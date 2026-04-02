@@ -1,45 +1,32 @@
 import SwiftUI
 
-/// A shape that mimics the MacBook notch.
-/// Top edge is flat (flush with screen top). Only bottom corners are rounded.
 struct NotchShape: Shape {
+    var topCornerRadius: CGFloat
     var bottomCornerRadius: CGFloat
 
-    var animatableData: CGFloat {
-        get { bottomCornerRadius }
-        set { bottomCornerRadius = newValue }
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { .init(topCornerRadius, bottomCornerRadius) }
+        set { topCornerRadius = newValue.first; bottomCornerRadius = newValue.second }
     }
 
     func path(in rect: CGRect) -> Path {
-        var path = Path()
+        let tr = topCornerRadius
         let br = bottomCornerRadius
+        var p = Path()
 
-        // Top-left (square corner)
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-
-        // Top edge
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-
-        // Right edge down to bottom-right corner
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
-
-        // Bottom-right corner
-        path.addQuadCurve(
-            to: CGPoint(x: rect.maxX - br, y: rect.maxY),
-            control: CGPoint(x: rect.maxX, y: rect.maxY)
-        )
-
-        // Bottom edge
-        path.addLine(to: CGPoint(x: rect.minX + br, y: rect.maxY))
-
-        // Bottom-left corner
-        path.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY - br),
-            control: CGPoint(x: rect.minX, y: rect.maxY)
-        )
-
-        // Left edge back to top
-        path.closeSubpath()
-        return path
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addQuadCurve(to: CGPoint(x: rect.minX + tr, y: rect.minY + tr),
+                        control: CGPoint(x: rect.minX + tr, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.minX + tr, y: rect.maxY - br))
+        p.addQuadCurve(to: CGPoint(x: rect.minX + tr + br, y: rect.maxY),
+                        control: CGPoint(x: rect.minX + tr, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX - tr - br, y: rect.maxY))
+        p.addQuadCurve(to: CGPoint(x: rect.maxX - tr, y: rect.maxY - br),
+                        control: CGPoint(x: rect.maxX - tr, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY + tr))
+        p.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY),
+                        control: CGPoint(x: rect.maxX - tr, y: rect.minY))
+        p.closeSubpath()
+        return p
     }
 }

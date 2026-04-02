@@ -45,6 +45,13 @@ final class NotchViewModel {
         }
     }
 
+    var topCornerRadius: CGFloat {
+        switch mode {
+        case .compact: 6
+        case .expanded, .fullPanel: 12
+        }
+    }
+
     var bottomCornerRadius: CGFloat {
         switch mode {
         case .compact: 14
@@ -88,7 +95,7 @@ struct NotchContentView: View {
         let hasSessions = !sessions.isEmpty
 
         ZStack(alignment: .top) {
-            NotchShape(bottomCornerRadius: viewModel.bottomCornerRadius)
+            NotchShape(topCornerRadius: viewModel.topCornerRadius, bottomCornerRadius: viewModel.bottomCornerRadius)
             .fill(.black)
             .frame(
                 width: viewModel.notchWidth,
