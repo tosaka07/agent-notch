@@ -76,11 +76,18 @@ final class NotchViewModel {
 
 struct NotchContentView: View {
     @State var viewModel = NotchViewModel()
-    var sessionManager: SessionManager
+    @State var sessionManager: SessionManager
 
     private let animation: Animation = .spring(response: 0.42, dampingFraction: 0.8)
 
+    /// Directly reference activeSessions in body so @Observable tracking kicks in
+    private var sessions: [UnifiedSession] {
+        sessionManager.activeSessions
+    }
+
     var body: some View {
+        let hasSessions = !sessions.isEmpty
+
         ZStack(alignment: .top) {
             NotchShape(
                 topCornerRadius: viewModel.topCornerRadius,
@@ -98,8 +105,8 @@ struct NotchContentView: View {
                 .animation(animation, value: viewModel.mode)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .onChange(of: sessionManager.activeSessions.count) {
-            viewModel.hasActivity = !sessionManager.activeSessions.isEmpty
+        .onChange(of: hasSessions) { _, newValue in
+            viewModel.hasActivity = newValue
         }
     }
 

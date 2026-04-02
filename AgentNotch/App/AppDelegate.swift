@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     static func processEvent(_ event: ClaudeEvent, manager: SessionManager) {
+        defer { manager.changeCount += 1 }
         switch event {
         case let .sessionStarted(info):
             let session = manager.getOrCreateSession(
