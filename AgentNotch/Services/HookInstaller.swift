@@ -124,13 +124,13 @@ enum HookInstaller {
         try? FileManager.default.createDirectory(atPath: installDir, withIntermediateDirectories: true)
 
         // Always overwrite with latest version from bundle
-        if let bundleURL = Bundle.main.url(forResource: "claude-hook", withExtension: "py") {
+        if let bundleURL = Bundle.main.url(forResource: "agent-notch-hook", withExtension: "py") {
             try? FileManager.default.removeItem(atPath: installPath)
             try? FileManager.default.copyItem(at: bundleURL, to: URL(fileURLWithPath: installPath))
         } else {
             // Dev mode: copy from scripts/
             let devPath = (Bundle.main.bundlePath as NSString)
-                .deletingLastPathComponent + "/scripts/claude-hook.py"
+                .deletingLastPathComponent + "/scripts/agent-notch-hook.py"
             if FileManager.default.fileExists(atPath: devPath) {
                 try? FileManager.default.removeItem(atPath: installPath)
                 try? FileManager.default.copyItem(
