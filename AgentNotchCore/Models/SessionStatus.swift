@@ -1,9 +1,9 @@
 import SwiftUI
 
-enum SessionStatus: String, Codable, Sendable {
+public enum SessionStatus: String, Codable, Sendable {
     case starting, idle, thinking, toolRunning, permissionWaiting, compacting, error, completed
 
-    var color: Color {
+    public var color: Color {
         switch self {
         case .starting, .idle: .gray
         case .thinking: .orange
@@ -14,7 +14,7 @@ enum SessionStatus: String, Codable, Sendable {
         }
     }
 
-    var label: String {
+    public var label: String {
         switch self {
         case .starting: "Starting"
         case .idle: "Idle"

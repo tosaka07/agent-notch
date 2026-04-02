@@ -1,16 +1,16 @@
 import Foundation
 
-struct TokenUsage: Sendable {
-    var inputTokens: Int = 0
-    var outputTokens: Int = 0
-    var cacheCreationTokens: Int = 0
-    var cacheReadTokens: Int = 0
-    var totalTokens: Int { inputTokens + outputTokens }
-    var cachedTokens: Int { cacheCreationTokens + cacheReadTokens }
+public struct TokenUsage: Sendable {
+    public var inputTokens: Int = 0
+    public var outputTokens: Int = 0
+    public var cacheCreationTokens: Int = 0
+    public var cacheReadTokens: Int = 0
+    public var totalTokens: Int { inputTokens + outputTokens }
+    public var cachedTokens: Int { cacheCreationTokens + cacheReadTokens }
 }
 
-enum TranscriptParser {
-    static func parseCumulativeUsage(at path: String) -> TokenUsage {
+public enum TranscriptParser {
+    public static func parseCumulativeUsage(at path: String) -> TokenUsage {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let content = String(data: data, encoding: .utf8)
         else {

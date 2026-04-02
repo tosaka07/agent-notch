@@ -1,3 +1,4 @@
+import AgentNotchCore
 import AppKit
 import SwiftUI
 

@@ -1,7 +1,7 @@
 import Foundation
 
-enum TokenFormatter {
-    static func format(_ count: Int) -> String {
+public enum TokenFormatter {
+    public static func format(_ count: Int) -> String {
         if count == 0 {
             return "0"
         } else if count < 1_000 {

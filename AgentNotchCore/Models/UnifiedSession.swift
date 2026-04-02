@@ -1,31 +1,31 @@
 import Foundation
 
-final class UnifiedSession: Identifiable, @unchecked Sendable {
-    let id: String
-    let agentType: AgentType
-    var model: String?
-    var cwd: String?
-    var status: SessionStatus
-    let startedAt: Date
-    var endedAt: Date?
-    var totalInputTokens: Int
-    var totalOutputTokens: Int
-    var totalCachedTokens: Int
-    var estimatedCost: Double
-    var toolCallCount: Int
-    var currentTool: ToolInfo?
-    var recentTools: [ToolInfo]
-    var pendingPermissions: [PermissionRequest]
-    var pid: Int32?
-    var tty: String?
-    var transcriptPath: String?
+public final class UnifiedSession: Identifiable, @unchecked Sendable {
+    public let id: String
+    public let agentType: AgentType
+    public var model: String?
+    public var cwd: String?
+    public var status: SessionStatus
+    public let startedAt: Date
+    public var endedAt: Date?
+    public var totalInputTokens: Int
+    public var totalOutputTokens: Int
+    public var totalCachedTokens: Int
+    public var estimatedCost: Double
+    public var toolCallCount: Int
+    public var currentTool: ToolInfo?
+    public var recentTools: [ToolInfo]
+    public var pendingPermissions: [PermissionRequest]
+    public var pid: Int32?
+    public var tty: String?
+    public var transcriptPath: String?
 
-    var elapsedTime: TimeInterval {
+    public var elapsedTime: TimeInterval {
         let end = endedAt ?? Date()
         return end.timeIntervalSince(startedAt)
     }
 
-    init(
+    public init(
         id: String,
         agentType: AgentType,
         model: String? = nil,

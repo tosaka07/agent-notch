@@ -1,7 +1,9 @@
 import Foundation
 
-enum HookInstaller {
-    private static let hookScriptName = "agent-notch-hook.py"
+/// Manages Claude Code hook installation.
+/// Hooks call `agent-notch hook` CLI binary, which forwards events to the socket.
+public enum HookInstaller {
+    private static let hookIdentifier = "agent-notch"
 
     private static let hookEvents: [(event: String, matcher: String?, timeout: Int?)] = [
         ("SessionStart", nil, nil),
@@ -17,13 +19,21 @@ enum HookInstaller {
         ("PreCompact", "auto", nil),
     ]
 
-    static func installIfNeeded() {
-        copyHookScript()
-        updateSettings()
+    /// Install hooks using the CLI binary path.
+    /// Called from the GUI app on launch.
+    public static func installIfNeeded() {
+        let cliPath = findCLIPath()
+        updateSettings(command: "\(cliPath) hook")
     }
 
-    /// Remove our hooks from settings.json and delete the script
-    static func uninstall() {
+    /// Install hooks from the CLI itself (uses own binary path).
+    public static func installCLI() {
+        let cliPath = CommandLine.arguments[0]
+        updateSettings(command: "\(cliPath) hook")
+    }
+
+    /// Remove our hooks from settings.json
+    public static func uninstall() {
         let settingsPath = settingsFilePath()
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
               var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -31,10 +41,7 @@ enum HookInstaller {
 
         for (event, value) in hooks {
             guard var entries = value as? [[String: Any]] else { continue }
-            entries.removeAll { entry in
-                guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
-                return entryHooks.contains { ($0["command"] as? String)?.contains(hookScriptName) == true }
-            }
+            entries.removeAll { isOurHookEntry($0) }
             if entries.isEmpty {
                 hooks.removeValue(forKey: event)
             } else {
@@ -43,37 +50,33 @@ enum HookInstaller {
         }
 
         json["hooks"] = hooks.isEmpty ? nil : hooks
-        json.removeValue(forKey: "_agentNotchHookVersion")
 
         if let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: URL(fileURLWithPath: settingsPath))
         }
-
-        try? FileManager.default.removeItem(atPath: hookScriptInstallPath())
     }
 
-    static func isInstalled() -> Bool {
+    public static func isInstalled() -> Bool {
         let settingsPath = settingsFilePath()
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let hooks = json["hooks"] as? [String: Any] else { return false }
 
-        // Check if any hook entry contains our script
         for (_, value) in hooks {
             guard let entries = value as? [[String: Any]] else { continue }
-            for entry in entries {
-                guard let entryHooks = entry["hooks"] as? [[String: Any]] else { continue }
-                if entryHooks.contains(where: { ($0["command"] as? String)?.contains(hookScriptName) == true }) {
-                    return true
-                }
-            }
+            if entries.contains(where: { isOurHookEntry($0) }) { return true }
         }
         return false
     }
 
     // MARK: - Private
 
-    private static func updateSettings() {
+    private static func isOurHookEntry(_ entry: [String: Any]) -> Bool {
+        guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
+        return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
+    }
+
+    private static func updateSettings(command: String) {
         let settingsPath = settingsFilePath()
         var settings: [String: Any] = [:]
 
@@ -82,8 +85,6 @@ enum HookInstaller {
             settings = existing
         }
 
-        let scriptPath = hookScriptInstallPath()
-        let command = "python3 \(scriptPath)"
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
 
         for (event, matcher, timeout) in hookEvents {
@@ -93,16 +94,11 @@ enum HookInstaller {
             var matcherEntry: [String: Any] = ["hooks": [hookCmd]]
             if let matcher { matcherEntry["matcher"] = matcher }
 
-            // Preserve existing hooks for this event — append ours if not already present
             if var existingEntries = hooks[event] as? [[String: Any]] {
-                let alreadyInstalled = existingEntries.contains { entry in
-                    guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
-                    return entryHooks.contains { ($0["command"] as? String)?.contains(hookScriptName) == true }
-                }
-                if !alreadyInstalled {
-                    existingEntries.append(matcherEntry)
-                    hooks[event] = existingEntries
-                }
+                // Remove any old version of our hook, then add current
+                existingEntries.removeAll { isOurHookEntry($0) }
+                existingEntries.append(matcherEntry)
+                hooks[event] = existingEntries
             } else {
                 hooks[event] = [matcherEntry]
             }
@@ -118,32 +114,35 @@ enum HookInstaller {
         }
     }
 
-    private static func copyHookScript() {
-        let installPath = hookScriptInstallPath()
-        let installDir = (installPath as NSString).deletingLastPathComponent
-        try? FileManager.default.createDirectory(atPath: installDir, withIntermediateDirectories: true)
-
-        // Always overwrite with latest version from bundle
-        if let bundleURL = Bundle.main.url(forResource: "agent-notch-hook", withExtension: "py") {
-            try? FileManager.default.removeItem(atPath: installPath)
-            try? FileManager.default.copyItem(at: bundleURL, to: URL(fileURLWithPath: installPath))
-        } else {
-            // Dev mode: copy from scripts/
-            let devPath = (Bundle.main.bundlePath as NSString)
-                .deletingLastPathComponent + "/scripts/agent-notch-hook.py"
-            if FileManager.default.fileExists(atPath: devPath) {
-                try? FileManager.default.removeItem(atPath: installPath)
-                try? FileManager.default.copyItem(
-                    at: URL(fileURLWithPath: devPath),
-                    to: URL(fileURLWithPath: installPath)
-                )
-            }
+    /// Find the CLI binary path. Checks common install locations.
+    private static func findCLIPath() -> String {
+        // 1. Adjacent to GUI app binary (same .build/debug/ dir)
+        let appDir = (Bundle.main.executablePath ?? "").components(separatedBy: "/").dropLast().joined(separator: "/")
+        let adjacentPath = appDir + "/agent-notch"
+        if FileManager.default.fileExists(atPath: adjacentPath) {
+            return adjacentPath
         }
-        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installPath)
-    }
 
-    private static func hookScriptInstallPath() -> String {
-        NSHomeDirectory() + "/.agent-notch/\(hookScriptName)"
+        // 2. In PATH
+        let whichProcess = Process()
+        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        whichProcess.arguments = ["agent-notch"]
+        let pipe = Pipe()
+        whichProcess.standardOutput = pipe
+        whichProcess.standardError = FileHandle.nullDevice
+        if let _ = try? whichProcess.run() {
+            whichProcess.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !path.isEmpty { return path }
+        }
+
+        // 3. Homebrew
+        let brewPath = "/opt/homebrew/bin/agent-notch"
+        if FileManager.default.fileExists(atPath: brewPath) { return brewPath }
+
+        // 4. Fallback — assume it's in PATH
+        return "agent-notch"
     }
 
     private static func settingsFilePath() -> String {

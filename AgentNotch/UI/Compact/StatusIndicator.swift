@@ -1,3 +1,4 @@
+import AgentNotchCore
 import SwiftUI
 
 struct StatusIndicator: View {

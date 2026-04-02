@@ -1,9 +1,9 @@
 import SwiftUI
 
-enum AgentType: String, Codable, Sendable, CaseIterable {
+public enum AgentType: String, Codable, Sendable, CaseIterable {
     case claudeCode, codex, geminiCLI, custom
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .claudeCode: "Claude Code"
         case .codex: "Codex"
@@ -12,7 +12,7 @@ enum AgentType: String, Codable, Sendable, CaseIterable {
         }
     }
 
-    var color: Color {
+    public var color: Color {
         switch self {
         case .claudeCode: .orange
         case .codex: .blue

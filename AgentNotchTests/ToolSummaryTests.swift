@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import AgentNotch
+@testable import AgentNotchCore
 
 @Suite("ToolSummary Tests")
 struct ToolSummaryTests {

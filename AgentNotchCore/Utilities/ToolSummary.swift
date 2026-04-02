@@ -1,7 +1,7 @@
 import Foundation
 
-enum ToolSummary {
-    static func generate(toolName: String, toolInput: [String: String]) -> String {
+public enum ToolSummary {
+    public static func generate(toolName: String, toolInput: [String: String]) -> String {
         switch toolName.lowercased() {
         case "bash":
             if let command = toolInput["command"] {

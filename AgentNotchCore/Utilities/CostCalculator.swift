@@ -1,13 +1,13 @@
 import Foundation
 
-enum CostCalculator {
-    struct ModelPricing: Sendable {
-        let inputPerMillion: Double
-        let outputPerMillion: Double
-        let cachedPerMillion: Double
+public enum CostCalculator {
+    public struct ModelPricing: Sendable {
+        public let inputPerMillion: Double
+        public let outputPerMillion: Double
+        public let cachedPerMillion: Double
     }
 
-    static let pricingTable: [String: ModelPricing] = [
+    public static let pricingTable: [String: ModelPricing] = [
         "claude-opus-4-6": ModelPricing(inputPerMillion: 15, outputPerMillion: 75, cachedPerMillion: 1.5),
         "claude-sonnet-4-6": ModelPricing(inputPerMillion: 3, outputPerMillion: 15, cachedPerMillion: 0.3),
         "claude-haiku-4-5": ModelPricing(inputPerMillion: 0.8, outputPerMillion: 4, cachedPerMillion: 0.08),
@@ -18,7 +18,7 @@ enum CostCalculator {
         "gemini-2.5-flash": ModelPricing(inputPerMillion: 0.15, outputPerMillion: 0.6, cachedPerMillion: 0.0375),
     ]
 
-    static func estimateCost(
+    public static func estimateCost(
         model: String,
         inputTokens: Int,
         outputTokens: Int,
@@ -31,7 +31,7 @@ enum CostCalculator {
         return input + output + cached
     }
 
-    static func formatCost(_ cost: Double) -> String {
+    public static func formatCost(_ cost: Double) -> String {
         if cost == 0 {
             return "$0.00"
         } else if cost < 0.01 {

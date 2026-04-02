@@ -1,8 +1,8 @@
 import Foundation
 import Network
 
-enum SocketProtocol {
-    static func encode(_ object: Any) throws -> Data {
+public enum SocketProtocol {
+    public static func encode(_ object: Any) throws -> Data {
         let jsonData = try JSONSerialization.data(withJSONObject: object)
         var length = UInt32(jsonData.count)
         var data = Data(bytes: &length, count: 4)
@@ -10,7 +10,7 @@ enum SocketProtocol {
         return data
     }
 
-    static func decode(_ data: Data) throws -> (message: [String: Any], bytesConsumed: Int)? {
+    public static func decode(_ data: Data) throws -> (message: [String: Any], bytesConsumed: Int)? {
         guard data.count >= 4 else { return nil }
         let length = data.prefix(4).withUnsafeBytes { $0.load(as: UInt32.self) }
         let totalNeeded = 4 + Int(length)
@@ -23,17 +23,17 @@ enum SocketProtocol {
     }
 }
 
-enum SocketError: Error {
+public enum SocketError: Error {
     case invalidJSON
     case connectionFailed
 }
 
-final class SocketConnection: Sendable {
-    let connection: NWConnection
+public final class SocketConnection: Sendable {
+    public let connection: NWConnection
     private let queue: DispatchQueue
-    let onMessage: @Sendable ([String: Any]) -> [String: Any]?
+    public let onMessage: @Sendable ([String: Any]) -> [String: Any]?
 
-    init(
+    public init(
         connection: NWConnection,
         queue: DispatchQueue,
         onMessage: @escaping @Sendable ([String: Any]) -> [String: Any]?
@@ -43,7 +43,7 @@ final class SocketConnection: Sendable {
         self.onMessage = onMessage
     }
 
-    func start() {
+    public func start() {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .ready:
@@ -57,7 +57,7 @@ final class SocketConnection: Sendable {
         connection.start(queue: queue)
     }
 
-    func cancel() {
+    public func cancel() {
         connection.cancel()
     }
 

@@ -2,43 +2,43 @@ import Foundation
 
 // MARK: - Event associated-value types
 
-struct SessionInfo: Sendable {
-    let sessionId: String
-    let model: String?
-    let cwd: String?
-    let transcriptPath: String?
-    let source: String?
+public struct SessionInfo: Sendable {
+    public let sessionId: String
+    public let model: String?
+    public let cwd: String?
+    public let transcriptPath: String?
+    public let source: String?
 }
 
-struct ToolStartInfo: Sendable {
-    let sessionId: String
-    let toolName: String
-    let toolUseId: String
-    let toolInput: [String: String]
-    let summary: String
+public struct ToolStartInfo: Sendable {
+    public let sessionId: String
+    public let toolName: String
+    public let toolUseId: String
+    public let toolInput: [String: String]
+    public let summary: String
 }
 
-struct ToolEndInfo: Sendable {
-    let sessionId: String
-    let toolUseId: String
-    let toolName: String
+public struct ToolEndInfo: Sendable {
+    public let sessionId: String
+    public let toolUseId: String
+    public let toolName: String
 }
 
-struct ToolFailInfo: Sendable {
-    let sessionId: String
-    let toolUseId: String
-    let error: String
+public struct ToolFailInfo: Sendable {
+    public let sessionId: String
+    public let toolUseId: String
+    public let error: String
 }
 
-struct PermissionInfo: Sendable {
-    let sessionId: String
-    let toolName: String
-    let toolInput: [String: String]
+public struct PermissionInfo: Sendable {
+    public let sessionId: String
+    public let toolName: String
+    public let toolInput: [String: String]
 }
 
 // MARK: - ClaudeEvent
 
-enum ClaudeEvent: Sendable {
+public enum ClaudeEvent: Sendable {
     case sessionStarted(SessionInfo)
     case userPrompt(sessionId: String)
     case toolStarted(ToolStartInfo)
@@ -55,8 +55,8 @@ enum ClaudeEvent: Sendable {
 
 // MARK: - Parser
 
-enum ClaudeEventParser {
-    static func parse(_ json: [String: Any]) -> ClaudeEvent {
+public enum ClaudeEventParser {
+    public static func parse(_ json: [String: Any]) -> ClaudeEvent {
         guard let eventType = json["hook_event_name"] as? String else {
             return .unknown
         }

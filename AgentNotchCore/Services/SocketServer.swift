@@ -1,16 +1,16 @@
 import Foundation
 import Network
 
-final class SocketServer: Sendable {
-    static let socketPath = "/tmp/agent-notch-\(NSUserName()).sock"
+public final class SocketServer: Sendable {
+    public static let socketPath = "/tmp/agent-notch-\(NSUserName()).sock"
 
     private let listener: NWListener
     private let queue = DispatchQueue(label: "com.agentnotch.socketserver", qos: .userInitiated)
-    let onMessage: @Sendable ([String: Any]) -> [String: Any]?
+    public let onMessage: @Sendable ([String: Any]) -> [String: Any]?
 
     private let _connections = NWProtocolFramer.LockedArray<SocketConnection>()
 
-    init(onMessage: @escaping @Sendable ([String: Any]) -> [String: Any]?) throws {
+    public init(onMessage: @escaping @Sendable ([String: Any]) -> [String: Any]?) throws {
         self.onMessage = onMessage
 
         Self.removeStaleSocket()
@@ -22,7 +22,7 @@ final class SocketServer: Sendable {
         self.listener = try NWListener(using: params)
     }
 
-    func start() {
+    public func start() {
         listener.stateUpdateHandler = { state in
             switch state {
             case .ready:
@@ -48,7 +48,7 @@ final class SocketServer: Sendable {
         listener.start(queue: queue)
     }
 
-    func stop() {
+    public func stop() {
         listener.cancel()
         for conn in _connections.removeAll() {
             conn.cancel()
