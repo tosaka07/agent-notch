@@ -11,9 +11,12 @@ enum NotchMode: Sendable {
 final class NotchViewModel {
     var mode: NotchMode = .compact
 
+    // Physical notch width — set from NSScreen on init
+    var physicalNotchWidth: CGFloat = 224
+
     var notchWidth: CGFloat {
         switch mode {
-        case .compact: 224
+        case .compact: physicalNotchWidth + 300  // 150px wings on each side
         case .expanded: 550
         case .fullPanel: 650
         }
@@ -96,35 +99,67 @@ struct NotchContentView: View {
 
     // MARK: - Compact
 
+    /// Compact mode: content is placed in the "wings" on either side of the physical notch.
+    /// The center (physical notch area) is left empty/black.
     @ViewBuilder
     private var compactContent: some View {
         let sessions = sessionManager.activeSessions
-        if sessions.isEmpty {
-            Text("Agent Notch")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
-                .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
-        } else {
-            HStack(spacing: 6) {
-                ForEach(sessions.prefix(4)) { session in
-                    HStack(spacing: 3) {
-                        StatusIndicator(status: session.status, size: 6)
+        let wingWidth = (viewModel.notchWidth - viewModel.physicalNotchWidth) / 2 - 8
 
-                        if let tool = session.currentTool {
-                            Text(tool.summary)
-                                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.8))
-                                .lineLimit(1)
-                        } else {
-                            Text(session.status.label)
-                                .font(.system(size: 8, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.5))
-                                .lineLimit(1)
+        HStack(spacing: 0) {
+            // Left wing
+            Group {
+                if sessions.isEmpty {
+                    Text("Agent Notch")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                } else if let first = sessions.first {
+                    compactSessionLabel(first)
+                }
+            }
+            .frame(width: wingWidth, height: viewModel.notchHeight)
+
+            // Center gap — physical notch area (invisible)
+            Color.clear
+                .frame(width: viewModel.physicalNotchWidth, height: viewModel.notchHeight)
+
+            // Right wing
+            Group {
+                if sessions.count > 1, let second = sessions.dropFirst().first {
+                    compactSessionLabel(second)
+                } else if sessions.isEmpty {
+                    EmptyView()
+                } else {
+                    // Single session: show tokens on right
+                    if let session = sessions.first {
+                        HStack(spacing: 4) {
+                            Text("\(TokenFormatter.format(session.totalInputTokens))↓")
+                            Text(CostCalculator.formatCost(session.estimatedCost))
                         }
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.6))
                     }
                 }
             }
-            .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
+            .frame(width: wingWidth, height: viewModel.notchHeight)
+        }
+        .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
+    }
+
+    private func compactSessionLabel(_ session: UnifiedSession) -> some View {
+        HStack(spacing: 4) {
+            StatusIndicator(status: session.status, size: 6)
+            if let tool = session.currentTool {
+                Text(tool.summary)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
+            } else {
+                Text(session.agentType.displayName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .lineLimit(1)
+            }
         }
     }
 

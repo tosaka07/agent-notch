@@ -26,7 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupNotchOverlay() {
         guard let screen = NSScreen.builtin else { return }
         let controller = NotchWindowController(screen: screen)
-        let contentView = NotchContentView(sessionManager: sessionManager)
+        var contentView = NotchContentView(sessionManager: sessionManager)
+        contentView.viewModel.physicalNotchWidth = screen.notchSize.width
         controller.show(contentView: contentView)
         windowController = controller
     }
