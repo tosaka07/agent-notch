@@ -44,13 +44,6 @@ final class NotchViewModel {
         }
     }
 
-    var topCornerRadius: CGFloat {
-        switch mode {
-        case .compact: 6
-        case .expanded, .fullPanel: 19
-        }
-    }
-
     var bottomCornerRadius: CGFloat {
         switch mode {
         case .compact: 14
@@ -94,10 +87,7 @@ struct NotchContentView: View {
         let hasSessions = !sessions.isEmpty
 
         ZStack(alignment: .top) {
-            NotchShape(
-                topCornerRadius: viewModel.topCornerRadius,
-                bottomCornerRadius: viewModel.bottomCornerRadius
-            )
+            NotchShape(bottomCornerRadius: viewModel.bottomCornerRadius)
             .fill(.black)
             .frame(
                 width: viewModel.notchWidth,
@@ -156,7 +146,7 @@ struct NotchContentView: View {
 
                 // Center: notch area (black spacer)
                 Color.black
-                    .frame(width: viewModel.physicalNotchWidth - viewModel.topCornerRadius)
+                    .frame(width: viewModel.physicalNotchWidth - 6)
 
                 // Right wing: current tool or spinner
                 HStack(spacing: 4) {
