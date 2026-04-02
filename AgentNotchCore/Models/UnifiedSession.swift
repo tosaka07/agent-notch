@@ -1,5 +1,14 @@
 import Foundation
 
+public struct PendingQuestion: Sendable {
+    public let toolUseId: String
+    public let question: String
+    public let options: [String]
+    public init(toolUseId: String, question: String, options: [String]) {
+        self.toolUseId = toolUseId; self.question = question; self.options = options
+    }
+}
+
 public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public let id: String
     public let agentType: AgentType
@@ -19,6 +28,7 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var pid: Int32?
     public var tty: String?
     public var transcriptPath: String?
+    public var pendingQuestion: PendingQuestion?
 
     public var elapsedTime: TimeInterval {
         let end = endedAt ?? Date()

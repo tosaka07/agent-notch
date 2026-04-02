@@ -1,6 +1,11 @@
 import AgentNotchCore
 import AppKit
+import Network
 import SwiftUI
+
+extension Notification.Name {
+    static let agentNotchAutoExpand = Notification.Name("agentNotchAutoExpand")
+}
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -32,20 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController = controller
     }
 
-    // MARK: - Screen Observer
-
     private func setupScreenObserver() {
         let observer = ScreenObserver()
         observer.onScreenChanged = { [weak self] in
-            self?.recreateNotchOverlay()
+            self?.windowController?.close()
+            self?.windowController = nil
+            self?.setupNotchOverlay()
         }
         screenObserver = observer
-    }
-
-    private func recreateNotchOverlay() {
-        windowController?.close()
-        windowController = nil
-        setupNotchOverlay()
     }
 
     // MARK: - Socket Server
@@ -53,13 +52,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startSocketServer() {
         let manager = sessionManager
         do {
-            let server = try SocketServer { message in
+            let server = try SocketServer { message, connection in
                 let event = ClaudeEventParser.parse(message)
+                let sessionId = message["session_id"] as? String ?? ""
+
+                // For PermissionRequest / AskQuestion: hold connection open
+                let isDeferred: Bool
+                switch event {
+                case .permissionRequested(let info):
+                    let toolUseId = info.toolUseId.isEmpty ? UUID().uuidString : info.toolUseId
+                    // Store pending response on the server via a posted notification
+                    let pending = PendingSocketResponse(
+                        sessionId: sessionId, toolUseId: toolUseId,
+                        connection: connection, receivedAt: Date()
+                    )
+                    Task { @MainActor in
+                        // Access socketServer on MainActor
+                        (NSApp.delegate as? AppDelegate)?.socketServer?.addPending(pending)
+                    }
+                    isDeferred = true
+                case .askQuestion(let info):
+                    let pending = PendingSocketResponse(
+                        sessionId: sessionId, toolUseId: info.toolUseId,
+                        connection: connection, receivedAt: Date()
+                    )
+                    Task { @MainActor in
+                        (NSApp.delegate as? AppDelegate)?.socketServer?.addPending(pending)
+                    }
+                    isDeferred = true
+                default:
+                    isDeferred = false
+                }
+
                 Task { @MainActor in
                     AppDelegate.processEvent(event, manager: manager)
                 }
-                // TODO: For PermissionRequest, keep socket open and return response later
-                return ["status": "ok"]
+
+                return isDeferred ? nil : ["status": "ok"]
             }
             server.start()
             socketServer = server
@@ -68,16 +97,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Permission Actions (called from UI)
+
+    func approvePermission(sessionId: String, toolUseId: String) {
+        socketServer?.respondToPermission(toolUseId: toolUseId, decision: "allow", reason: nil)
+        if let session = sessionManager.session(for: sessionId) {
+            session.pendingPermissions.removeAll { $0.toolUseId == toolUseId }
+            session.status = .thinking
+            sessionManager.notifyChange()
+        }
+    }
+
+    func denyPermission(sessionId: String, toolUseId: String, reason: String?) {
+        socketServer?.respondToPermission(toolUseId: toolUseId, decision: "deny", reason: reason)
+        if let session = sessionManager.session(for: sessionId) {
+            session.pendingPermissions.removeAll { $0.toolUseId == toolUseId }
+            session.status = .thinking
+            sessionManager.notifyChange()
+        }
+    }
+
+    func answerQuestion(sessionId: String, toolUseId: String, answer: String) {
+        // AskUserQuestion response format
+        socketServer?.respondToPermission(toolUseId: toolUseId, decision: "allow", reason: answer)
+        if let session = sessionManager.session(for: sessionId) {
+            session.pendingQuestion = nil
+            session.status = .thinking
+            sessionManager.notifyChange()
+        }
+    }
+
+    // MARK: - Event Processing
+
     @MainActor
     static func processEvent(_ event: ClaudeEvent, manager: SessionManager) {
         defer { manager.notifyChange() }
 
         switch event {
         case let .sessionStarted(info):
-            let session = manager.getOrCreateSession(
-                id: info.sessionId,
-                agentType: .claudeCode
-            )
+            let session = manager.getOrCreateSession(id: info.sessionId, agentType: .claudeCode)
             session.model = info.model
             session.cwd = info.cwd
             session.transcriptPath = info.transcriptPath
@@ -93,12 +151,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ?? manager.getOrCreateSession(id: info.sessionId, agentType: .claudeCode)
             session.status = .toolRunning
             session.currentTool = ToolInfo(
-                id: info.toolUseId,
-                name: info.toolName,
-                summary: info.summary,
-                input: info.toolInput,
-                startedAt: Date(),
-                status: .running
+                id: info.toolUseId, name: info.toolName, summary: info.summary,
+                input: info.toolInput, startedAt: Date(), status: .running
             )
             session.toolCallCount += 1
 
@@ -108,9 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     tool.status = .succeeded
                     tool.completedAt = Date()
                     session.recentTools.insert(tool, at: 0)
-                    if session.recentTools.count > 50 {
-                        session.recentTools.removeLast()
-                    }
+                    if session.recentTools.count > 50 { session.recentTools.removeLast() }
                 }
                 session.currentTool = nil
                 session.status = .thinking
@@ -119,12 +171,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case let .toolFailed(info):
             if let session = manager.session(for: info.sessionId) {
                 if var tool = session.currentTool, tool.id == info.toolUseId {
-                    tool.status = .failed
-                    tool.completedAt = Date()
+                    tool.status = .failed; tool.completedAt = Date()
                     session.recentTools.insert(tool, at: 0)
-                    if session.recentTools.count > 50 {
-                        session.recentTools.removeLast()
-                    }
+                    if session.recentTools.count > 50 { session.recentTools.removeLast() }
                 }
                 session.currentTool = nil
                 session.status = .thinking
@@ -135,14 +184,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ?? manager.getOrCreateSession(id: info.sessionId, agentType: .claudeCode)
             session.status = .permissionWaiting
             session.pendingPermissions.append(PermissionRequest(
-                id: UUID().uuidString,
-                agentType: .claudeCode,
-                sessionId: info.sessionId,
-                toolName: info.toolName,
-                toolInput: info.toolInput,
-                timestamp: Date(),
-                canRespond: true  // TODO: wire up actual socket response
+                id: UUID().uuidString, agentType: .claudeCode,
+                sessionId: info.sessionId, toolName: info.toolName,
+                toolInput: info.toolInput, toolUseId: info.toolUseId,
+                timestamp: Date(), canRespond: true
             ))
+            // Auto-expand notch
+            NotificationCenter.default.post(name: .agentNotchAutoExpand, object: info.sessionId)
+
+        case let .askQuestion(info):
+            let session = manager.session(for: info.sessionId)
+                ?? manager.getOrCreateSession(id: info.sessionId, agentType: .claudeCode)
+            session.status = .permissionWaiting
+            session.pendingQuestion = PendingQuestion(
+                toolUseId: info.toolUseId, question: info.question, options: info.options
+            )
+            NotificationCenter.default.post(name: .agentNotchAutoExpand, object: info.sessionId)
 
         case let .notification(sessionId, type, _):
             if type == "idle_prompt" {
@@ -155,31 +212,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let session = manager.session(for: sessionId) {
                 session.status = .idle
                 session.pendingPermissions.removeAll()
+                session.pendingQuestion = nil
                 if let path = session.transcriptPath, let model = session.model {
                     let usage = TranscriptParser.parseCumulativeUsage(at: path)
                     session.totalInputTokens = usage.inputTokens
                     session.totalOutputTokens = usage.outputTokens
                     session.totalCachedTokens = usage.cachedTokens
                     session.estimatedCost = CostCalculator.estimateCost(
-                        model: model,
-                        inputTokens: usage.inputTokens,
-                        outputTokens: usage.outputTokens,
-                        cachedTokens: usage.cachedTokens
+                        model: model, inputTokens: usage.inputTokens,
+                        outputTokens: usage.outputTokens, cachedTokens: usage.cachedTokens
                     )
                 }
             }
 
         case let .sessionEnded(sessionId):
-            // Remove session from active list
             manager.removeSession(id: sessionId)
 
         case let .compacting(sessionId):
             manager.session(for: sessionId)?.status = .compacting
 
-        case .subagentStopped:
-            break
-
-        case .unknown:
+        case .subagentStopped, .unknown:
             break
         }
     }
@@ -200,9 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.menu = menu
     }
 
-    @objc private func showAbout() {
-        NSApp.orderFrontStandardAboutPanel()
-    }
+    @objc private func showAbout() { NSApp.orderFrontStandardAboutPanel() }
 
     @objc private func clearSessions() {
         sessionManager.removeAllSessions()

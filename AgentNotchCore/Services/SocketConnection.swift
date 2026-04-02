@@ -31,12 +31,12 @@ public enum SocketError: Error {
 public final class SocketConnection: Sendable {
     public let connection: NWConnection
     private let queue: DispatchQueue
-    public let onMessage: @Sendable ([String: Any]) -> [String: Any]?
+    public let onMessage: @Sendable ([String: Any], NWConnection) -> [String: Any]?
 
     public init(
         connection: NWConnection,
         queue: DispatchQueue,
-        onMessage: @escaping @Sendable ([String: Any]) -> [String: Any]?
+        onMessage: @escaping @Sendable ([String: Any], NWConnection) -> [String: Any]?
     ) {
         self.connection = connection
         self.queue = queue
@@ -71,8 +71,9 @@ public final class SocketConnection: Sendable {
 
             do {
                 if let result = try SocketProtocol.decode(data) {
-                    let response = self.onMessage(result.message)
+                    let response = self.onMessage(result.message, self.connection)
                     if let response {
+                        // Immediate response — send and close
                         let responseData = try SocketProtocol.encode(response)
                         self.connection.send(
                             content: responseData,
@@ -80,21 +81,10 @@ public final class SocketConnection: Sendable {
                                 self.connection.cancel()
                             }
                         )
-                    } else {
-                        let emptyResponse = try SocketProtocol.encode([:] as [String: String])
-                        self.connection.send(
-                            content: emptyResponse,
-                            completion: .contentProcessed { _ in
-                                self.connection.cancel()
-                            }
-                        )
                     }
+                    // nil response = deferred (connection stays open for later response)
                 }
             } catch {
-                self.connection.cancel()
-            }
-
-            if isComplete || error != nil {
                 self.connection.cancel()
             }
         }

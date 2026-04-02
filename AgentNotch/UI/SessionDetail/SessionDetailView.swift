@@ -17,6 +17,32 @@ struct SessionDetailView: View {
 
             Divider().overlay(Color.white.opacity(0.1))
 
+            // Permission banner
+            if let perm = session.pendingPermissions.first {
+                PermissionBanner(
+                    permission: perm,
+                    onApprove: {
+                        (NSApp.delegate as? AppDelegate)?.approvePermission(
+                            sessionId: session.id, toolUseId: perm.toolUseId)
+                    },
+                    onDeny: {
+                        (NSApp.delegate as? AppDelegate)?.denyPermission(
+                            sessionId: session.id, toolUseId: perm.toolUseId,
+                            reason: "Denied via Agent Notch")
+                    }
+                )
+                .padding(.horizontal, 12).padding(.top, 4)
+            }
+
+            // Question banner
+            if let q = session.pendingQuestion {
+                QuestionBanner(question: q.question, options: q.options) { answer in
+                    (NSApp.delegate as? AppDelegate)?.answerQuestion(
+                        sessionId: session.id, toolUseId: q.toolUseId, answer: answer)
+                }
+                .padding(.horizontal, 12).padding(.top, 4)
+            }
+
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 4) {

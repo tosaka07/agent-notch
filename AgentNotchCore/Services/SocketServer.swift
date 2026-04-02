@@ -1,16 +1,29 @@
 import Foundation
 import Network
 
+public struct PendingSocketResponse: Sendable {
+    public let sessionId: String
+    public let toolUseId: String
+    public let connection: NWConnection
+    public let receivedAt: Date
+
+    public init(sessionId: String, toolUseId: String, connection: NWConnection, receivedAt: Date) {
+        self.sessionId = sessionId; self.toolUseId = toolUseId
+        self.connection = connection; self.receivedAt = receivedAt
+    }
+}
+
 public final class SocketServer: Sendable {
     public static let socketPath = "/tmp/agent-notch-\(NSUserName()).sock"
 
     private let listener: NWListener
     private let queue = DispatchQueue(label: "com.agentnotch.socketserver", qos: .userInitiated)
-    public let onMessage: @Sendable ([String: Any]) -> [String: Any]?
+    public let onMessage: @Sendable ([String: Any], NWConnection) -> [String: Any]?
 
     private let _connections = NWProtocolFramer.LockedArray<SocketConnection>()
+    private let _pending = NWProtocolFramer.LockedDict<String, PendingSocketResponse>()
 
-    public init(onMessage: @escaping @Sendable ([String: Any]) -> [String: Any]?) throws {
+    public init(onMessage: @escaping @Sendable ([String: Any], NWConnection) -> [String: Any]?) throws {
         self.onMessage = onMessage
 
         Self.removeStaleSocket()
@@ -50,10 +63,40 @@ public final class SocketServer: Sendable {
 
     public func stop() {
         listener.cancel()
-        for conn in _connections.removeAll() {
-            conn.cancel()
-        }
+        for conn in _connections.removeAll() { conn.cancel() }
+        for (_, p) in _pending.all() { p.connection.cancel() }
+        _pending.removeAll()
         Self.removeStaleSocket()
+    }
+
+    // MARK: - Deferred Permission Response
+
+    public func addPending(_ response: PendingSocketResponse) {
+        _pending.set(response.toolUseId, response)
+    }
+
+    public func respondToPermission(toolUseId: String, decision: String, reason: String?) {
+        guard let pending = _pending.remove(toolUseId) else { return }
+        let response: [String: Any] = [
+            "hookSpecificOutput": [
+                "hookEventName": "PermissionRequest",
+                "decision": ["behavior": decision, "message": reason ?? ""]
+            ]
+        ]
+        if let data = try? SocketProtocol.encode(response) {
+            pending.connection.send(content: data, completion: .contentProcessed { _ in
+                pending.connection.cancel()
+            })
+        }
+    }
+
+    public func cancelPending(sessionId: String) {
+        for (key, val) in _pending.all() {
+            if val.sessionId == sessionId {
+                val.connection.cancel()
+                _pending.remove(key)
+            }
+        }
     }
 
     private static func removeStaleSocket() {
@@ -82,6 +125,28 @@ extension NWProtocolFramer {
             elements.removeAll()
             lock.unlock()
             return copy
+        }
+    }
+
+    final class LockedDict<Key: Hashable & Sendable, Value: Sendable>: @unchecked Sendable {
+        private var dict: [Key: Value] = [:]
+        private let lock = NSLock()
+
+        func set(_ key: Key, _ value: Value) {
+            lock.lock(); dict[key] = value; lock.unlock()
+        }
+
+        @discardableResult
+        func remove(_ key: Key) -> Value? {
+            lock.lock(); let v = dict.removeValue(forKey: key); lock.unlock(); return v
+        }
+
+        func all() -> [(Key, Value)] {
+            lock.lock(); let items = Array(dict); lock.unlock(); return items
+        }
+
+        func removeAll() {
+            lock.lock(); dict.removeAll(); lock.unlock()
         }
     }
 }

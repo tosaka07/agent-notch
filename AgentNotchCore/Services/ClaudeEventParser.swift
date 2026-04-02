@@ -34,6 +34,14 @@ public struct PermissionInfo: Sendable {
     public let sessionId: String
     public let toolName: String
     public let toolInput: [String: String]
+    public let toolUseId: String
+}
+
+public struct AskQuestionInfo: Sendable {
+    public let sessionId: String
+    public let toolUseId: String
+    public let question: String
+    public let options: [String]
 }
 
 // MARK: - ClaudeEvent
@@ -49,6 +57,7 @@ public enum ClaudeEvent: Sendable {
     case sessionIdle(String)
     case sessionEnded(String)
     case subagentStopped(sessionId: String)
+    case askQuestion(AskQuestionInfo)
     case compacting(sessionId: String)
     case unknown
 }
@@ -81,18 +90,27 @@ public enum ClaudeEventParser {
             let toolName = json["tool_name"] as? String ?? ""
             let toolUseId = json["tool_use_id"] as? String ?? UUID().uuidString
             let rawInput = json["tool_input"] as? [String: Any] ?? [:]
+
+            // AskUserQuestion — special handling
+            if toolName == "AskUserQuestion" {
+                let questions = rawInput["questions"] as? [[String: Any]] ?? []
+                let firstQ = questions.first
+                let question = firstQ?["question"] as? String ?? "Question from Claude"
+                let options = firstQ?["options"] as? [String] ?? []
+                return .askQuestion(AskQuestionInfo(
+                    sessionId: sessionId, toolUseId: toolUseId,
+                    question: question, options: options
+                ))
+            }
+
             let toolInput = rawInput.reduce(into: [String: String]()) { result, pair in
                 result[pair.key] = "\(pair.value)"
             }
             let summary = ToolSummary.generate(toolName: toolName, toolInput: toolInput)
-            let info = ToolStartInfo(
-                sessionId: sessionId,
-                toolName: toolName,
-                toolUseId: toolUseId,
-                toolInput: toolInput,
-                summary: summary
-            )
-            return .toolStarted(info)
+            return .toolStarted(ToolStartInfo(
+                sessionId: sessionId, toolName: toolName, toolUseId: toolUseId,
+                toolInput: toolInput, summary: summary
+            ))
 
         case "PostToolUse":
             let toolName = json["tool_name"] as? String ?? ""
@@ -116,16 +134,15 @@ public enum ClaudeEventParser {
 
         case "PermissionRequest":
             let toolName = json["tool_name"] as? String ?? ""
+            let toolUseId = json["tool_use_id"] as? String ?? ""
             let rawInput = json["tool_input"] as? [String: Any] ?? [:]
             let toolInput = rawInput.reduce(into: [String: String]()) { result, pair in
                 result[pair.key] = "\(pair.value)"
             }
-            let info = PermissionInfo(
-                sessionId: sessionId,
-                toolName: toolName,
-                toolInput: toolInput
-            )
-            return .permissionRequested(info)
+            return .permissionRequested(PermissionInfo(
+                sessionId: sessionId, toolName: toolName,
+                toolInput: toolInput, toolUseId: toolUseId
+            ))
 
         case "Notification":
             let type = json["type"] as? String ?? ""
