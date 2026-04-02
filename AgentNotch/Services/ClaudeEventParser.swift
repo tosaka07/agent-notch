@@ -57,7 +57,7 @@ enum ClaudeEvent: Sendable {
 
 enum ClaudeEventParser {
     static func parse(_ json: [String: Any]) -> ClaudeEvent {
-        guard let eventType = json["event"] as? String else {
+        guard let eventType = json["hook_event_name"] as? String else {
             return .unknown
         }
 

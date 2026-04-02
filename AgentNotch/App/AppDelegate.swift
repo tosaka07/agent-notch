@@ -50,13 +50,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Socket Server
 
+    nonisolated static func debugLog(_ msg: String) {
+        let line = "[\(Date())] \(msg)\n"
+        let path = "/tmp/agent-notch-debug.log"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8)!)
+            handle.closeFile()
+        } else {
+            FileManager.default.createFile(atPath: path, contents: line.data(using: .utf8))
+        }
+    }
+
     private func startSocketServer() {
         let manager = sessionManager
         do {
             let server = try SocketServer { message in
+                AppDelegate.debugLog("Received: \(message["hook_event_name"] ?? "unknown") session=\(message["session_id"] ?? "?")")
                 let event = ClaudeEventParser.parse(message)
+                AppDelegate.debugLog("Parsed event: \(event)")
                 Task { @MainActor in
                     AppDelegate.processEvent(event, manager: manager)
+                    let allSessions = manager.sessions
+                    AppDelegate.debugLog("Processed. sessions dict count: \(allSessions.count), active: \(manager.activeSessions.count), changeCount: \(manager.changeCount)")
+                    for (id, s) in allSessions {
+                        AppDelegate.debugLog("  session[\(id)] status=\(s.status) tool=\(s.currentTool?.name ?? "nil")")
+                    }
                 }
                 return ["status": "ok"]
             }
@@ -72,14 +91,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defer { manager.changeCount += 1 }
         switch event {
         case let .sessionStarted(info):
+            debugLog("sessionStarted: creating session \(info.sessionId), manager id=\(ObjectIdentifier(manager))")
             let session = manager.getOrCreateSession(
                 id: info.sessionId,
                 agentType: AgentType.from(source: info.source)
             )
+            debugLog("sessionStarted: created, sessions count now=\(manager.sessions.count)")
             session.model = info.model
             session.cwd = info.cwd
             session.transcriptPath = info.transcriptPath
             session.status = .idle
+            debugLog("sessionStarted: status set to idle, sessions count=\(manager.sessions.count)")
 
         case let .userPrompt(sessionId):
             if let session = manager.session(for: sessionId) {

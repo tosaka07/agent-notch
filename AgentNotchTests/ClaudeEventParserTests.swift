@@ -7,7 +7,7 @@ struct ClaudeEventParserTests {
     @Test("SessionStart maps to sessionStarted with correct fields")
     func sessionStart() {
         let json: [String: Any] = [
-            "event": "SessionStart",
+            "hook_event_name": "SessionStart",
             "session_id": "sess-001",
             "model": "claude-sonnet-4-20250514",
             "cwd": "/Users/dev/project",
@@ -29,7 +29,7 @@ struct ClaudeEventParserTests {
     @Test("PreToolUse maps to toolStarted with summary from ToolSummary")
     func preToolUse() {
         let json: [String: Any] = [
-            "event": "PreToolUse",
+            "hook_event_name": "PreToolUse",
             "session_id": "sess-001",
             "tool_name": "Edit",
             "tool_use_id": "tu-123",
@@ -49,7 +49,7 @@ struct ClaudeEventParserTests {
     @Test("PermissionRequest maps correctly")
     func permissionRequest() {
         let json: [String: Any] = [
-            "event": "PermissionRequest",
+            "hook_event_name": "PermissionRequest",
             "session_id": "sess-002",
             "tool_name": "Bash",
             "tool_input": ["command": "rm -rf /tmp/test"],
@@ -67,7 +67,7 @@ struct ClaudeEventParserTests {
     @Test("Stop maps to sessionIdle")
     func stop() {
         let json: [String: Any] = [
-            "event": "Stop",
+            "hook_event_name": "Stop",
             "session_id": "sess-003",
         ]
         let event = ClaudeEventParser.parse(json)
@@ -81,7 +81,7 @@ struct ClaudeEventParserTests {
     @Test("Unknown event type maps to unknown")
     func unknownEvent() {
         let json: [String: Any] = [
-            "event": "SomeFutureEvent",
+            "hook_event_name": "SomeFutureEvent",
             "session_id": "sess-004",
         ]
         let event = ClaudeEventParser.parse(json)
