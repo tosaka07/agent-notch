@@ -78,7 +78,12 @@ struct NotchContentView: View {
     @State var viewModel = NotchViewModel()
     @State var sessionManager: SessionManager
 
-    private let animation: Animation = .spring(response: 0.42, dampingFraction: 0.8)
+    private var animation: Animation {
+        // Open: bouncy spring. Close: no bounce (dampingFraction 1.0) to avoid shrinking below notch
+        viewModel.mode == .compact
+            ? .spring(response: 0.45, dampingFraction: 1.0)
+            : .spring(response: 0.42, dampingFraction: 0.8)
+    }
 
     /// Directly reference activeSessions in body so @Observable tracking kicks in
     private var sessions: [UnifiedSession] {
