@@ -14,11 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupNotchOverlay() {
         guard let screen = NSScreen.builtin else { return }
         let controller = NotchWindowController(screen: screen)
-        controller.show(
-            rootView: Text("Agent Notch")
-                .foregroundStyle(.white)
-                .font(.system(size: 12, weight: .medium))
-        )
+        controller.show(contentView: NotchContentView())
         windowController = controller
     }
 
