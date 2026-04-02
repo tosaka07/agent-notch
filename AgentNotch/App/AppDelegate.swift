@@ -6,11 +6,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var windowController: NotchWindowController?
     private var socketServer: SocketServer?
+    private var screenObserver: ScreenObserver?
     private let sessionManager = SessionManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
         setupNotchOverlay()
+        setupScreenObserver()
         startSocketServer()
         HookInstaller.installIfNeeded()
     }
@@ -27,6 +29,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let contentView = NotchContentView(sessionManager: sessionManager)
         controller.show(contentView: contentView)
         windowController = controller
+    }
+
+    // MARK: - Screen Observer
+
+    private func setupScreenObserver() {
+        let observer = ScreenObserver()
+        observer.onScreenChanged = { [weak self] in
+            self?.recreateNotchOverlay()
+        }
+        screenObserver = observer
+    }
+
+    private func recreateNotchOverlay() {
+        windowController?.close()
+        windowController = nil
+        setupNotchOverlay()
     }
 
     // MARK: - Socket Server
