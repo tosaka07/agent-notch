@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
         }
-        sessionManager.changeCount += 1
+        sessionManager.notifyChange()
         AppDelegate.debugLog("Restored \(scanned.count) existing sessions")
     }
 
@@ -99,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { @MainActor in
                     AppDelegate.processEvent(event, manager: manager)
                     let allSessions = manager.sessions
-                    AppDelegate.debugLog("Processed. sessions dict count: \(allSessions.count), active: \(manager.activeSessions.count), changeCount: \(manager.changeCount)")
+                    AppDelegate.debugLog("Processed. sessions dict count: \(allSessions.count), active: \(manager.activeSessions.count)")
                     for (id, s) in allSessions {
                         AppDelegate.debugLog("  session[\(id)] status=\(s.status) tool=\(s.currentTool?.name ?? "nil")")
                     }
@@ -115,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     static func processEvent(_ event: ClaudeEvent, manager: SessionManager) {
-        defer { manager.changeCount += 1 }
+        defer { manager.notifyChange() }
         switch event {
         case let .sessionStarted(info):
             debugLog("sessionStarted: creating session \(info.sessionId), manager id=\(ObjectIdentifier(manager))")

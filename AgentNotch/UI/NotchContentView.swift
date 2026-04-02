@@ -76,7 +76,7 @@ final class NotchViewModel {
 
 struct NotchContentView: View {
     @State var viewModel = NotchViewModel()
-    @State var sessionManager: SessionManager
+    @ObservedObject var sessionManager: SessionManager
 
     private var animation: Animation {
         // Open: bouncy spring. Close: no bounce (dampingFraction 1.0) to avoid shrinking below notch
@@ -91,8 +91,6 @@ struct NotchContentView: View {
     }
 
     var body: some View {
-        // Read changeCount in body to force re-render on every event
-        let _ = sessionManager.changeCount
         let hasSessions = !sessions.isEmpty
 
         ZStack(alignment: .top) {

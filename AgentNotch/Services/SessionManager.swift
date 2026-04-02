@@ -1,17 +1,12 @@
+import Combine
 import Foundation
 
-@Observable
 @MainActor
-final class SessionManager {
-    private(set) var sessions: [String: UnifiedSession] = [:]
-
-    /// Incremented on every mutation to force SwiftUI re-evaluation
-    var changeCount: Int = 0
+final class SessionManager: ObservableObject {
+    @Published private(set) var sessions: [String: UnifiedSession] = [:]
 
     var activeSessions: [UnifiedSession] {
-        // Access changeCount so @Observable tracks it
-        _ = changeCount
-        return sessions.values
+        sessions.values
             .filter { $0.status != .completed }
             .sorted { $0.startedAt > $1.startedAt }
     }
@@ -30,12 +25,16 @@ final class SessionManager {
         }
         let session = UnifiedSession(id: id, agentType: agentType)
         sessions[id] = session
-        changeCount += 1
         return session
     }
 
     func session(for id: String) -> UnifiedSession? {
         sessions[id]
+    }
+
+    /// Call after mutating any session property to trigger SwiftUI update
+    func notifyChange() {
+        objectWillChange.send()
     }
 
     func cleanupCompleted(olderThan cutoff: Date) {

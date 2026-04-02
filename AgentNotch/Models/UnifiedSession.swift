@@ -1,6 +1,5 @@
 import Foundation
 
-@Observable
 final class UnifiedSession: Identifiable, @unchecked Sendable {
     let id: String
     let agentType: AgentType
