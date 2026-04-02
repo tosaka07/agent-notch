@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupScreenObserver()
         startSocketServer()
         HookInstaller.installIfNeeded()
+        restoreExistingSessions()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -46,6 +47,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController?.close()
         windowController = nil
         setupNotchOverlay()
+    }
+
+    // MARK: - Restore Existing Sessions
+
+    private func restoreExistingSessions() {
+        let scanned = ActiveSessionScanner.scan(recencyMinutes: 10)
+        for s in scanned {
+            let session = sessionManager.getOrCreateSession(id: s.sessionId, agentType: .claudeCode)
+            session.model = s.model
+            session.cwd = s.cwd
+            session.transcriptPath = s.transcriptPath
+            session.totalInputTokens = s.tokenUsage.inputTokens
+            session.totalOutputTokens = s.tokenUsage.outputTokens
+            session.totalCachedTokens = s.tokenUsage.cachedTokens
+            session.status = .idle
+            if let model = s.model {
+                session.estimatedCost = CostCalculator.estimateCost(
+                    model: model,
+                    inputTokens: s.tokenUsage.inputTokens,
+                    outputTokens: s.tokenUsage.outputTokens,
+                    cachedTokens: s.tokenUsage.cachedTokens
+                )
+            }
+        }
+        sessionManager.changeCount += 1
+        AppDelegate.debugLog("Restored \(scanned.count) existing sessions")
     }
 
     // MARK: - Socket Server
