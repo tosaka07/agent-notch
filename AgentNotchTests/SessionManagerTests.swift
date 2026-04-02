@@ -22,19 +22,24 @@ struct SessionManagerTests {
         first.status = .thinking
         let second = manager.getOrCreateSession(id: "s1", agentType: .codex)
         #expect(second.status == .thinking)
-        #expect(second.agentType == .claudeCode) // original type preserved
+        #expect(second.agentType == .claudeCode)
         #expect(manager.allSessions.count == 1)
     }
 
-    @Test("Removes completed sessions older than cutoff")
-    func removesCompleted() {
+    @Test("Removes session by id")
+    func removesSession() {
         let manager = SessionManager()
-        let session = manager.getOrCreateSession(id: "s1", agentType: .claudeCode)
-        session.status = .completed
-        session.endedAt = Date(timeIntervalSinceNow: -3600) // 1 hour ago
+        _ = manager.getOrCreateSession(id: "s1", agentType: .claudeCode)
+        manager.removeSession(id: "s1")
+        #expect(manager.allSessions.isEmpty)
+    }
 
-        let cutoff = Date(timeIntervalSinceNow: -1800) // 30 min ago
-        manager.cleanupCompleted(olderThan: cutoff)
+    @Test("Removes all sessions")
+    func removesAllSessions() {
+        let manager = SessionManager()
+        _ = manager.getOrCreateSession(id: "s1", agentType: .claudeCode)
+        _ = manager.getOrCreateSession(id: "s2", agentType: .codex)
+        manager.removeAllSessions()
         #expect(manager.allSessions.isEmpty)
     }
 
@@ -51,7 +56,7 @@ struct SessionManagerTests {
         s3.status = .toolRunning
 
         #expect(manager.allSessions.count == 3)
-        #expect(manager.activeSessions.count == 2) // s1 and s3
+        #expect(manager.activeSessions.count == 2)
     }
 
     @Test("session(for:) returns nil for unknown id")

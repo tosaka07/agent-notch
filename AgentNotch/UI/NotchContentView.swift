@@ -182,10 +182,25 @@ struct NotchContentView: View {
 
     private var expandedContent: some View {
         VStack(spacing: 8) {
-            Text("Sessions")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.top, 44)
+            HStack {
+                Text("Sessions")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                Spacer()
+                if !sessionManager.activeSessions.isEmpty {
+                    Button {
+                        sessionManager.removeAllSessions()
+                        sessionManager.notifyChange()
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 44)
+            .padding(.horizontal, 16)
 
             let sessions = sessionManager.activeSessions
             if sessions.isEmpty {

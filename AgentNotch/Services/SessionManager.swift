@@ -32,20 +32,16 @@ final class SessionManager: ObservableObject {
         sessions[id]
     }
 
+    func removeSession(id: String) {
+        sessions.removeValue(forKey: id)
+    }
+
+    func removeAllSessions() {
+        sessions.removeAll()
+    }
+
     /// Call after mutating any session property to trigger SwiftUI update
     func notifyChange() {
         objectWillChange.send()
-    }
-
-    func cleanupCompleted(olderThan cutoff: Date) {
-        let keysToRemove = sessions.filter { _, session in
-            session.status == .completed &&
-            session.endedAt != nil &&
-            session.endedAt! < cutoff
-        }.map(\.key)
-
-        for key in keysToRemove {
-            sessions.removeValue(forKey: key)
-        }
     }
 }
