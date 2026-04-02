@@ -11,6 +11,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/sindresorhus/Defaults.git", from: "9.0.0"),
         .package(url: "https://github.com/sindresorhus/LaunchAtLogin-Modern.git", from: "1.1.0"),
+        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui.git", from: "2.4.0"),
     ],
     targets: [
         // Shared library — models, services, utilities (no UI dependency)
@@ -25,6 +26,7 @@ let package = Package(
                 "AgentNotchCore",
                 "Defaults",
                 .product(name: "LaunchAtLogin", package: "LaunchAtLogin-Modern"),
+                .product(name: "MarkdownUI", package: "swift-markdown-ui"),
             ],
             path: "AgentNotch",
             exclude: ["Info.plist"],
