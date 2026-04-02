@@ -91,6 +91,8 @@ struct NotchContentView: View {
     }
 
     var body: some View {
+        // Read changeCount in body to force re-render on every event
+        let _ = sessionManager.changeCount
         let hasSessions = !sessions.isEmpty
 
         ZStack(alignment: .top) {
