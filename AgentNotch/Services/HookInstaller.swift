@@ -1,20 +1,21 @@
 import Foundation
 
 enum HookInstaller {
-    static let hookVersion = "1"
+    static let hookVersion = "2"
 
-    nonisolated(unsafe) private static let hookEvents: [[String: Any]] = [
-        ["event": "SessionStart"],
-        ["event": "UserPromptSubmit"],
-        ["event": "PreToolUse", "matcher": "*"],
-        ["event": "PostToolUse", "matcher": "*"],
-        ["event": "PostToolUseFailure", "matcher": "*"],
-        ["event": "PermissionRequest", "matcher": "*", "timeout": 86400],
-        ["event": "Notification", "matcher": "*"],
-        ["event": "Stop"],
-        ["event": "SubagentStop"],
-        ["event": "SessionEnd"],
-        ["event": "PreCompact", "matcher": "auto/manual"],
+    /// Hook event definitions: (event name, matcher or nil, timeout or nil)
+    private static let hookEvents: [(event: String, matcher: String?, timeout: Int?)] = [
+        ("SessionStart", nil, nil),
+        ("UserPromptSubmit", nil, nil),
+        ("PreToolUse", "", nil),              // empty matcher = match all tools
+        ("PostToolUse", "", nil),
+        ("PostToolUseFailure", "", nil),
+        ("PermissionRequest", "", 86400),
+        ("Notification", "", nil),
+        ("Stop", nil, nil),
+        ("SubagentStop", nil, nil),
+        ("SessionEnd", nil, nil),
+        ("PreCompact", "auto", nil),
     ]
 
     static func installIfNeeded() {
@@ -46,27 +47,31 @@ enum HookInstaller {
         }
 
         let scriptPath = bundledHookScriptPath()
-        var hooks: [[String: Any]] = []
 
-        for hookEvent in hookEvents {
-            var entry: [String: Any] = [:]
-            entry["type"] = "command"
-            entry["command"] = "python3 \(scriptPath)"
+        // Claude Code hooks schema:
+        // "hooks": {
+        //   "EventName": [
+        //     { "matcher": "...", "hooks": [{ "type": "command", "command": "..." }] }
+        //   ]
+        // }
+        var existingHooks = settings["hooks"] as? [String: Any] ?? [:]
 
-            if let event = hookEvent["event"] as? String {
-                entry["event"] = event
-            }
-            if let matcher = hookEvent["matcher"] as? String {
-                entry["matcher"] = matcher
-            }
-            if let timeout = hookEvent["timeout"] as? Int {
-                entry["timeout"] = timeout
-            }
+        for (event, matcher, timeout) in hookEvents {
+            var hookCmd: [String: Any] = [
+                "type": "command",
+                "command": "python3 \(scriptPath)",
+            ]
+            if let timeout { hookCmd["timeout"] = timeout }
 
-            hooks.append(entry)
+            var matcherEntry: [String: Any] = [
+                "hooks": [hookCmd],
+            ]
+            if let matcher { matcherEntry["matcher"] = matcher }
+
+            existingHooks[event] = [matcherEntry]
         }
 
-        settings["hooks"] = hooks
+        settings["hooks"] = existingHooks
         settings["_agentNotchHookVersion"] = hookVersion
 
         // Ensure the .claude directory exists
