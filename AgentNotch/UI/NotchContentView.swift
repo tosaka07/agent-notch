@@ -11,12 +11,26 @@ enum NotchMode: Sendable {
 final class NotchViewModel {
     var mode: NotchMode = .compact
 
-    // Physical notch width — set from NSScreen on init
+    // Physical notch dimensions — set from NSScreen on init
     var physicalNotchWidth: CGFloat = 224
+    var physicalNotchHeight: CGFloat = 38
+
+    // Whether any session is active (controls wing expansion)
+    var hasActivity: Bool = false
+
+    /// Wing size on each side (Claude Island style: notchHeight - 12 + 10)
+    var sideWidth: CGFloat {
+        max(0, physicalNotchHeight - 12) + 10
+    }
+
+    /// Extra width beyond the physical notch
+    private var expansionWidth: CGFloat {
+        hasActivity ? (2 * sideWidth + 20) : 0
+    }
 
     var notchWidth: CGFloat {
         switch mode {
-        case .compact: physicalNotchWidth + 300  // 150px wings on each side
+        case .compact: physicalNotchWidth + expansionWidth
         case .expanded: 550
         case .fullPanel: 650
         }
@@ -24,7 +38,7 @@ final class NotchViewModel {
 
     var notchHeight: CGFloat {
         switch mode {
-        case .compact: 38
+        case .compact: physicalNotchHeight
         case .expanded: 400
         case .fullPanel: 500
         }
@@ -78,11 +92,15 @@ struct NotchContentView: View {
                 height: viewModel.notchHeight
             )
             .animation(animation, value: viewModel.mode)
+            .animation(.smooth, value: viewModel.hasActivity)
 
             contentForMode
                 .animation(animation, value: viewModel.mode)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onChange(of: sessionManager.activeSessions.count) {
+            viewModel.hasActivity = !sessionManager.activeSessions.isEmpty
+        }
     }
 
     @ViewBuilder
@@ -99,67 +117,52 @@ struct NotchContentView: View {
 
     // MARK: - Compact
 
-    /// Compact mode: content is placed in the "wings" on either side of the physical notch.
-    /// The center (physical notch area) is left empty/black.
+    /// Compact mode (Claude Island style):
+    /// - No activity: notch-sized black shape, invisible behind physical notch
+    /// - Active: wings extend from notch — left wing has status icon, right wing has spinner/info
     @ViewBuilder
     private var compactContent: some View {
         let sessions = sessionManager.activeSessions
-        let wingWidth = (viewModel.notchWidth - viewModel.physicalNotchWidth) / 2 - 8
 
-        HStack(spacing: 0) {
-            // Left wing
-            Group {
-                if sessions.isEmpty {
-                    Text("Agent Notch")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.7))
-                } else if let first = sessions.first {
-                    compactSessionLabel(first)
-                }
-            }
-            .frame(width: wingWidth, height: viewModel.notchHeight)
-
-            // Center gap — physical notch area (invisible)
-            Color.clear
-                .frame(width: viewModel.physicalNotchWidth, height: viewModel.notchHeight)
-
-            // Right wing
-            Group {
-                if sessions.count > 1, let second = sessions.dropFirst().first {
-                    compactSessionLabel(second)
-                } else if sessions.isEmpty {
-                    EmptyView()
-                } else {
-                    // Single session: show tokens on right
-                    if let session = sessions.first {
-                        HStack(spacing: 4) {
-                            Text("\(TokenFormatter.format(session.totalInputTokens))↓")
-                            Text(CostCalculator.formatCost(session.estimatedCost))
-                        }
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.6))
+        if sessions.isEmpty {
+            // No sessions — invisible behind the physical notch
+            EmptyView()
+                .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
+        } else {
+            HStack(spacing: 0) {
+                // Left wing: agent status icon
+                HStack(spacing: 4) {
+                    StatusIndicator(status: sessions.first?.status ?? .idle, size: 10)
+                    if sessions.count > 1 {
+                        // Multiple sessions: show count
+                        Text("\(sessions.count)")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.7))
                     }
                 }
-            }
-            .frame(width: wingWidth, height: viewModel.notchHeight)
-        }
-        .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
-    }
+                .frame(width: viewModel.sideWidth)
 
-    private func compactSessionLabel(_ session: UnifiedSession) -> some View {
-        HStack(spacing: 4) {
-            StatusIndicator(status: session.status, size: 6)
-            if let tool = session.currentTool {
-                Text(tool.summary)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .lineLimit(1)
-            } else {
-                Text(session.agentType.displayName)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
+                // Center: notch area (black spacer)
+                Color.black
+                    .frame(width: viewModel.physicalNotchWidth - viewModel.topCornerRadius)
+
+                // Right wing: current tool or spinner
+                HStack(spacing: 4) {
+                    if let tool = sessions.first?.currentTool {
+                        Text(tool.summary)
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .lineLimit(1)
+                    } else {
+                        Text(sessions.first?.status.label ?? "")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(width: viewModel.sideWidth)
             }
+            .frame(height: viewModel.notchHeight)
         }
     }
 
