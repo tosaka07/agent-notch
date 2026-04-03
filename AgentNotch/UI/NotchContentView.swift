@@ -94,9 +94,6 @@ struct NotchContentView: View {
         .onChange(of: hasSessions) { _, newValue in
             viewModel.hasActivity = newValue
         }
-        .onChange(of: sessionManager.activeSessions.first?.status) { _, _ in
-            viewModel.hasActivity = sessionManager.activeSessions.contains { $0.status.isActive }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .agentNotchAutoExpand)) { notification in
             if let sessionId = notification.object as? String {
                 withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
