@@ -14,9 +14,12 @@ public enum HookInstaller {
         ("PermissionRequest", "", 86400),
         ("Notification", "", nil),
         ("Stop", nil, nil),
+        ("StopFailure", nil, nil),
+        ("SubagentStart", nil, nil),
         ("SubagentStop", nil, nil),
         ("SessionEnd", nil, nil),
         ("PreCompact", "auto", nil),
+        ("PostCompact", nil, nil),
     ]
 
     /// Install hooks using the CLI binary path.

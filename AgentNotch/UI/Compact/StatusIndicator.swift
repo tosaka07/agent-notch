@@ -8,11 +8,8 @@ struct StatusIndicator: View {
     @State private var isAnimating = false
 
     var body: some View {
-        Circle()
-            .fill(status.color)
+        indicator
             .frame(width: size, height: size)
-            .scaleEffect(scaleValue)
-            .opacity(opacityValue)
             .animation(animationForStatus, value: isAnimating)
             .onAppear { isAnimating = true }
             .onChange(of: status) { _, _ in
@@ -21,50 +18,71 @@ struct StatusIndicator: View {
             }
     }
 
-    private var scaleValue: CGFloat {
+    @ViewBuilder
+    private var indicator: some View {
         switch status {
-        case .idle, .starting:
-            return 1.0
-        case .thinking:
-            return isAnimating ? 1.3 : 0.8
-        case .toolRunning:
-            return isAnimating ? 1.2 : 0.9
         case .permissionWaiting:
-            return isAnimating ? 1.4 : 0.7
+            // Warning triangle for permission
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: size * 0.9))
+                .foregroundStyle(status.color)
+                .scaleEffect(isAnimating ? 1.2 : 0.8)
+
+        case .done:
+            // Checkmark for done
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: size * 0.9))
+                .foregroundStyle(status.color)
+                .opacity(isAnimating ? 0 : 1)
+
         case .error:
-            return isAnimating ? 1.5 : 0.5
-        case .compacting:
-            return isAnimating ? 1.2 : 0.9
-        case .completed:
-            return 1.0
+            // X for error
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: size * 0.9))
+                .foregroundStyle(status.color)
+                .scaleEffect(isAnimating ? 1.3 : 0.7)
+
+        default:
+            // Dot for all other states
+            Circle()
+                .fill(status.color)
+                .scaleEffect(scaleValue)
         }
     }
 
-    private var opacityValue: Double {
+    private var scaleValue: CGFloat {
         switch status {
-        case .completed:
-            return isAnimating ? 0.0 : 1.0
+        case .idle, .starting, .completed:
+            1.0
+        case .thinking:
+            isAnimating ? 1.3 : 0.8
+        case .toolRunning, .subagentRunning:
+            isAnimating ? 1.2 : 0.85
+        case .compacting:
+            isAnimating ? 1.15 : 0.9
         default:
-            return 1.0
+            1.0
         }
     }
 
     private var animationForStatus: Animation? {
         switch status {
-        case .idle, .starting:
-            return nil
+        case .idle, .starting, .completed:
+            nil
         case .thinking:
-            return .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
+            .easeInOut(duration: 1.0).repeatForever(autoreverses: true)
         case .toolRunning:
-            return .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+            .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+        case .subagentRunning:
+            .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
         case .permissionWaiting:
-            return .easeInOut(duration: 0.5).repeatForever(autoreverses: true)
-        case .error:
-            return .easeInOut(duration: 0.3).repeatForever(autoreverses: true)
+            .easeInOut(duration: 0.4).repeatForever(autoreverses: true)
         case .compacting:
-            return .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
-        case .completed:
-            return .easeOut(duration: 2.0)
+            .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+        case .done:
+            .easeOut(duration: 3.0)
+        case .error:
+            .easeInOut(duration: 0.3).repeatForever(autoreverses: true)
         }
     }
 }

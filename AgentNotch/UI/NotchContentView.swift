@@ -94,6 +94,9 @@ struct NotchContentView: View {
         .onChange(of: hasSessions) { _, newValue in
             viewModel.hasActivity = newValue
         }
+        .onChange(of: sessionManager.activeSessions.first?.status) { _, _ in
+            viewModel.hasActivity = sessionManager.activeSessions.contains { $0.status.isActive }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .agentNotchAutoExpand)) { notification in
             if let sessionId = notification.object as? String {
                 withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
@@ -131,31 +134,24 @@ struct NotchContentView: View {
             EmptyView()
                 .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
         } else {
-            HStack(spacing: 0) {
-                HStack(spacing: 4) {
-                    StatusIndicator(status: sessions.first?.status ?? .idle, size: 10)
-                    if sessions.count > 1 {
-                        Text("\(sessions.count)")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                }
-                .frame(width: viewModel.sideWidth)
+            // Aggregate status: most urgent across all sessions
+            let urgentStatus = mostUrgentStatus(sessions)
 
+            HStack(spacing: 0) {
+                // Left wing: status indicator only
+                StatusIndicator(status: urgentStatus, size: 12)
+                    .frame(width: viewModel.sideWidth)
+
+                // Center: physical notch
                 Color.black
                     .frame(width: viewModel.physicalNotchWidth - 6)
 
-                HStack(spacing: 4) {
-                    if let tool = sessions.first?.currentTool {
-                        Text(tool.summary)
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                // Right wing: session count (only if 2+)
+                Group {
+                    if sessions.count > 1 {
+                        Text("\(sessions.count)")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.7))
-                            .lineLimit(1)
-                    } else {
-                        Text(sessions.first?.status.label ?? "")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.5))
-                            .lineLimit(1)
                     }
                 }
                 .frame(width: viewModel.sideWidth)
@@ -209,5 +205,22 @@ struct NotchContentView: View {
             }
         }
         .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
+    }
+
+    // MARK: - Helpers
+
+    /// Returns the most urgent status across all sessions.
+    /// Priority: permissionWaiting > error > toolRunning > subagentRunning > thinking > compacting > done > idle
+    private func mostUrgentStatus(_ sessions: [UnifiedSession]) -> SessionStatus {
+        let priority: [SessionStatus] = [
+            .permissionWaiting, .error, .toolRunning, .subagentRunning,
+            .thinking, .compacting, .done, .idle, .starting, .completed,
+        ]
+        for status in priority {
+            if sessions.contains(where: { $0.status == status }) {
+                return status
+            }
+        }
+        return .idle
     }
 }

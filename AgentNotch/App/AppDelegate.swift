@@ -208,9 +208,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 session.status = .idle
             }
 
+        case let .subagentStarted(sessionId, _):
+            let session = manager.session(for: sessionId)
+                ?? manager.getOrCreateSession(id: sessionId, agentType: .claudeCode)
+            session.status = .subagentRunning
+
+        case let .stopFailure(sessionId, errorType):
+            let session = manager.session(for: sessionId)
+                ?? manager.getOrCreateSession(id: sessionId, agentType: .claudeCode)
+            session.status = .error
+            session.currentTool = nil
+
+        case let .compactingDone(sessionId):
+            if let session = manager.session(for: sessionId) {
+                session.status = .thinking
+            }
+
         case let .sessionIdle(sessionId):
             if let session = manager.session(for: sessionId) {
-                session.status = .idle
+                session.status = .done
+                session.currentTool = nil
                 session.pendingPermissions.removeAll()
                 session.pendingQuestion = nil
                 if let path = session.transcriptPath, let model = session.model {
@@ -222,6 +239,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         model: model, inputTokens: usage.inputTokens,
                         outputTokens: usage.outputTokens, cachedTokens: usage.cachedTokens
                     )
+                }
+                manager.notifyChange()
+                // Fade to idle after 3 seconds
+                let sid = sessionId
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(3))
+                    if manager.session(for: sid)?.status == .done {
+                        manager.session(for: sid)?.status = .idle
+                        manager.notifyChange()
+                    }
                 }
             }
 

@@ -58,7 +58,10 @@ public enum ClaudeEvent: Sendable {
     case sessionEnded(String)
     case subagentStopped(sessionId: String)
     case askQuestion(AskQuestionInfo)
+    case subagentStarted(sessionId: String, agentType: String)
     case compacting(sessionId: String)
+    case compactingDone(sessionId: String)
+    case stopFailure(sessionId: String, errorType: String)
     case unknown
 }
 
@@ -152,6 +155,10 @@ public enum ClaudeEventParser {
         case "Stop":
             return .sessionIdle(sessionId)
 
+        case "SubagentStart":
+            let agentType = json["agent_type"] as? String ?? "unknown"
+            return .subagentStarted(sessionId: sessionId, agentType: agentType)
+
         case "SubagentStop":
             return .subagentStopped(sessionId: sessionId)
 
@@ -160,6 +167,13 @@ public enum ClaudeEventParser {
 
         case "PreCompact":
             return .compacting(sessionId: sessionId)
+
+        case "PostCompact":
+            return .compactingDone(sessionId: sessionId)
+
+        case "StopFailure":
+            let errorType = json["error"] as? String ?? "unknown"
+            return .stopFailure(sessionId: sessionId, errorType: errorType)
 
         default:
             return .unknown
