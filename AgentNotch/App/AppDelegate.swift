@@ -84,8 +84,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     isDeferred = false
                 }
 
+                // Extract common fields available on all hook events
+                let cwd = message["cwd"] as? String
+                let transcriptPath = message["transcript_path"] as? String
+
                 Task { @MainActor in
                     AppDelegate.processEvent(event, manager: manager)
+                    // Backfill cwd/transcriptPath on every event (may have been missing on auto-created sessions)
+                    if let session = manager.session(for: sessionId) {
+                        if session.cwd == nil, let cwd { session.cwd = cwd }
+                        if session.transcriptPath == nil, let transcriptPath { session.transcriptPath = transcriptPath }
+                    }
                 }
 
                 return isDeferred ? nil : ["status": "ok"]
