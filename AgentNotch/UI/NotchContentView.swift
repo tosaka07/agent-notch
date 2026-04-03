@@ -79,6 +79,7 @@ struct NotchContentView: View {
 
     var body: some View {
         let hasSessions = !sessionManager.activeSessions.isEmpty
+        let _ = { viewModel.hasActivity = hasSessions }()
 
         ZStack(alignment: .top) {
             NotchShape(topCornerRadius: viewModel.topCornerRadius, bottomCornerRadius: viewModel.bottomCornerRadius)
