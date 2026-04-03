@@ -8,6 +8,10 @@ final class HotZoneTracker {
     var onClickedOutside: (() -> Void)?
     var onHoverChanged: ((Bool) -> Void)?
 
+    /// Current panel size (updated by NotchWindowController when mode changes)
+    var currentPanelWidth: CGFloat = 0
+    var currentPanelHeight: CGFloat = 0
+
     private let eventMonitor = MouseEventMonitor()
     private var isHovering = false
 
@@ -37,19 +41,34 @@ final class HotZoneTracker {
         case .leftMouseDown:
             if geometry.isPointInNotch(location) {
                 onNotchClicked?()
+            } else if isInsidePanel(location) {
+                // Click inside the expanded panel — let SwiftUI handle it
+                // Do nothing
             } else {
                 onClickedOutside?()
             }
 
         case .mouseMoved:
             let inNotch = geometry.isPointInNotch(location)
-            if inNotch != isHovering {
-                isHovering = inNotch
-                onHoverChanged?(inNotch)
+            let inPanel = isInsidePanel(location)
+            let hovering = inNotch || inPanel
+            if hovering != isHovering {
+                isHovering = hovering
+                onHoverChanged?(hovering)
             }
 
         default:
             break
         }
+    }
+
+    private func isInsidePanel(_ point: CGPoint) -> Bool {
+        guard currentPanelWidth > 0, currentPanelHeight > 0 else { return false }
+        return geometry.isPointInWindow(
+            point,
+            isExpanded: true,
+            expandedWidth: currentPanelWidth,
+            expandedHeight: currentPanelHeight
+        )
     }
 }

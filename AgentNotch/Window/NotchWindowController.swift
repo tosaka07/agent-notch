@@ -1,10 +1,12 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
 final class NotchWindowController {
     private var panel: NotchPanel?
     private var hotZoneTracker: HotZoneTracker?
+    private var modeObservation: AnyCancellable?
     let geometry: NotchGeometry
     let screen: NSScreen
 
@@ -17,10 +19,9 @@ final class NotchWindowController {
     }
 
     func show(contentView: NotchContentView) {
-        // Use the full expanded frame so content has room to expand into
         let frame = geometry.windowFrame(
             expandedWidth: 650,
-            expandedHeight: 500,
+            expandedHeight: 550,
             isExpanded: true
         )
         let panel = NotchPanel(contentRect: frame)
@@ -34,6 +35,8 @@ final class NotchWindowController {
     func close() {
         hotZoneTracker?.stop()
         hotZoneTracker = nil
+        modeObservation?.cancel()
+        modeObservation = nil
         panel?.close()
         panel = nil
     }
@@ -41,11 +44,18 @@ final class NotchWindowController {
     private func setupHotZoneTracker(viewModel: NotchViewModel) {
         let tracker = HotZoneTracker(geometry: geometry)
 
+        // Update panel size based on current mode
+        func updateTrackerSize() {
+            tracker.currentPanelWidth = viewModel.notchWidth
+            tracker.currentPanelHeight = viewModel.notchHeight
+        }
+        updateTrackerSize()
+
         tracker.onNotchClicked = { [weak self, weak viewModel] in
             guard let self, let viewModel else { return }
             viewModel.toggle()
-            // When expanded, allow mouse events so the panel is interactive
             self.panel?.ignoresMouseEvents = viewModel.mode == .compact
+            updateTrackerSize()
         }
 
         tracker.onClickedOutside = { [weak self, weak viewModel] in
@@ -53,13 +63,21 @@ final class NotchWindowController {
             guard viewModel.mode != .compact else { return }
             viewModel.close()
             self.panel?.ignoresMouseEvents = true
+            updateTrackerSize()
         }
 
-        tracker.onHoverChanged = { _ in
-            // Reserved for future hover effects
-        }
+        tracker.onHoverChanged = { _ in }
 
         tracker.start()
         hotZoneTracker = tracker
+
+        // Observe mode changes from auto-expand (notifications) to update tracker + panel
+        modeObservation = NotificationCenter.default.publisher(for: .agentNotchAutoExpand)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak viewModel] _ in
+                guard let self, let viewModel else { return }
+                self.panel?.ignoresMouseEvents = viewModel.mode == .compact
+                updateTrackerSize()
+            }
     }
 }
