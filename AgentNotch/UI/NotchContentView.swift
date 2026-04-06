@@ -171,17 +171,12 @@ struct NotchContentView: View {
         if sessions.isEmpty {
             EmptyView()
         } else {
-            // Aggregate status: most urgent across all sessions
             let urgentStatus = mostUrgentStatus(sessions)
 
             HStack(spacing: 0) {
-                // Left wing: status indicator only
+                // Left wing: status indicator
                 StatusIndicator(status: urgentStatus, size: 12)
-                    .frame(width: viewModel.sideWidth)
-
-                // Center: physical notch (match exact width so wings stay outside)
-                Color.black
-                    .frame(width: viewModel.physicalNotchWidth)
+                    .frame(maxWidth: .infinity)
 
                 // Right wing: session count (only if 2+)
                 Group {
@@ -191,7 +186,7 @@ struct NotchContentView: View {
                             .foregroundStyle(.white.opacity(0.7))
                     }
                 }
-                .frame(width: viewModel.sideWidth)
+                .frame(maxWidth: .infinity)
             }
             .frame(height: viewModel.notchHeight)
         }

@@ -33,8 +33,13 @@ extension NSScreen {
             let leftWidth = auxiliaryTopLeftArea?.width ?? 0
             let rightWidth = auxiliaryTopRightArea?.width ?? 0
 
-            // Notch width = screen width - left auxiliary - right auxiliary
-            let notchWidth = frame.width - leftWidth - rightWidth
+            guard leftWidth > 0, rightWidth > 0 else {
+                return CGSize(width: 180, height: topInset)
+            }
+
+            // +4 compensates for the physical notch's rounded corners that extend
+            // beyond the auxiliary area boundary (same approach as boring.notch / claude-island)
+            let notchWidth = frame.width - leftWidth - rightWidth + 4
             let notchHeight = topInset
 
             if notchWidth > 0 && notchHeight > 0 {
