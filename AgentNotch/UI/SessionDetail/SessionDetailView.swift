@@ -10,14 +10,17 @@ struct SessionDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Header
             header
-                .padding(.top, 44)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
+                .padding(.top, 40)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 6)
 
-            Divider().overlay(Color.white.opacity(0.1))
+            Rectangle()
+                .fill(.white.opacity(0.06))
+                .frame(height: 0.5)
 
-            // Permission banner
+            // Permission / Question banners
             if let perm = session.pendingPermissions.first {
                 PermissionBanner(
                     permission: perm,
@@ -31,28 +34,28 @@ struct SessionDetailView: View {
                             reason: "Denied via Agent Notch")
                     }
                 )
-                .padding(.horizontal, 12).padding(.top, 4)
+                .padding(.horizontal, 10).padding(.top, 6)
             }
 
-            // Question banner
             if let q = session.pendingQuestion {
                 QuestionBanner(question: q.question, options: q.options) { answer in
                     (NSApp.delegate as? AppDelegate)?.answerQuestion(
                         sessionId: session.id, toolUseId: q.toolUseId, answer: answer)
                 }
-                .padding(.horizontal, 12).padding(.top, 4)
+                .padding(.horizontal, 10).padding(.top, 6)
             }
 
+            // Chat log
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 4) {
+                    LazyVStack(spacing: 2) {
                         ForEach(chatEntries) { entry in
                             ChatMessageView(entry: entry)
                                 .id(entry.id)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
                 }
                 .onAppear {
                     loadChat()
@@ -66,44 +69,39 @@ struct SessionDetailView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Button { onBack() } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.5))
-                }
-                .buttonStyle(.plain)
+        HStack(spacing: 8) {
+            Button { onBack() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.plain)
 
-                StatusIndicator(status: session.status, size: 8)
-                Text(session.agentType.displayName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
+            StatusIndicator(status: session.status, size: 7)
 
-                if let cwd = session.cwd {
-                    Text(shortenPath(cwd))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.3))
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(session.agentType.displayName)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.9))
+                    Text(projectName(session.cwd))
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.25))
                         .lineLimit(1)
                 }
-
-                Spacer()
-
-                Text(formatDuration(session.elapsedTime))
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.4))
-            }
-
-            HStack(spacing: 12) {
                 if let model = session.model {
-                    Text(model).font(.system(size: 9))
+                    Text(model)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.2))
                 }
-                Text("\(TokenFormatter.format(session.totalInputTokens))↓ \(TokenFormatter.format(session.totalOutputTokens))↑")
-                    .font(.system(size: 9, design: .monospaced))
-                Text(CostCalculator.formatCost(session.estimatedCost))
-                    .font(.system(size: 9, design: .monospaced))
             }
-            .foregroundStyle(.white.opacity(0.4))
+
+            Spacer()
+
+            Text(formatDuration(session.elapsedTime))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.3))
         }
     }
 
@@ -118,17 +116,13 @@ struct SessionDetailView: View {
         }
     }
 
-    private func shortenPath(_ path: String) -> String {
-        let home = NSHomeDirectory()
-        var short = path
-        if short.hasPrefix(home) { short = "~" + short.dropFirst(home.count) }
-        let parts = short.split(separator: "/")
-        if parts.count > 3 { return "~/" + parts.suffix(2).joined(separator: "/") }
-        return short
+    private func projectName(_ path: String?) -> String {
+        guard let path else { return "" }
+        return (path as NSString).lastPathComponent
     }
 
     private func formatDuration(_ interval: TimeInterval) -> String {
         let m = Int(interval) / 60; let s = Int(interval) % 60
-        return String(format: "%dm %02ds", m, s)
+        return String(format: "%d:%02d", m, s)
     }
 }

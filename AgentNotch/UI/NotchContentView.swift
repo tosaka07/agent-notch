@@ -12,16 +12,21 @@ enum NotchMode: Equatable, Sendable {
 final class NotchViewModel {
     var mode: NotchMode = .compact
 
-    var physicalNotchWidth: CGFloat = 224
-    var physicalNotchHeight: CGFloat = 38
+    var physicalNotchWidth: CGFloat
+    var physicalNotchHeight: CGFloat
     var hasActivity: Bool = false
+
+    init(notchSize: CGSize = CGSize(width: 224, height: 38)) {
+        self.physicalNotchWidth = notchSize.width
+        self.physicalNotchHeight = notchSize.height
+    }
 
     var sideWidth: CGFloat {
         max(0, physicalNotchHeight - 12) + 10
     }
 
     private var expansionWidth: CGFloat {
-        hasActivity ? (2 * sideWidth + 20) : 0
+        hasActivity ? (2 * sideWidth) : 0
     }
 
     var notchWidth: CGFloat {
@@ -68,8 +73,13 @@ final class NotchViewModel {
 }
 
 struct NotchContentView: View {
-    @State var viewModel = NotchViewModel()
+    @State var viewModel: NotchViewModel
     @ObservedObject var sessionManager: SessionManager
+
+    init(sessionManager: SessionManager, notchSize: CGSize = CGSize(width: 224, height: 38)) {
+        self._viewModel = State(initialValue: NotchViewModel(notchSize: notchSize))
+        self.sessionManager = sessionManager
+    }
 
     private var animation: Animation {
         viewModel.mode == .compact
@@ -142,9 +152,9 @@ struct NotchContentView: View {
                 StatusIndicator(status: urgentStatus, size: 12)
                     .frame(width: viewModel.sideWidth)
 
-                // Center: physical notch
+                // Center: physical notch (match exact width so wings stay outside)
                 Color.black
-                    .frame(width: viewModel.physicalNotchWidth - 6)
+                    .frame(width: viewModel.physicalNotchWidth)
 
                 // Right wing: session count (only if 2+)
                 Group {
@@ -163,44 +173,58 @@ struct NotchContentView: View {
     // MARK: - Expanded
 
     private var expandedContent: some View {
-        VStack(spacing: 8) {
-            HStack {
+        VStack(spacing: 0) {
+            // Header
+            HStack(spacing: 6) {
                 Text("Sessions")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+
+                let count = sessionManager.activeSessions.count
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.3))
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
+
                 Spacer()
+
                 if !sessionManager.activeSessions.isEmpty {
                     Button {
                         sessionManager.removeAllSessions()
                         sessionManager.notifyChange()
                     } label: {
-                        Image(systemName: "trash")
+                        Image(systemName: "xmark.circle")
                             .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.3))
+                            .foregroundStyle(.white.opacity(0.2))
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.top, 44)
-            .padding(.horizontal, 16)
+            .padding(.top, 40)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 8)
 
             let sessions = sessionManager.activeSessions
             if sessions.isEmpty {
                 Spacer()
                 Text("No active sessions")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.2))
                 Spacer()
             } else {
                 ScrollView {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 4) {
                         ForEach(sessions) { session in
                             SessionCardView(session: session) {
                                 viewModel.showSession(session.id)
                             }
                         }
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 10)
                 }
             }
         }
