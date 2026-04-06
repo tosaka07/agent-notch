@@ -6,15 +6,22 @@ struct StatusIndicator: View {
     var size: CGFloat = 8
 
     @State private var isAnimating = false
+    @State private var doneOpacity: Double = 1.0
 
     var body: some View {
         indicator
             .frame(width: size, height: size)
             .animation(animationForStatus, value: isAnimating)
             .onAppear { isAnimating = true }
-            .onChange(of: status) { _, _ in
+            .onChange(of: status) { _, newStatus in
                 isAnimating = false
+                doneOpacity = 1.0
                 withAnimation { isAnimating = true }
+                if newStatus == .done {
+                    withAnimation(.easeOut(duration: 0.5).delay(2.0)) {
+                        doneOpacity = 0
+                    }
+                }
             }
     }
 
@@ -29,11 +36,11 @@ struct StatusIndicator: View {
                 .scaleEffect(isAnimating ? 1.2 : 0.8)
 
         case .done:
-            // Checkmark for done
+            // Checkmark for done — hold full opacity 1.5s, then fade out
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: size * 0.9))
                 .foregroundStyle(status.color)
-                .opacity(isAnimating ? 0 : 1)
+                .opacity(doneOpacity)
 
         case .error:
             // X for error

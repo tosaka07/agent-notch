@@ -15,14 +15,14 @@ public enum SessionStatus: String, Codable, Sendable {
     public var color: Color {
         switch self {
         case .starting, .idle: .gray
-        case .thinking: .orange
-        case .toolRunning: .green
+        case .thinking: .blue
+        case .toolRunning: .blue
         case .subagentRunning: .cyan
         case .permissionWaiting: .orange
         case .compacting: .purple
         case .done: .green
         case .error: .red
-        case .completed: .blue
+        case .completed: .gray
         }
     }
 
