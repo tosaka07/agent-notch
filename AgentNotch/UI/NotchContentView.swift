@@ -82,15 +82,18 @@ struct NotchContentView: View {
         let _ = { viewModel.hasActivity = hasSessions }()
 
         ZStack(alignment: .top) {
-            contentForMode
+            // Black background shape — animates size
+            NotchShape(topCornerRadius: viewModel.topCornerRadius, bottomCornerRadius: viewModel.bottomCornerRadius)
+                .fill(.black)
                 .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
-                .background(.black)
-                .clipShape(NotchShape(
-                    topCornerRadius: viewModel.topCornerRadius,
-                    bottomCornerRadius: viewModel.bottomCornerRadius
-                ))
                 .animation(animation, value: viewModel.mode)
                 .animation(.smooth, value: viewModel.hasActivity)
+
+            // Content — clipped to NotchShape, fades in after background expands
+            contentForMode
+                .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
+                .clipped()
+                .allowsHitTesting(viewModel.mode != .compact)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: hasSessions) { _, newValue in
