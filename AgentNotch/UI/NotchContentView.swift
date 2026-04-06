@@ -177,6 +177,9 @@ struct NotchContentView: View {
 
     private var expandedContent: some View {
         VStack(spacing: 0) {
+            // Top spacer — room for physical notch area
+            Spacer().frame(height: viewModel.physicalNotchHeight + 4)
+
             // Header
             HStack(spacing: 6) {
                 Text("Sessions")

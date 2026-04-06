@@ -10,10 +10,11 @@ struct SessionDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
+            Spacer().frame(height: 42)
+
             header
                 .padding(.horizontal, 14)
-                .padding(.vertical, 6)
+                .padding(.bottom, 6)
 
             Rectangle()
                 .fill(.white.opacity(0.06))
