@@ -29,13 +29,9 @@ final class NotchViewModel {
         max(0, physicalNotchHeight - 12) + 10
     }
 
-    private var expansionWidth: CGFloat {
-        hasActivity ? (2 * sideWidth) : 0
-    }
-
     var notchWidth: CGFloat {
         switch mode {
-        case .compact: physicalNotchWidth + notchCornerMargin + expansionWidth
+        case .compact: physicalNotchWidth + notchCornerMargin + (2 * sideWidth)
         case .expanded: 550
         case .sessionDetail: 650
         }
@@ -127,6 +123,10 @@ struct NotchContentView: View {
             )
             .background(.black)
             .clipShape(currentNotchShape)
+            .overlay {
+                currentNotchShape
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
             .shadow(color: isOpened ? .black.opacity(0.6) : .clear, radius: 6)
             .animation(isOpened ? openAnimation : closeAnimation, value: viewModel.mode)
             .animation(.smooth, value: viewModel.hasActivity)
@@ -168,28 +168,31 @@ struct NotchContentView: View {
     @ViewBuilder
     private var compactContent: some View {
         let sessions = sessionManager.activeSessions
-        if sessions.isEmpty {
-            EmptyView()
-        } else {
-            let urgentStatus = mostUrgentStatus(sessions)
+        let urgentStatus = mostUrgentStatus(sessions)
+        let wing = viewModel.sideWidth
 
-            HStack(spacing: 0) {
-                // Left wing: status indicator
-                StatusIndicator(status: urgentStatus, size: 12)
-                    .frame(maxWidth: .infinity)
-
-                // Right wing: session count (only if 2+)
-                Group {
-                    if sessions.count > 1 {
-                        Text("\(sessions.count)")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
+        HStack(spacing: 0) {
+            // Left wing
+            Group {
+                if !sessions.isEmpty {
+                    StatusIndicator(status: urgentStatus, size: 12)
                 }
-                .frame(maxWidth: .infinity)
             }
-            .frame(height: viewModel.notchHeight)
+            .frame(width: wing, height: viewModel.physicalNotchHeight)
+
+            Spacer(minLength: 0)
+
+            // Right wing
+            Group {
+                if sessions.count > 1 {
+                    Text("\(sessions.count)")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            .frame(width: wing, height: viewModel.physicalNotchHeight)
         }
+        .frame(width: viewModel.notchWidth, height: viewModel.physicalNotchHeight)
     }
 
     // MARK: - Expanded
