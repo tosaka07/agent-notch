@@ -11,16 +11,19 @@ struct NotchGeometry: Sendable {
         return CGRect(x: x, y: y, width: notchSize.width, height: notchSize.height)
     }
 
-    /// Whether the given point (in screen coordinates) is within the notch area,
-    /// including configurable padding.
+    /// Whether the given point (in screen coordinates) is within the notch area.
+    /// Padding extends horizontally and upward only — no downward padding,
+    /// so the notch hit zone doesn't overlap with session cards below.
     func isPointInNotch(
         _ point: CGPoint,
-        horizontalPadding: CGFloat = 10,
-        verticalPadding: CGFloat = 5
+        horizontalPadding: CGFloat = 10
     ) -> Bool {
-        let paddedRect = notchScreenRect.insetBy(
-            dx: -horizontalPadding,
-            dy: -verticalPadding
+        let rect = notchScreenRect
+        let paddedRect = CGRect(
+            x: rect.origin.x - horizontalPadding,
+            y: rect.origin.y,
+            width: rect.width + horizontalPadding * 2,
+            height: rect.height
         )
         return paddedRect.contains(point)
     }

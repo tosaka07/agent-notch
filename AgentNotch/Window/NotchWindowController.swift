@@ -44,40 +44,36 @@ final class NotchWindowController {
     private func setupHotZoneTracker(viewModel: NotchViewModel) {
         let tracker = HotZoneTracker(geometry: geometry)
 
-        // Update panel size based on current mode
-        func updateTrackerSize() {
-            tracker.currentPanelWidth = viewModel.notchWidth
-            tracker.currentPanelHeight = viewModel.notchHeight
+        func syncPanelState() {
+            let expanded = viewModel.mode != .compact
+            tracker.isExpanded = expanded
+            self.panel?.ignoresMouseEvents = !expanded
         }
-        updateTrackerSize()
+        syncPanelState()
 
         tracker.onNotchClicked = { [weak self, weak viewModel] in
             guard let self, let viewModel else { return }
             viewModel.toggle()
-            self.panel?.ignoresMouseEvents = viewModel.mode == .compact
-            updateTrackerSize()
+            syncPanelState()
         }
 
-        tracker.onClickedOutside = { [weak self, weak viewModel] in
-            guard let self, let viewModel else { return }
+        tracker.onClickedOutside = { [weak viewModel] in
+            guard let viewModel else { return }
             guard viewModel.mode != .compact else { return }
             viewModel.close()
-            self.panel?.ignoresMouseEvents = true
-            updateTrackerSize()
+            syncPanelState()
         }
-
-        tracker.onHoverChanged = { _ in }
 
         tracker.start()
         hotZoneTracker = tracker
 
-        // Observe mode changes from auto-expand (notifications) to update tracker + panel
+        // Observe auto-expand notifications
         modeObservation = NotificationCenter.default.publisher(for: .agentNotchAutoExpand)
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak viewModel] _ in
                 guard let self, let viewModel else { return }
-                self.panel?.ignoresMouseEvents = viewModel.mode == .compact
-                updateTrackerSize()
+                _ = self  // retain for syncPanelState
+                syncPanelState()
             }
     }
 }

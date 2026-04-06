@@ -90,11 +90,27 @@ struct SessionDetailView: View {
                         .foregroundStyle(.white.opacity(0.35))
                         .lineLimit(1)
                 }
-                if let model = session.model {
-                    Text(model)
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.3))
+                HStack(spacing: 4) {
+                    if let model = session.model {
+                        Text(model)
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
+                    if let branch = session.gitBranch {
+                        let isWorktree = session.worktreeName != nil
+                        if session.model != nil {
+                            Text("·")
+                                .foregroundStyle(.white.opacity(0.2))
+                        }
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 7))
+                            .foregroundStyle(isWorktree ? .cyan.opacity(0.5) : .white.opacity(0.3))
+                        Text(branch)
+                            .foregroundStyle(isWorktree ? .cyan.opacity(0.4) : .white.opacity(0.3))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
+                .font(.system(size: 8, design: .monospaced))
             }
 
             Spacer()

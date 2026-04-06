@@ -3,24 +3,15 @@ import AppKit
 @MainActor
 final class MouseEventMonitor {
     private var globalMonitor: Any?
-    private var localMonitor: Any?
 
     func startMonitoring(
-        globalMask: NSEvent.EventTypeMask,
-        localMask: NSEvent.EventTypeMask,
+        mask: NSEvent.EventTypeMask,
         handler: @escaping @MainActor (NSEvent) -> Void
     ) {
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: globalMask) { event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { event in
             MainActor.assumeIsolated {
                 handler(event)
             }
-        }
-
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: localMask) { event in
-            MainActor.assumeIsolated {
-                handler(event)
-            }
-            return event
         }
     }
 
@@ -28,10 +19,6 @@ final class MouseEventMonitor {
         if let globalMonitor {
             NSEvent.removeMonitor(globalMonitor)
             self.globalMonitor = nil
-        }
-        if let localMonitor {
-            NSEvent.removeMonitor(localMonitor)
-            self.localMonitor = nil
         }
     }
 

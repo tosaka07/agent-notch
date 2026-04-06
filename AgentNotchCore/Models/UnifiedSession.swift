@@ -35,6 +35,45 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
         return end.timeIntervalSince(startedAt)
     }
 
+    /// Resolves the git directory — handles both normal repos and worktrees.
+    /// Normal: `{cwd}/.git/` is a directory → returns it.
+    /// Worktree: `{cwd}/.git` is a file containing `gitdir: ...` → follows the pointer.
+    private var resolvedGitDir: (gitDir: String, worktreeName: String?)? {
+        guard let cwd else { return nil }
+        let dotGit = (cwd as NSString).appendingPathComponent(".git")
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: dotGit, isDirectory: &isDir) else { return nil }
+        if isDir.boolValue {
+            return (dotGit, nil)
+        }
+        // Worktree: .git is a file like "gitdir: /path/to/main/.git/worktrees/wt-name"
+        guard let content = try? String(contentsOfFile: dotGit, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+              content.hasPrefix("gitdir: ") else { return nil }
+        let gitDir = String(content.dropFirst("gitdir: ".count))
+        // Extract worktree name from path: .../worktrees/{name}
+        let parts = (gitDir as NSString).pathComponents
+        let wtName: String?
+        if parts.count >= 2, parts[parts.count - 2] == "worktrees" {
+            wtName = parts.last
+        } else {
+            wtName = nil
+        }
+        return (gitDir, wtName)
+    }
+
+    public var gitBranch: String? {
+        guard let info = resolvedGitDir else { return nil }
+        let headPath = (info.gitDir as NSString).appendingPathComponent("HEAD")
+        guard let content = try? String(contentsOfFile: headPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        let prefix = "ref: refs/heads/"
+        guard content.hasPrefix(prefix) else { return nil }
+        return String(content.dropFirst(prefix.count))
+    }
+
+    public var worktreeName: String? {
+        resolvedGitDir?.worktreeName
+    }
+
     public init(
         id: String,
         agentType: AgentType,
