@@ -21,6 +21,10 @@ final class NotchViewModel {
         self.physicalNotchHeight = notchSize.height
     }
 
+    /// Extra margin to cover the physical notch's rounded corners
+    /// (the API-reported width doesn't account for the corner radii).
+    private let notchCornerMargin: CGFloat = 6
+
     var sideWidth: CGFloat {
         max(0, physicalNotchHeight - 12) + 10
     }
@@ -31,7 +35,7 @@ final class NotchViewModel {
 
     var notchWidth: CGFloat {
         switch mode {
-        case .compact: physicalNotchWidth + expansionWidth
+        case .compact: physicalNotchWidth + notchCornerMargin + expansionWidth
         case .expanded: 550
         case .sessionDetail: 650
         }
@@ -81,29 +85,52 @@ struct NotchContentView: View {
         self.sessionManager = sessionManager
     }
 
-    private var animation: Animation {
-        viewModel.mode == .compact
-            ? .spring(response: 0.45, dampingFraction: 1.0)
-            : .spring(response: 0.42, dampingFraction: 0.8)
+    private let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
+    private let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
+
+    private var currentNotchShape: NotchShape {
+        NotchShape(
+            topCornerRadius: viewModel.topCornerRadius,
+            bottomCornerRadius: viewModel.bottomCornerRadius
+        )
     }
 
     var body: some View {
         let hasSessions = !sessionManager.activeSessions.isEmpty
         let _ = { viewModel.hasActivity = hasSessions }()
+        let isOpened = viewModel.mode != .compact
 
-        ZStack(alignment: .top) {
-            // Black background shape — animates size
-            NotchShape(topCornerRadius: viewModel.topCornerRadius, bottomCornerRadius: viewModel.bottomCornerRadius)
-                .fill(.black)
-                .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
-                .animation(animation, value: viewModel.mode)
-                .animation(.smooth, value: viewModel.hasActivity)
+        VStack(spacing: 0) {
+            // Notch layout: content + background as one unit, clipped by NotchShape
+            VStack(spacing: 0) {
+                // Compact header row (always present — persists across open/close)
+                compactContent
+                    .frame(height: viewModel.physicalNotchHeight)
 
-            // Content — clipped to NotchShape, fades in after background expands
-            contentForMode
-                .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
-                .clipped()
-                .allowsHitTesting(viewModel.mode != .compact)
+                // Expanded content (only when opened)
+                if isOpened {
+                    openedContent
+                        .transition(
+                            .asymmetric(
+                                insertion: .scale(scale: 0.9, anchor: .top).combined(with: .opacity),
+                                removal: .opacity.animation(.easeOut(duration: 0.12))
+                            )
+                        )
+                }
+            }
+            .padding(.horizontal, isOpened ? viewModel.topCornerRadius : 0)
+            .padding(.bottom, isOpened ? 12 : 0)
+            .frame(
+                maxWidth: isOpened ? viewModel.notchWidth : nil,
+                maxHeight: isOpened ? viewModel.notchHeight : nil,
+                alignment: .top
+            )
+            .background(.black)
+            .clipShape(currentNotchShape)
+            .shadow(color: isOpened ? .black.opacity(0.6) : .clear, radius: 6)
+            .animation(isOpened ? openAnimation : closeAnimation, value: viewModel.mode)
+            .animation(.smooth, value: viewModel.hasActivity)
+            .allowsHitTesting(viewModel.mode != .compact)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: hasSessions) { _, newValue in
@@ -111,7 +138,7 @@ struct NotchContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .agentNotchAutoExpand)) { notification in
             if let sessionId = notification.object as? String {
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
+                withAnimation(openAnimation) {
                     viewModel.showSession(sessionId)
                 }
             }
@@ -119,10 +146,10 @@ struct NotchContentView: View {
     }
 
     @ViewBuilder
-    private var contentForMode: some View {
+    private var openedContent: some View {
         switch viewModel.mode {
         case .compact:
-            compactContent
+            EmptyView()
         case .expanded:
             expandedContent
         case .sessionDetail(let sessionId):
@@ -204,9 +231,8 @@ struct NotchContentView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.top, 40)
             .padding(.horizontal, 14)
-            .padding(.bottom, 8)
+            .padding(.vertical, 8)
 
             let sessions = sessionManager.activeSessions
             if sessions.isEmpty {

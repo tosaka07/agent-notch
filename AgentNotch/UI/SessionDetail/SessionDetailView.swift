@@ -12,9 +12,8 @@ struct SessionDetailView: View {
         VStack(spacing: 0) {
             // Header
             header
-                .padding(.top, 40)
                 .padding(.horizontal, 14)
-                .padding(.bottom, 6)
+                .padding(.vertical, 6)
 
             Rectangle()
                 .fill(.white.opacity(0.06))
