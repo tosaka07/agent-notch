@@ -82,14 +82,15 @@ struct NotchContentView: View {
         let _ = { viewModel.hasActivity = hasSessions }()
 
         ZStack(alignment: .top) {
-            NotchShape(topCornerRadius: viewModel.topCornerRadius, bottomCornerRadius: viewModel.bottomCornerRadius)
-                .fill(.black)
+            contentForMode
                 .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
+                .background(.black)
+                .clipShape(NotchShape(
+                    topCornerRadius: viewModel.topCornerRadius,
+                    bottomCornerRadius: viewModel.bottomCornerRadius
+                ))
                 .animation(animation, value: viewModel.mode)
                 .animation(.smooth, value: viewModel.hasActivity)
-
-            contentForMode
-                .animation(animation, value: viewModel.mode)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: hasSessions) { _, newValue in
@@ -116,7 +117,6 @@ struct NotchContentView: View {
                 SessionDetailView(session: session, sessionManager: sessionManager) {
                     viewModel.backToList()
                 }
-                .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
             } else {
                 expandedContent
             }
@@ -130,7 +130,6 @@ struct NotchContentView: View {
         let sessions = sessionManager.activeSessions
         if sessions.isEmpty {
             EmptyView()
-                .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
         } else {
             // Aggregate status: most urgent across all sessions
             let urgentStatus = mostUrgentStatus(sessions)
@@ -202,7 +201,6 @@ struct NotchContentView: View {
                 }
             }
         }
-        .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
     }
 
     // MARK: - Helpers
