@@ -203,7 +203,7 @@ struct NotchContentView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 20)
             .padding(.bottom, 10)
 
             let sessions = sessionManager.activeSessions
@@ -222,8 +222,8 @@ struct NotchContentView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 14)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 16)
                 }
             }
         }
