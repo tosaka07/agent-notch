@@ -96,26 +96,20 @@ struct NotchContentView: View {
         let _ = { viewModel.hasActivity = hasSessions }()
         let isOpened = viewModel.mode != .compact
 
-        Group {
+        // Single view that changes size — background + clipShape animate together
+        VStack(spacing: 0) {
             if isOpened {
-                // Expanded: content fills the notch shape
                 openedContent
-                    .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
-                    .background(.black)
-                    .clipShape(currentNotchShape)
-                    .overlay {
-                        currentNotchShape.stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    }
-                    .shadow(color: .black.opacity(0.6), radius: 6)
-                    .transition(.opacity.animation(.easeOut(duration: 0.15)))
             } else {
-                // Compact: just the header row
                 compactContent
-                    .background(.black)
-                    .clipShape(currentNotchShape)
             }
         }
+        .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
+        .background(.black)
+        .clipShape(currentNotchShape)
+        .shadow(color: isOpened ? .black.opacity(0.6) : .clear, radius: 6)
         .animation(isOpened ? openAnimation : closeAnimation, value: viewModel.mode)
+        .allowsHitTesting(viewModel.mode != .compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: hasSessions) { _, newValue in
             viewModel.hasActivity = newValue
