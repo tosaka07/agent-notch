@@ -28,3 +28,33 @@ struct TokenFormatterTests {
         #expect(TokenFormatter.format(1_000_000) == "1.0M")
     }
 }
+
+@Suite("RelativeTimeFormatter Tests")
+struct RelativeTimeFormatterTests {
+    private let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+    @Test("Seconds formatted as seconds ago")
+    func seconds() {
+        let date = now.addingTimeInterval(-42)
+        #expect(RelativeTimeFormatter.format(since: date, relativeTo: now) == "42秒前")
+    }
+
+    @Test("Minutes formatted as minutes ago")
+    func minutes() {
+        let date = now.addingTimeInterval(-(5 * 60))
+        #expect(RelativeTimeFormatter.format(since: date, relativeTo: now) == "5分前")
+    }
+
+    @Test("Days formatted as days ago")
+    func days() {
+        let date = now.addingTimeInterval(-(3 * 24 * 60 * 60))
+        #expect(RelativeTimeFormatter.format(since: date, relativeTo: now) == "3日前")
+    }
+
+    @Test("Months formatted as months ago")
+    func months() {
+        let calendar = Calendar(identifier: .gregorian)
+        let date = calendar.date(byAdding: .month, value: -2, to: now)!
+        #expect(RelativeTimeFormatter.format(since: date, relativeTo: now) == "2ヵ月前")
+    }
+}

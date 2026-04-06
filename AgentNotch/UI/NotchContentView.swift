@@ -21,8 +21,6 @@ final class NotchViewModel {
         self.physicalNotchHeight = notchSize.height
     }
 
-    /// Extra margin to cover the physical notch's rounded corners
-    /// (the API-reported width doesn't account for the corner radii).
     private let notchCornerMargin: CGFloat = 6
 
     var sideWidth: CGFloat {
@@ -32,16 +30,16 @@ final class NotchViewModel {
     var notchWidth: CGFloat {
         switch mode {
         case .compact: physicalNotchWidth + notchCornerMargin + (2 * sideWidth)
-        case .expanded: 550
-        case .sessionDetail: 650
+        case .expanded: 520
+        case .sessionDetail: 620
         }
     }
 
     var notchHeight: CGFloat {
         switch mode {
         case .compact: physicalNotchHeight
-        case .expanded: 400
-        case .sessionDetail: 550
+        case .expanded: 380
+        case .sessionDetail: 500
         }
     }
 
@@ -96,7 +94,6 @@ struct NotchContentView: View {
         let _ = { viewModel.hasActivity = hasSessions }()
         let isOpened = viewModel.mode != .compact
 
-        // Single view that changes size — background + clipShape animate together
         VStack(spacing: 0) {
             if isOpened {
                 openedContent
@@ -107,7 +104,7 @@ struct NotchContentView: View {
         .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
         .background(.black)
         .clipShape(currentNotchShape)
-        .shadow(color: isOpened ? .black.opacity(0.6) : .clear, radius: 6)
+        .shadow(color: isOpened ? .black.opacity(0.6) : .clear, radius: 8)
         .animation(isOpened ? openAnimation : closeAnimation, value: viewModel.mode)
         .allowsHitTesting(viewModel.mode != .compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -150,7 +147,6 @@ struct NotchContentView: View {
         let wing = viewModel.sideWidth
 
         HStack(spacing: 0) {
-            // Left wing
             Group {
                 if !sessions.isEmpty {
                     StatusIndicator(status: urgentStatus, size: 12)
@@ -160,12 +156,11 @@ struct NotchContentView: View {
 
             Spacer(minLength: 0)
 
-            // Right wing
             Group {
                 if sessions.count > 1 {
                     Text("\(sessions.count)")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.white.opacity(0.75))
                 }
             }
             .frame(width: wing, height: viewModel.physicalNotchHeight)
@@ -177,23 +172,21 @@ struct NotchContentView: View {
 
     private var expandedContent: some View {
         VStack(spacing: 0) {
-            // Top spacer — room for physical notch area
             Spacer().frame(height: viewModel.physicalNotchHeight + 4)
 
-            // Header
             HStack(spacing: 6) {
                 Text("Sessions")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
 
                 let count = sessionManager.activeSessions.count
                 if count > 0 {
                     Text("\(count)")
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.3))
-                        .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
                 }
 
                 Spacer()
@@ -204,32 +197,33 @@ struct NotchContentView: View {
                         sessionManager.notifyChange()
                     } label: {
                         Image(systemName: "xmark.circle")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.2))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.3))
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 18)
+            .padding(.bottom, 10)
 
             let sessions = sessionManager.activeSessions
             if sessions.isEmpty {
                 Spacer()
                 Text("No active sessions")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.3))
                 Spacer()
             } else {
                 ScrollView {
-                    VStack(spacing: 4) {
+                    VStack(spacing: 6) {
                         ForEach(sessions) { session in
                             SessionCardView(session: session) {
                                 viewModel.showSession(session.id)
                             }
                         }
                     }
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 14)
                 }
             }
         }
@@ -237,8 +231,6 @@ struct NotchContentView: View {
 
     // MARK: - Helpers
 
-    /// Returns the most urgent status across all sessions.
-    /// Priority: permissionWaiting > error > toolRunning > subagentRunning > thinking > compacting > done > idle
     private func mostUrgentStatus(_ sessions: [UnifiedSession]) -> SessionStatus {
         let priority: [SessionStatus] = [
             .permissionWaiting, .error, .toolRunning, .subagentRunning,

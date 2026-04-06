@@ -13,14 +13,14 @@ struct SessionDetailView: View {
             Spacer().frame(height: 42)
 
             header
-                .padding(.horizontal, 14)
-                .padding(.bottom, 6)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
 
             Rectangle()
-                .fill(.white.opacity(0.06))
+                .fill(.white.opacity(0.08))
                 .frame(height: 0.5)
 
-            // Permission / Question banners
+            // Banners
             if let perm = session.pendingPermissions.first {
                 PermissionBanner(
                     permission: perm,
@@ -34,7 +34,7 @@ struct SessionDetailView: View {
                             reason: "Denied via Agent Notch")
                     }
                 )
-                .padding(.horizontal, 10).padding(.top, 6)
+                .padding(.horizontal, 14).padding(.top, 8)
             }
 
             if let q = session.pendingQuestion {
@@ -42,7 +42,7 @@ struct SessionDetailView: View {
                     (NSApp.delegate as? AppDelegate)?.answerQuestion(
                         sessionId: session.id, toolUseId: q.toolUseId, answer: answer)
                 }
-                .padding(.horizontal, 10).padding(.top, 6)
+                .padding(.horizontal, 14).padding(.top, 8)
             }
 
             // Chat log
@@ -54,8 +54,8 @@ struct SessionDetailView: View {
                                 .id(entry.id)
                         }
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                 }
                 .onAppear {
                     loadChat()
@@ -72,9 +72,9 @@ struct SessionDetailView: View {
         HStack(spacing: 8) {
             Button { onBack() } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.4))
-                    .frame(width: 18, height: 18)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(width: 20, height: 20)
             }
             .buttonStyle(.plain)
 
@@ -84,24 +84,26 @@ struct SessionDetailView: View {
                 HStack(spacing: 6) {
                     Text(session.agentType.displayName)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.9))
+                        .foregroundStyle(.white.opacity(0.92))
                     Text(projectName(session.cwd))
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.25))
+                        .foregroundStyle(.white.opacity(0.35))
                         .lineLimit(1)
                 }
                 if let model = session.model {
                     Text(model)
                         .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.2))
+                        .foregroundStyle(.white.opacity(0.3))
                 }
             }
 
             Spacer()
 
-            Text(formatDuration(session.elapsedTime))
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.3))
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(RelativeTimeFormatter.format(since: session.startedAt, relativeTo: context.date))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
         }
     }
 
@@ -119,10 +121,5 @@ struct SessionDetailView: View {
     private func projectName(_ path: String?) -> String {
         guard let path else { return "" }
         return (path as NSString).lastPathComponent
-    }
-
-    private func formatDuration(_ interval: TimeInterval) -> String {
-        let m = Int(interval) / 60; let s = Int(interval) % 60
-        return String(format: "%d:%02d", m, s)
     }
 }
