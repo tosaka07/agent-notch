@@ -7,6 +7,7 @@ struct SessionDetailView: View {
     var onBack: () -> Void
 
     @State private var chatEntries: [ChatEntry] = []
+    @State private var isLoading = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,26 +47,34 @@ struct SessionDetailView: View {
             }
 
             // Chat log
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(chatEntries) { entry in
-                            ChatMessageView(entry: entry)
-                                .id(entry.id)
+            if chatEntries.isEmpty && isLoading {
+                Spacer()
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.white.opacity(0.4))
+                Spacer()
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(chatEntries) { entry in
+                                ChatMessageView(entry: entry)
+                                    .id(entry.id)
+                            }
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                }
-                .onAppear {
-                    loadChat()
-                    scrollToBottom(proxy)
-                }
-                .onReceive(sessionManager.objectWillChange) {
-                    loadChat()
+                    .onChange(of: chatEntries.count) { _, _ in
+                        scrollToBottom(proxy)
+                    }
+                    .onReceive(sessionManager.objectWillChange) {
+                        loadChatAsync()
+                    }
                 }
             }
         }
+        .onAppear { loadChatAsync() }
     }
 
     private var header: some View {
@@ -123,9 +132,18 @@ struct SessionDetailView: View {
         }
     }
 
-    private func loadChat() {
+    private func loadChatAsync(then scrollToEnd: Bool = false, proxy: ScrollViewProxy? = nil) {
         guard let path = session.transcriptPath else { return }
-        chatEntries = TranscriptReader.read(path: path, tail: 50)
+        Task { @MainActor in
+            let entries = await Task.detached {
+                TranscriptReader.read(path: path, tail: 50)
+            }.value
+            chatEntries = entries
+            isLoading = false
+            if scrollToEnd, let proxy {
+                scrollToBottom(proxy)
+            }
+        }
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
