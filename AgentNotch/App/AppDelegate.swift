@@ -13,12 +13,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: NotchWindowController?
     private var socketServer: SocketServer?
     private var screenObserver: ScreenObserver?
+    private var focusedScreenTracker: FocusedScreenTracker?
     let sessionManager = SessionManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
-        setupNotchOverlay()
+        setupNotchOverlay(on: NSScreen.builtin ?? NSScreen.screens[0])
         setupScreenObserver()
+        setupFocusedScreenTracker()
         startSocketServer()
         HookInstaller.installIfNeeded()
     }
@@ -29,10 +31,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Notch Overlay
 
-    private func setupNotchOverlay() {
-        guard let screen = NSScreen.builtin else { return }
+    private func setupNotchOverlay(on screen: NSScreen, force: Bool = false) {
+        // Skip if already showing on this screen (unless forced by screen parameter change)
+        if !force, let current = windowController?.screen, current.displayID == screen.displayID { return }
+        let previousMode = windowController?.currentMode ?? .compact
+        windowController?.close()
+        windowController = nil
         let controller = NotchWindowController(screen: screen)
-        let contentView = NotchContentView(sessionManager: sessionManager, notchSize: screen.notchSize)
+        let contentView = NotchContentView(
+            sessionManager: sessionManager, notchSize: screen.notchSize, initialMode: previousMode
+        )
         controller.show(contentView: contentView)
         windowController = controller
     }
@@ -40,11 +48,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupScreenObserver() {
         let observer = ScreenObserver()
         observer.onScreenChanged = { [weak self] in
-            self?.windowController?.close()
-            self?.windowController = nil
-            self?.setupNotchOverlay()
+            guard let self else { return }
+            // Screen params changed (display connected/disconnected). Re-evaluate target.
+            let currentID = self.windowController?.screen.displayID
+            if let currentID, NSScreen.screens.contains(where: { $0.displayID == currentID }) {
+                // Current screen still exists — recreate to pick up new geometry
+                if let screen = NSScreen.screens.first(where: { $0.displayID == currentID }) {
+                    self.setupNotchOverlay(on: screen, force: true)
+                }
+            } else {
+                // Current screen gone — fall back
+                self.setupNotchOverlay(on: NSScreen.builtin ?? NSScreen.screens[0])
+            }
         }
         screenObserver = observer
+    }
+
+    private func setupFocusedScreenTracker() {
+        let tracker = FocusedScreenTracker()
+        tracker.onScreenChanged = { [weak self] screen in
+            self?.setupNotchOverlay(on: screen)
+        }
+        tracker.start()
+        focusedScreenTracker = tracker
     }
 
     // MARK: - Socket Server

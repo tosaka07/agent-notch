@@ -16,9 +16,10 @@ final class NotchViewModel {
     var physicalNotchHeight: CGFloat
     var hasActivity: Bool = false
 
-    init(notchSize: CGSize = CGSize(width: 224, height: 38)) {
+    init(notchSize: CGSize = CGSize(width: 224, height: 38), initialMode: NotchMode = .compact) {
         self.physicalNotchWidth = notchSize.width
         self.physicalNotchHeight = notchSize.height
+        self.mode = initialMode
     }
 
     private let notchCornerMargin: CGFloat = 6
@@ -74,8 +75,8 @@ struct NotchContentView: View {
     @State var viewModel: NotchViewModel
     @ObservedObject var sessionManager: SessionManager
 
-    init(sessionManager: SessionManager, notchSize: CGSize = CGSize(width: 224, height: 38)) {
-        self._viewModel = State(initialValue: NotchViewModel(notchSize: notchSize))
+    init(sessionManager: SessionManager, notchSize: CGSize = CGSize(width: 224, height: 38), initialMode: NotchMode = .compact) {
+        self._viewModel = State(initialValue: NotchViewModel(notchSize: notchSize, initialMode: initialMode))
         self.sessionManager = sessionManager
     }
 

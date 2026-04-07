@@ -8,8 +8,11 @@ final class NotchWindowController {
     private var hostingView: PassThroughHostingView<NotchContentView>?
     private var hotZoneTracker: HotZoneTracker?
     private var modeObservation: AnyCancellable?
+    private weak var viewModelRef: NotchViewModel?
     let geometry: NotchGeometry
     let screen: NSScreen
+
+    var currentMode: NotchMode { viewModelRef?.mode ?? .compact }
 
     init(screen: NSScreen) {
         self.screen = screen
@@ -36,6 +39,7 @@ final class NotchWindowController {
         self.panel = panel
         self.hostingView = hosting
 
+        self.viewModelRef = contentView.viewModel
         setupHitTestRect(viewModel: contentView.viewModel, hosting: hosting)
         setupHotZoneTracker(viewModel: contentView.viewModel)
     }

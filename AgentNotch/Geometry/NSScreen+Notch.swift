@@ -1,14 +1,15 @@
 import AppKit
 
 extension NSScreen {
+    /// Stable display identifier for comparing screens across notification cycles.
+    var displayID: CGDirectDisplayID {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? 0
+    }
+
     /// Whether this screen is the built-in display (e.g., MacBook's internal screen).
     @MainActor
     var isBuiltinDisplay: Bool {
-        let screenNumber = deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-        guard let cgDirectDisplayID = screenNumber as? CGDirectDisplayID else {
-            return false
-        }
-        return CGDisplayIsBuiltin(cgDirectDisplayID) != 0
+        CGDisplayIsBuiltin(displayID) != 0
     }
 
     /// Whether this screen has a physical notch (safe area insets at top > 0).
