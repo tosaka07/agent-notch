@@ -89,6 +89,17 @@ struct SessionCardView: View {
                         .foregroundStyle(.white.opacity(0.3))
                 }
                 Spacer()
+
+                if session.pid != nil || session.tty != nil {
+                    Button {
+                        TerminalJumper.jump(pid: session.pid, tty: session.tty)
+                    } label: {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .font(.system(size: s(9)))
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .frame(height: s(14))
         }

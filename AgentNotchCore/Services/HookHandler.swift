@@ -16,7 +16,8 @@ public enum HookHandler {
         }
 
         // Add process info and agent type
-        json["_pid"] = ProcessInfo.processInfo.processIdentifier
+        // Use parent PID (the Claude Code process that invoked this hook)
+        json["_pid"] = getppid()
         json["_tty"] = getTTY()
         json["_agent_type"] = agentType
 

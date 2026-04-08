@@ -148,14 +148,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Extract common fields available on all hook events
                 let cwd = message["cwd"] as? String
                 let transcriptPath = message["transcript_path"] as? String
+                let rawPid = message["_pid"]
+                let pid = (rawPid as? NSNumber)?.int32Value
+                let tty = message["_tty"] as? String
+                print("[AppDelegate] raw _pid=\(rawPid as Any) (type=\(type(of: rawPid))), parsed=\(pid as Any), _tty=\(tty as Any)")
 
                 Task { @MainActor in
                     AppDelegate.processEvent(event, agentType: agentType, manager: manager)
-                    // Backfill cwd/transcriptPath on every event (may have been missing on auto-created sessions)
+                    // Backfill fields on every event (may have been missing on auto-created sessions)
                     if let session = manager.session(for: sessionId) {
                         session.lastActivityAt = Date()
                         if session.cwd == nil, let cwd { session.cwd = cwd }
                         if session.transcriptPath == nil, let transcriptPath { session.transcriptPath = transcriptPath }
+                        if session.pid == nil, let pid { session.pid = pid }
+                        if session.tty == nil, let tty { session.tty = tty }
                     }
                 }
 

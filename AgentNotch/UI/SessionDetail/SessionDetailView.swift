@@ -10,49 +10,22 @@ struct SessionDetailView: View {
     @State private var chatEntries: [ChatEntry] = []
     @State private var isLoading = true
     @State private var isAtBottom = true
-    @State private var selectedTab: DetailTab = .chat
     @Default(.textSize) private var textSize
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
-
-    enum DetailTab: String, CaseIterable {
-        case chat = "Chat"
-        case tools = "Tools"
-    }
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer().frame(height: 42)
 
             header
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
                 .padding(.bottom, 8)
 
             // Stats bar
             sessionStatsBar
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
                 .padding(.bottom, 4)
-
-            // Tab picker
-            HStack(spacing: 0) {
-                ForEach(DetailTab.allCases, id: \.self) { tab in
-                    Button {
-                        withAnimation(.easeOut(duration: 0.15)) { selectedTab = tab }
-                    } label: {
-                        VStack(spacing: 3) {
-                            Text(tab.rawValue)
-                                .font(.system(size: s(9), weight: selectedTab == tab ? .semibold : .regular))
-                                .foregroundStyle(selectedTab == tab ? .white.opacity(0.9) : .white.opacity(0.4))
-                            Rectangle()
-                                .fill(selectedTab == tab ? .white.opacity(0.6) : .clear)
-                                .frame(height: 1)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
-                }
-            }
-            .padding(.horizontal, 16)
 
             Rectangle()
                 .fill(.white.opacity(0.08))
@@ -83,13 +56,7 @@ struct SessionDetailView: View {
                 .padding(.horizontal, 14).padding(.top, 8)
             }
 
-            // Content based on selected tab
-            switch selectedTab {
-            case .chat:
-                chatTabContent
-            case .tools:
-                ToolHistoryView(session: session)
-            }
+            chatTabContent
         }
         .onAppear { loadChatAsync() }
     }
@@ -100,7 +67,8 @@ struct SessionDetailView: View {
                 Image(systemName: "chevron.left")
                     .font(.system(size: s(10), weight: .bold))
                     .foregroundStyle(.white.opacity(0.5))
-                    .frame(width: 20, height: 20)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -140,6 +108,18 @@ struct SessionDetailView: View {
             }
 
             Spacer()
+
+            if session.pid != nil || session.tty != nil {
+                Button {
+                    TerminalJumper.jump(pid: session.pid, tty: session.tty)
+                } label: {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: s(10)))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+                .buttonStyle(.plain)
+                .help("Jump to terminal")
+            }
 
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(RelativeTimeFormatter.format(since: session.startedAt, relativeTo: context.date))
