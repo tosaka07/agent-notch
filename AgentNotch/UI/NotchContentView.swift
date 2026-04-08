@@ -137,13 +137,21 @@ struct NotchContentView: View {
         .background(.black)
         .clipShape(currentNotchShape)
         .overlay(
-            NotchGlowBorder(
-                topCornerRadius: viewModel.topCornerRadius,
-                bottomCornerRadius: viewModel.bottomCornerRadius
+            CompletionFlare(
+                shape: NotchGlowBorder(
+                    topCornerRadius: viewModel.topCornerRadius,
+                    bottomCornerRadius: viewModel.bottomCornerRadius
+                ),
+                color: glowColor,
+                intensity: completionGlow
             )
-            .stroke(glowColor, lineWidth: 2)
-            .opacity(completionGlow)
-            .shadow(color: glowColor.opacity(completionGlow * 0.6), radius: 8)
+            .clipShape(
+                NotchOuterMask(
+                    topCornerRadius: viewModel.topCornerRadius,
+                    bottomCornerRadius: viewModel.bottomCornerRadius
+                ),
+                style: FillStyle(eoFill: true)
+            )
         )
         .shadow(color: isExpanded ? .black.opacity(0.6) : .clear, radius: 8)
         .animation(isExpanded ? openAnimation : closeAnimation, value: viewModel.mode)
@@ -164,18 +172,72 @@ struct NotchContentView: View {
                   let userInfo = notification.userInfo
             else { return }
 
-            // Border glow animation
             triggerCompletionGlow(color: .green)
 
             guard viewModel.mode == .compact || viewModel.mode == .notification
             else { return }
+
+            let projectName = userInfo["projectName"] as? String ?? "Session"
+            let gitBranch = userInfo["gitBranch"] as? String
+            let isWT = userInfo["isWorktree"] as? Bool ?? false
+            let msg = sanitizedMessage(userInfo["message"] as? String ?? "")
+            let itemId = sessionId
+
+            let content = AnyView(
+                sessionNotificationContent(
+                    icon: AnyView(Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)),
+                    projectName: projectName,
+                    gitBranch: gitBranch,
+                    isWorktree: isWT,
+                    message: msg,
+                    onMarqueeComplete: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            notificationManager.requestDismiss(id: itemId)
+                        }
+                    }
+                )
+            )
             let item = NotchNotificationManager.Item(
-                id: sessionId,
-                projectName: userInfo["projectName"] as? String ?? "Session",
-                gitBranch: userInfo["gitBranch"] as? String,
-                message: userInfo["message"] as? String ?? "",
+                id: itemId,
+                content: content,
+                autoDismissAfter: msg.isEmpty ? 7 : nil,
                 createdAt: Date()
             )
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
+                notificationManager.enqueue(item)
+                viewModel.mode = .notification
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .agentNotchSessionSwept)) { notification in
+            guard let sessionId = notification.object as? String,
+                  let userInfo = notification.userInfo,
+                  viewModel.mode == .compact || viewModel.mode == .notification
+            else { return }
+
+            let projectName = userInfo["projectName"] as? String ?? "Session"
+            let msg = userInfo["message"] as? String ?? ""
+            let itemId = "swept-\(sessionId)"
+
+            let content = AnyView(
+                sessionNotificationContent(
+                    icon: AnyView(Image(systemName: "trash.circle.fill").foregroundStyle(.orange)),
+                    projectName: projectName,
+                    gitBranch: nil,
+                    message: msg,
+                    onMarqueeComplete: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            notificationManager.requestDismiss(id: itemId)
+                        }
+                    }
+                )
+            )
+            let item = NotchNotificationManager.Item(
+                id: itemId,
+                content: content,
+                autoDismissAfter: msg.isEmpty ? 7 : nil,
+                createdAt: Date()
+            )
+            triggerCompletionGlow(color: .orange)
             withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
                 notificationManager.enqueue(item)
                 viewModel.mode = .notification
@@ -275,7 +337,10 @@ struct NotchContentView: View {
             if viewModel.mode == .notification {
                 VStack(spacing: 0) {
                     ForEach(notificationManager.items) { item in
-                        notificationRow(item: item)
+                        item.content
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .transition(
                                 .asymmetric(
                                     insertion: .opacity.combined(with: .move(edge: .top)),
@@ -372,52 +437,43 @@ struct NotchContentView: View {
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
+    /// Reusable content builder for session-related notifications.
     @ViewBuilder
-    private func notificationRow(item: NotchNotificationManager.Item) -> some View {
-        let msg = sanitizedMessage(item.message)
-        let hasMarquee = !msg.isEmpty
-
+    private func sessionNotificationContent(
+        icon: AnyView,
+        projectName: String,
+        gitBranch: String?,
+        isWorktree: Bool = false,
+        message: String,
+        onMarqueeComplete: @escaping () -> Void
+    ) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: s(9)))
-                    .foregroundStyle(.green)
-                Text(item.projectName)
+                icon.font(.system(size: s(9)))
+                Text(projectName)
                     .font(.system(size: s(9), weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.7))
-                if let branch = item.gitBranch {
+                if let branch = gitBranch {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: s(7)))
-                        .foregroundStyle(.white.opacity(0.3))
+                        .foregroundStyle(isWorktree ? .cyan.opacity(0.5) : .white.opacity(0.3))
                     Text(branch)
                         .font(.system(size: s(9), design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(isWorktree ? .cyan.opacity(0.4) : .white.opacity(0.35))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 Spacer()
             }
 
-            if hasMarquee {
+            if !message.isEmpty {
                 MarqueeText(
-                    text: msg,
+                    text: message,
                     font: .system(size: s(10), weight: .medium),
-                    onCycleComplete: {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                            notificationManager.marqueeCompleted(id: item.id)
-                        }
-                    }
+                    onCycleComplete: onMarqueeComplete
                 )
                 .foregroundStyle(.white.opacity(0.55))
                 .frame(height: s(14))
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear {
-            if !hasMarquee {
-                notificationManager.scheduleStaticDismiss(id: item.id)
             }
         }
     }
@@ -443,12 +499,12 @@ struct NotchContentView: View {
 
     private func triggerCompletionGlow(color: Color) {
         glowColor = color
-        withAnimation(.easeOut(duration: 0.3)) {
+        withAnimation(.easeOut(duration: 0.4)) {
             completionGlow = 1
         }
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(0.4))
-            withAnimation(.easeOut(duration: 2.0)) {
+            try? await Task.sleep(for: .seconds(2.5))
+            withAnimation(.easeOut(duration: 2.5)) {
                 completionGlow = 0
             }
         }

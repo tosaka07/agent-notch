@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Default(.textSize) var textSize
+    @Default(.sessionTimeout) var sessionTimeout
     var onClose: (() -> Void)? = nil
 
     var body: some View {
@@ -22,8 +23,19 @@ struct SettingsView: View {
                         .font(.system(size: 11 * textSize.scale))
                 }
             }
+
+            Section("セッション") {
+                Picker("自動削除", selection: $sessionTimeout) {
+                    ForEach(SessionTimeoutPreference.allCases, id: \.self) { pref in
+                        Text(pref.label).tag(pref)
+                    }
+                }
+                Text("最後の活動から指定時間経過した非稼働セッションを自動削除します。\nディレクトリが削除された場合は即座に削除されます。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 300, height: 140)
+        .frame(width: 320, height: 260)
     }
 }

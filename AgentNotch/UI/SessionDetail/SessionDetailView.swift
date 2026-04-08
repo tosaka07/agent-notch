@@ -10,9 +10,15 @@ struct SessionDetailView: View {
     @State private var chatEntries: [ChatEntry] = []
     @State private var isLoading = true
     @State private var isAtBottom = true
+    @State private var selectedTab: DetailTab = .chat
     @Default(.textSize) private var textSize
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+
+    enum DetailTab: String, CaseIterable {
+        case chat = "Chat"
+        case tools = "Tools"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,6 +27,32 @@ struct SessionDetailView: View {
             header
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
+
+            // Stats bar
+            sessionStatsBar
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
+
+            // Tab picker
+            HStack(spacing: 0) {
+                ForEach(DetailTab.allCases, id: \.self) { tab in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) { selectedTab = tab }
+                    } label: {
+                        VStack(spacing: 3) {
+                            Text(tab.rawValue)
+                                .font(.system(size: s(9), weight: selectedTab == tab ? .semibold : .regular))
+                                .foregroundStyle(selectedTab == tab ? .white.opacity(0.9) : .white.opacity(0.4))
+                            Rectangle()
+                                .fill(selectedTab == tab ? .white.opacity(0.6) : .clear)
+                                .frame(height: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, 16)
 
             Rectangle()
                 .fill(.white.opacity(0.08))
@@ -51,68 +83,12 @@ struct SessionDetailView: View {
                 .padding(.horizontal, 14).padding(.top, 8)
             }
 
-            // Chat log
-            if chatEntries.isEmpty && isLoading {
-                Spacer()
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(.white.opacity(0.4))
-                Spacer()
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        Spacer(minLength: 0)
-                            .frame(maxHeight: .infinity)
-
-                        LazyVStack(alignment: .leading, spacing: 2) {
-                            ForEach(chatEntries) { entry in
-                                ChatMessageView(entry: entry)
-                                    .id(entry.id)
-                            }
-
-                            if let tool = session.currentTool, tool.status == .running {
-                                ActiveToolIndicator(tool: tool)
-                                    .id("activeTool")
-                                    .transition(.opacity)
-                            }
-
-                            Color.clear
-                                .frame(height: 1)
-                                .id("bottom")
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                    }
-                    .defaultScrollAnchor(.bottom)
-                    .modifier(ScrollBottomTracker(isAtBottom: $isAtBottom))
-                    .overlay(alignment: .bottom) {
-                        if !isAtBottom {
-                            Button {
-                                withAnimation(.easeOut(duration: 0.25)) {
-                                    proxy.scrollTo("bottom", anchor: .bottom)
-                                }
-                            } label: {
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: s(10), weight: .bold))
-                                    .foregroundStyle(.white.opacity(0.8))
-                                    .frame(width: 28, height: 28)
-                                    .background(.white.opacity(0.1))
-                                    .clipShape(Circle())
-                                    .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.bottom, 8)
-                            .transition(.opacity.combined(with: .scale(scale: 0.8)))
-                        }
-                    }
-                    .animation(.easeOut(duration: 0.2), value: isAtBottom)
-                    .onChange(of: chatEntries.count) { _, _ in
-                        if isAtBottom { scrollToBottom(proxy) }
-                    }
-                    .onReceive(sessionManager.objectWillChange) {
-                        loadChatAsync()
-                    }
-                }
+            // Content based on selected tab
+            switch selectedTab {
+            case .chat:
+                chatTabContent
+            case .tools:
+                ToolHistoryView(session: session)
             }
         }
         .onAppear { loadChatAsync() }
@@ -172,6 +148,117 @@ struct SessionDetailView: View {
             }
         }
     }
+
+    // MARK: - Stats Bar
+
+    private var sessionStatsBar: some View {
+        HStack(spacing: 12) {
+            statItem(icon: "wrench", value: "\(session.toolCallCount)", label: "tools")
+            if session.totalInputTokens > 0 || session.totalOutputTokens > 0 {
+                statItem(icon: "arrow.down", value: formatTokens(session.totalInputTokens), label: "in")
+                statItem(icon: "arrow.up", value: formatTokens(session.totalOutputTokens), label: "out")
+                if session.totalCachedTokens > 0 {
+                    statItem(icon: "memorychip", value: formatTokens(session.totalCachedTokens), label: "cached")
+                }
+            }
+            Spacer()
+            if session.estimatedCost > 0 {
+                Text(String(format: "$%.3f", session.estimatedCost))
+                    .font(.system(size: s(9), weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+        }
+    }
+
+    private func statItem(icon: String, value: String, label: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: s(7)))
+                .foregroundStyle(.white.opacity(0.3))
+            Text(value)
+                .font(.system(size: s(9), weight: .medium, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.5))
+            Text(label)
+                .font(.system(size: s(8)))
+                .foregroundStyle(.white.opacity(0.25))
+        }
+    }
+
+    private func formatTokens(_ count: Int) -> String {
+        if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
+        if count >= 1_000 { return String(format: "%.1fK", Double(count) / 1_000) }
+        return "\(count)"
+    }
+
+    // MARK: - Chat Tab
+
+    @ViewBuilder
+    private var chatTabContent: some View {
+        if chatEntries.isEmpty && isLoading {
+            Spacer()
+            ProgressView()
+                .controlSize(.small)
+                .tint(.white.opacity(0.4))
+            Spacer()
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Spacer(minLength: 0)
+                        .frame(maxHeight: .infinity)
+
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(chatEntries) { entry in
+                            ChatMessageView(entry: entry)
+                                .id(entry.id)
+                        }
+
+                        if let tool = session.currentTool, tool.status == .running {
+                            ActiveToolIndicator(tool: tool)
+                                .id("activeTool")
+                                .transition(.opacity)
+                        }
+
+                        Color.clear
+                            .frame(height: 1)
+                            .id("bottom")
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                .defaultScrollAnchor(.bottom)
+                .modifier(ScrollBottomTracker(isAtBottom: $isAtBottom))
+                .overlay(alignment: .bottom) {
+                    if !isAtBottom {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                proxy.scrollTo("bottom", anchor: .bottom)
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: s(10), weight: .bold))
+                                .foregroundStyle(.white.opacity(0.8))
+                                .frame(width: 28, height: 28)
+                                .background(.white.opacity(0.1))
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 8)
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    }
+                }
+                .animation(.easeOut(duration: 0.2), value: isAtBottom)
+                .onChange(of: chatEntries.count) { _, _ in
+                    if isAtBottom { scrollToBottom(proxy) }
+                }
+                .onReceive(sessionManager.objectWillChange) {
+                    loadChatAsync()
+                }
+            }
+        }
+    }
+
+    // MARK: - Data Loading
 
     private func loadChatAsync(then scrollToEnd: Bool = false, proxy: ScrollViewProxy? = nil) {
         guard let path = session.transcriptPath else { return }

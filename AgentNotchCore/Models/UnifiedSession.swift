@@ -29,6 +29,7 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var tty: String?
     public var transcriptPath: String?
     public var pendingQuestion: PendingQuestion?
+    public var lastActivityAt: Date
 
     public var elapsedTime: TimeInterval {
         let end = endedAt ?? Date()
@@ -113,5 +114,6 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
         self.pid = nil
         self.tty = nil
         self.transcriptPath = nil
+        self.lastActivityAt = startedAt
     }
 }

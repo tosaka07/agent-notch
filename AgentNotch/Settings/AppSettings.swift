@@ -28,6 +28,25 @@ enum TextSizePreference: String, Defaults.Serializable, CaseIterable, Sendable {
     }
 }
 
+enum SessionTimeoutPreference: Int, Defaults.Serializable, CaseIterable, Sendable {
+    case oneHour = 3600
+    case sixHours = 21600
+    case oneDay = 86400
+    case threeDays = 259200
+    case never = 0
+
+    var label: String {
+        switch self {
+        case .oneHour: "1時間"
+        case .sixHours: "6時間"
+        case .oneDay: "1日"
+        case .threeDays: "3日"
+        case .never: "なし"
+        }
+    }
+}
+
 extension Defaults.Keys {
     static let textSize = Key<TextSizePreference>("textSize", default: .small)
+    static let sessionTimeout = Key<SessionTimeoutPreference>("sessionTimeout", default: .oneDay)
 }

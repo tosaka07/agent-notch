@@ -45,4 +45,50 @@ public final class SessionManager: ObservableObject {
     public func notifyChange() {
         objectWillChange.send()
     }
+
+    public struct SweptSession: Sendable {
+        public let id: String
+        public let projectName: String
+        public let reason: SweptReason
+    }
+
+    public enum SweptReason: Sendable {
+        case directoryDeleted
+        case timeout
+    }
+
+    /// Remove sessions that are stale. Returns info about removed sessions.
+    @discardableResult
+    public func sweepStale(timeoutSeconds: Int) -> [SweptSession] {
+        let now = Date()
+        var swept: [SweptSession] = []
+
+        for (id, session) in sessions {
+            if session.status.isRunning || session.status == .permissionWaiting {
+                continue
+            }
+
+            let name = session.originRepoName
+                ?? (session.cwd as NSString?)?.lastPathComponent ?? "Session"
+
+            if let cwd = session.cwd, !FileManager.default.fileExists(atPath: cwd) {
+                swept.append(SweptSession(id: id, projectName: name, reason: .directoryDeleted))
+                sessions.removeValue(forKey: id)
+                continue
+            }
+
+            if timeoutSeconds > 0 {
+                let elapsed = now.timeIntervalSince(session.lastActivityAt)
+                if elapsed > TimeInterval(timeoutSeconds) {
+                    swept.append(SweptSession(id: id, projectName: name, reason: .timeout))
+                    sessions.removeValue(forKey: id)
+                }
+            }
+        }
+
+        if !swept.isEmpty {
+            notifyChange()
+        }
+        return swept
+    }
 }

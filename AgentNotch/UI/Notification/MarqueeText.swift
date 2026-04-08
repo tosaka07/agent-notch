@@ -19,8 +19,7 @@ struct MarqueeText: View {
             let _ = DispatchQueue.main.async {
                 containerWidth = geo.size.width
             }
-            Text(text)
-                .font(font)
+            Text(Self.markdownAttributed(text, font: font))
                 .lineLimit(1)
                 .fixedSize()
                 .background(GeometryReader { textGeo in
@@ -51,8 +50,8 @@ struct MarqueeText: View {
             return
         }
         animating = true
-        // Initial pause
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        // Initial pause — give time to read the start of the text
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             guard animating else { return }
             scrollToEnd()
         }
@@ -88,5 +87,24 @@ struct MarqueeText: View {
         guard !cycleReported else { return }
         cycleReported = true
         onCycleComplete?()
+    }
+
+    /// Parse inline markdown (bold, italic, code, strikethrough) into AttributedString.
+    /// Falls back to plain text if parsing fails.
+    private static func markdownAttributed(_ text: String, font: Font) -> AttributedString {
+        // Strip block-level elements (tables, headings, lists) — keep inline only
+        let cleaned = text
+            .replacingOccurrences(of: #"\n"#, with: " ")
+            .replacingOccurrences(of: #"^\s*[-*+]\s+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"^\s*#{1,6}\s+"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\|"#, with: "")
+
+        if var result = try? AttributedString(markdown: cleaned, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            result.font = font
+            return result
+        }
+        var plain = AttributedString(text)
+        plain.font = font
+        return plain
     }
 }

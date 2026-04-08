@@ -1,11 +1,13 @@
 import AgentNotchCore
 import AppKit
+import Defaults
 import Network
 import SwiftUI
 
 extension Notification.Name {
     static let agentNotchAutoExpand = Notification.Name("agentNotchAutoExpand")
     static let agentNotchSessionCompleted = Notification.Name("agentNotchSessionCompleted")
+    static let agentNotchSessionSwept = Notification.Name("agentNotchSessionSwept")
 }
 
 @MainActor
@@ -15,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var socketServer: SocketServer?
     private var screenObserver: ScreenObserver?
     private var focusedScreenTracker: FocusedScreenTracker?
+    private var cleanupTimer: Timer?
     let sessionManager = SessionManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -23,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupScreenObserver()
         setupFocusedScreenTracker()
         startSocketServer()
+        startSessionCleanupTimer()
         HookInstaller.installIfNeeded()
     }
 
@@ -76,6 +80,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         focusedScreenTracker = tracker
     }
 
+    // MARK: - Session Cleanup
+
+    private func startSessionCleanupTimer() {
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                let timeout = Defaults[.sessionTimeout].rawValue
+                let swept = self.sessionManager.sweepStale(timeoutSeconds: timeout)
+                for item in swept {
+                    let reason: String = switch item.reason {
+                    case .directoryDeleted: "ディレクトリ削除"
+                    case .timeout: "タイムアウト"
+                    }
+                    NotificationCenter.default.post(
+                        name: .agentNotchSessionSwept,
+                        object: item.id,
+                        userInfo: [
+                            "projectName": item.projectName,
+                            "message": "\(item.projectName) を自動削除しました（\(reason)）",
+                        ]
+                    )
+                }
+            }
+        }
+    }
+
     // MARK: - Socket Server
 
     private func startSocketServer() {
@@ -123,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     AppDelegate.processEvent(event, agentType: agentType, manager: manager)
                     // Backfill cwd/transcriptPath on every event (may have been missing on auto-created sessions)
                     if let session = manager.session(for: sessionId) {
+                        session.lastActivityAt = Date()
                         if session.cwd == nil, let cwd { session.cwd = cwd }
                         if session.transcriptPath == nil, let transcriptPath { session.transcriptPath = transcriptPath }
                     }
@@ -287,8 +318,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     name: .agentNotchSessionCompleted,
                     object: sessionId,
                     userInfo: [
-                        "projectName": (session.cwd as NSString?)?.lastPathComponent ?? "Session",
+                        "projectName": session.originRepoName
+                            ?? (session.cwd as NSString?)?.lastPathComponent ?? "Session",
                         "gitBranch": session.gitBranch as Any,
+                        "isWorktree": (session.worktreeName != nil),
                         "message": lastMessage,
                     ]
                 )
