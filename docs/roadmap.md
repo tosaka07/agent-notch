@@ -194,6 +194,29 @@ Phase 3 (成熟)     ████████████████  Gemini + 
 
 **成果物**: Claude Code + Codex の並列監視。日次コストダッシュボード。ターミナルジャンプ。
 
+### 技術的注意事項
+
+#### Hook の fire-and-forget 制約
+現在、HookHandler は全イベントを fire-and-forget で処理している（socket に送信後、応答を待たずに即終了）。
+これにより agent の動作をブロックしないが、以下の機能が実現できない:
+
+- **GUI からの権限 approve/deny** — hook の stdout で応答を返せないため、PermissionRequest に介入不可
+- **hook による tool のブロック** — PreToolUse で deny/block を返却不可
+- **hook レスポンスへの context 注入** — systemMessage, additionalContext 等の注入不可
+
+**対策案 (将来)**:
+PermissionRequest のみ recv ありモードに戻し、短いタイムアウト（例: 30秒）を設定。
+タイムアウト時はパススルー（agent 側の通常プロンプトにフォールバック）。
+PreToolUse/PostToolUse 等の通常イベントは fire-and-forget を維持。
+
+#### Codex CLI の hooks 有効化
+Codex CLI は hooks がデフォルト無効。`~/.codex/config.toml` に以下の設定が必要:
+```toml
+[features]
+codex_hooks = true
+```
+HookInstaller が自動追記するが、既存の config.toml の内容は保持する。
+
 ---
 
 ## Phase 3: Gemini CLI + プラグイン + カスタマイズ
