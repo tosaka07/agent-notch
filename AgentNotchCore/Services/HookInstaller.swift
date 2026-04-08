@@ -13,7 +13,6 @@ public enum HookInstaller {
         ("PreToolUse", "", nil),
         ("PostToolUse", "", nil),
         ("PostToolUseFailure", "", nil),
-        ("PermissionRequest", "", 86400),
         ("Notification", "", nil),
         ("Stop", nil, nil),
         ("StopFailure", nil, nil),
