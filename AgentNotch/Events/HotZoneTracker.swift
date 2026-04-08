@@ -51,13 +51,21 @@ final class HotZoneTracker {
         }
     }
 
+    /// Check if point is in the visible notch content area (wings included).
+    private func isPointInNotchContent(_ point: CGPoint) -> Bool {
+        if let rect = contentScreenRect?() {
+            return rect.contains(point)
+        }
+        return geometry.isPointInNotch(point)
+    }
+
     private func updateHover() {
         guard !isExpanded else {
             if wasHovering { wasHovering = false; onNotchHoverChanged?(false) }
             return
         }
         let location = NSEvent.mouseLocation
-        let hovering = geometry.isPointInNotch(location)
+        let hovering = isPointInNotchContent(location)
         if hovering != wasHovering {
             wasHovering = hovering
             onNotchHoverChanged?(hovering)
@@ -68,7 +76,11 @@ final class HotZoneTracker {
 
     private func handleGlobal(_ event: NSEvent) {
         let location = NSEvent.mouseLocation
-        if geometry.isPointInNotch(location) {
+        // When compact: use full content rect (wings). When expanded: use physical notch only.
+        let isNotchClick = isExpanded
+            ? geometry.isPointInNotch(location)
+            : isPointInNotchContent(location)
+        if isNotchClick {
             onNotchClicked?()
         } else if isExpanded {
             onClickedOutside?()
@@ -80,7 +92,10 @@ final class HotZoneTracker {
     private func handleLocal(_ event: NSEvent) -> Bool {
         let location = NSEvent.mouseLocation
 
-        if geometry.notchScreenRect.contains(location) {
+        let isNotchClick = isExpanded
+            ? geometry.notchScreenRect.contains(location)
+            : isPointInNotchContent(location)
+        if isNotchClick {
             onNotchClicked?()
             return true
         }
