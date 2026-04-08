@@ -89,8 +89,10 @@ final class NotchWindowController {
 
         func syncPanelState() {
             let expanded = viewModel.mode.isFullPanel
-            let interactive = expanded || viewModel.mode == .notification
+            let isNotif = viewModel.mode == .notification
+            let interactive = expanded || isNotif
             tracker.isExpanded = expanded
+            tracker.isNotification = isNotif
             if interactive {
                 self.panel?.ignoresMouseEvents = false
                 self.panel?.makeKey()

@@ -12,6 +12,7 @@ final class HotZoneTracker {
     var onNotchHoverChanged: ((Bool) -> Void)?
 
     var isExpanded = false
+    var isNotification = false
     private var wasHovering = false
 
     /// Returns the current visible content rect in screen coordinates.
@@ -76,6 +77,10 @@ final class HotZoneTracker {
 
     private func handleGlobal(_ event: NSEvent) {
         let location = NSEvent.mouseLocation
+        if isNotification {
+            // In notification mode, don't intercept — let SwiftUI buttons handle taps
+            return
+        }
         // When compact: use full content rect (wings). When expanded: use physical notch only.
         let isNotchClick = isExpanded
             ? geometry.isPointInNotch(location)
@@ -91,6 +96,11 @@ final class HotZoneTracker {
 
     private func handleLocal(_ event: NSEvent) -> Bool {
         let location = NSEvent.mouseLocation
+
+        if isNotification {
+            // Let SwiftUI buttons handle notification taps
+            return false
+        }
 
         let isNotchClick = isExpanded
             ? geometry.notchScreenRect.contains(location)
