@@ -16,7 +16,7 @@ final class NotchNotificationManager {
     /// Maximum stacked notifications
     private let maxVisible = 4
     /// Minimum display time before auto-dismiss (used when no marquee)
-    private let minDisplaySeconds: TimeInterval = 8
+    private let minDisplaySeconds: TimeInterval = 7
 
     var isEmpty: Bool { items.isEmpty }
     var hasNotification: Bool { !items.isEmpty }

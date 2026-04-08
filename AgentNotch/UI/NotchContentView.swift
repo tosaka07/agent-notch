@@ -251,13 +251,21 @@ struct NotchContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: viewModel.physicalNotchHeight)
                 .clipped()
 
-                // Right wing: count of actively running sessions
+                // Right wing: running/total session count (stacked vertically)
                 ZStack {
-                    let runningCount = sessions.filter(\.status.isRunning).count
-                    if runningCount > 1 {
-                        Text("\(runningCount)")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.75))
+                    let total = sessions.count
+                    let running = sessions.filter(\.status.isRunning).count
+                    if total > 0 {
+                        VStack(spacing: 0) {
+                            Text("\(running)")
+                                .foregroundStyle(.white.opacity(running > 0 ? 0.75 : 0.35))
+                            Rectangle()
+                                .fill(.white.opacity(0.2))
+                                .frame(width: 12, height: 0.5)
+                            Text("\(total)")
+                                .foregroundStyle(.white.opacity(0.35))
+                        }
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
                     }
                 }
                 .frame(width: wing, height: viewModel.physicalNotchHeight)
