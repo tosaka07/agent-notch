@@ -5,6 +5,8 @@ struct SettingsView: View {
     @Default(.textSize) var textSize
     @Default(.sessionTimeout) var sessionTimeout
     @Default(.notificationTapAction) var notificationTapAction
+    @Default(.displayMode) var displayMode
+    @Default(.specificDisplayUUID) var specificDisplayUUID
     var onClose: (() -> Void)? = nil
 
     var body: some View {
@@ -22,6 +24,25 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                     Text("Aa テスト Preview 123")
                         .font(.system(size: 11 * textSize.scale))
+                }
+
+                Picker("ディスプレイ", selection: $displayMode) {
+                    ForEach(DisplayModePreference.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+
+                if displayMode == .specificDisplay {
+                    Picker("対象ディスプレイ", selection: $specificDisplayUUID) {
+                        ForEach(availableDisplays, id: \.uuid) { display in
+                            HStack(spacing: 6) {
+                                Image(systemName: display.isBuiltin ? "laptopcomputer" : "display")
+                                    .font(.system(size: 10))
+                                Text(display.name)
+                            }
+                            .tag(display.uuid)
+                        }
+                    }
                 }
             }
 
@@ -45,6 +66,31 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 320, height: 340)
+        .frame(width: 320, height: displayMode == .specificDisplay ? 420 : 380)
+        .onAppear {
+            // Auto-select first display if none set
+            if displayMode == .specificDisplay, specificDisplayUUID.isEmpty,
+               let first = availableDisplays.first {
+                specificDisplayUUID = first.uuid
+            }
+        }
+    }
+
+    private struct DisplayInfo: Identifiable {
+        let uuid: String
+        let name: String
+        let isBuiltin: Bool
+        var id: String { uuid }
+    }
+
+    private var availableDisplays: [DisplayInfo] {
+        NSScreen.screens.compactMap { screen in
+            guard let uuid = screen.displayUUID else { return nil }
+            return DisplayInfo(
+                uuid: uuid,
+                name: screen.displayName,
+                isBuiltin: screen.isBuiltinDisplay
+            )
+        }
     }
 }

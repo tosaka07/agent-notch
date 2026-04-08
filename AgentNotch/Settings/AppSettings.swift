@@ -58,8 +58,27 @@ enum NotificationTapAction: String, Defaults.Serializable, CaseIterable, Sendabl
     }
 }
 
+enum DisplayModePreference: String, Defaults.Serializable, CaseIterable, Sendable {
+    case followFocus
+    case allDisplays
+    case builtinOnly
+    case specificDisplay
+
+    var label: String {
+        switch self {
+        case .followFocus: "フォーカス追従"
+        case .allDisplays: "全ディスプレイ"
+        case .builtinOnly: "内蔵のみ"
+        case .specificDisplay: "指定ディスプレイ"
+        }
+    }
+}
+
 extension Defaults.Keys {
     static let textSize = Key<TextSizePreference>("textSize", default: .small)
     static let sessionTimeout = Key<SessionTimeoutPreference>("sessionTimeout", default: .oneDay)
     static let notificationTapAction = Key<NotificationTapAction>("notificationTapAction", default: .jumpToTerminal)
+    static let displayMode = Key<DisplayModePreference>("displayMode", default: .followFocus)
+    /// UUID of the specific display chosen when displayMode == .specificDisplay
+    static let specificDisplayUUID = Key<String>("specificDisplayUUID", default: "")
 }

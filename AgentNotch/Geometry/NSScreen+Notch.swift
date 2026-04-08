@@ -56,4 +56,15 @@ extension NSScreen {
     static var builtin: NSScreen? {
         NSScreen.screens.first(where: { $0.isBuiltinDisplay }) ?? NSScreen.main
     }
+
+    /// Persistent UUID string for this display (survives reconnection).
+    var displayUUID: String? {
+        let uuid = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue()
+        return uuid.map { CFUUIDCreateString(nil, $0) as String }
+    }
+
+    /// Human-readable name for this display.
+    var displayName: String {
+        localizedName
+    }
 }

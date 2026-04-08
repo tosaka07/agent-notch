@@ -1,18 +1,21 @@
 import AppKit
 
-/// Tracks which screen has the focused app and fires a callback when it changes.
-/// Uses NSWorkspace app activation notifications — no Accessibility permission required.
+/// Tracks which screen should show the notch overlay.
+/// Uses mouse position (works with tiling WMs like Aerospace) + app activation as fallback.
 @MainActor
 final class FocusedScreenTracker {
     var onScreenChanged: ((NSScreen) -> Void)?
 
     private var currentDisplayID: CGDirectDisplayID = 0
-    private var observation: Any?
+    private var appObservation: Any?
+    private var mouseMonitor: Any?
+    private var debounceTask: Task<Void, Never>?
 
     func start() {
-        currentDisplayID = effectiveScreen()?.displayID ?? 0
+        currentDisplayID = screenForMouse()?.displayID ?? 0
 
-        observation = NSWorkspace.shared.notificationCenter.addObserver(
+        // 1. App activation — catches most normal switching
+        appObservation = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
@@ -20,29 +23,46 @@ final class FocusedScreenTracker {
                 self?.checkScreenChange()
             }
         }
+
+        // 2. Global mouse-moved — catches Aerospace / tiling WM focus changes
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.debouncedCheckScreenChange()
+            }
+        }
     }
 
     func stop() {
-        if let observation {
-            NSWorkspace.shared.notificationCenter.removeObserver(observation)
+        if let appObservation {
+            NSWorkspace.shared.notificationCenter.removeObserver(appObservation)
         }
-        observation = nil
+        appObservation = nil
+        if let mouseMonitor {
+            NSEvent.removeMonitor(mouseMonitor)
+        }
+        mouseMonitor = nil
+        debounceTask?.cancel()
+        debounceTask = nil
+    }
+
+    /// Debounce mouse-moved checks (fire at most once per 150ms)
+    private func debouncedCheckScreenChange() {
+        debounceTask?.cancel()
+        debounceTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            checkScreenChange()
+        }
     }
 
     private func checkScreenChange() {
-        // Ignore our own app being activated (e.g., status menu click)
-        if NSWorkspace.shared.frontmostApplication == NSRunningApplication.current { return }
-
-        guard let screen = effectiveScreen() else { return }
+        guard let screen = screenForMouse() else { return }
         guard screen.displayID != currentDisplayID else { return }
         currentDisplayID = screen.displayID
         onScreenChanged?(screen)
     }
 
-    /// The screen of the currently focused app.
-    /// NSScreen.main returns the screen containing the key window's menu bar.
-    private func effectiveScreen() -> NSScreen? {
-        if let main = NSScreen.main { return main }
+    private func screenForMouse() -> NSScreen? {
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { $0.frame.contains(mouse) }
     }
