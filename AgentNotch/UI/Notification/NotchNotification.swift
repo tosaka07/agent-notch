@@ -7,6 +7,7 @@ final class NotchNotificationManager {
         let content: AnyView
         let autoDismissAfter: TimeInterval?  // nil = fallback only (30s)
         let createdAt: Date
+        var onTap: (() -> Void)?
     }
 
     private(set) var items: [Item] = []

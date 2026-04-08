@@ -1,68 +1,36 @@
 import Foundation
-import Network
 
-/// CLI hook handler: reads JSON from stdin, forwards to Agent Notch socket, prints response.
-/// This replaces the Python hook script entirely.
+/// CLI hook handler: reads JSON from stdin, forwards to Agent Notch socket, exits immediately.
+/// Must never block the calling agent (Claude Code / Codex).
 public enum HookHandler {
     private static let socketPath = "/tmp/agent-notch-\(NSUserName()).sock"
-    private static let timeout: TimeInterval = 300 // 5 min for permission decisions
+    private static let socketTimeout: Int = 3 // seconds — fail fast, never block the agent
 
     public static func run(agentType: String = "claude") {
         // Read all of stdin
-        guard let inputData = try? FileHandle.standardInput.availableData,
+        guard let inputData = FileHandle.standardInput.availableData as Data?,
               !inputData.isEmpty,
               var json = try? JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
             exit(0)
         }
 
-        // Add process info and agent type
-        // Use parent PID (the Claude Code process that invoked this hook)
+        // Add agent type (lightweight — no process spawning)
         json["_pid"] = getppid()
-        json["_tty"] = getTTY()
         json["_agent_type"] = agentType
 
-        // Forward to socket
-        guard let response = sendToSocket(json) else {
-            // Socket not available — exit cleanly
-            exit(0)
-        }
+        // Fire-and-forget: send to socket, don't wait for a meaningful response
+        sendToSocket(json)
 
-        // Print response in the format the agent expects
-        if agentType == "codex" {
-            // Codex expects empty output or nothing for success (exit 0).
-            // Only print if there's a deferred permission decision to relay.
-            if let decision = response["decision"] as? String {
-                let codexResponse: [String: Any] = [
-                    "hookSpecificOutput": [
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": decision == "allow" ? "allow" : "deny",
-                    ]
-                ]
-                if let data = try? JSONSerialization.data(withJSONObject: codexResponse),
-                   let str = String(data: data, encoding: .utf8) {
-                    print(str)
-                }
-            }
-            // Otherwise: no output = success
-        } else {
-            // Claude Code: print the socket response as-is
-            if let responseData = try? JSONSerialization.data(withJSONObject: response),
-               let responseStr = String(data: responseData, encoding: .utf8) {
-                print(responseStr)
-            } else {
-                print("{}")
-            }
-        }
+        // Exit with no stdout output = pass-through (agent continues normally)
     }
 
-    private static func sendToSocket(_ message: [String: Any]) -> [String: Any]? {
+    private static func sendToSocket(_ message: [String: Any]) {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return nil }
+        guard fd >= 0 else { return }
         defer { close(fd) }
 
-        // Set timeout
-        var tv = timeval(tv_sec: Int(timeout), tv_usec: 0)
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        // Short send timeout — never block the agent
+        var tv = timeval(tv_sec: socketTimeout, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
         // Connect
@@ -79,53 +47,18 @@ public enum HookHandler {
                 connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        guard connectResult == 0 else { return nil }
+        guard connectResult == 0 else { return }
 
-        // Send: 4-byte length prefix + JSON (AeroSpace protocol)
-        guard let payload = try? JSONSerialization.data(withJSONObject: message) else { return nil }
+        // Send: 4-byte length prefix + JSON
+        guard let payload = try? JSONSerialization.data(withJSONObject: message) else { return }
         var length = UInt32(payload.count)
         var sendData = Data(bytes: &length, count: 4)
         sendData.append(payload)
 
-        let sent = sendData.withUnsafeBytes { ptr in
+        _ = sendData.withUnsafeBytes { ptr in
             send(fd, ptr.baseAddress!, sendData.count, 0)
         }
-        guard sent == sendData.count else { return nil }
-
-        // Receive: 4-byte length prefix + JSON
-        var headerBuf = [UInt8](repeating: 0, count: 4)
-        let headerRead = recv(fd, &headerBuf, 4, MSG_WAITALL)
-        guard headerRead == 4 else { return nil }
-
-        let responseLength = Data(headerBuf).withUnsafeBytes { $0.load(as: UInt32.self) }
-        guard responseLength > 0, responseLength < 1_000_000 else { return nil }
-
-        var responseBuf = [UInt8](repeating: 0, count: Int(responseLength))
-        let bodyRead = recv(fd, &responseBuf, Int(responseLength), MSG_WAITALL)
-        guard bodyRead == Int(responseLength) else { return nil }
-
-        let responseData = Data(responseBuf)
-        return try? JSONSerialization.jsonObject(with: responseData) as? [String: Any]
-    }
-
-    private static func getTTY() -> String? {
-        let ppid = getppid()
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-p", "\(ppid)", "-o", "tty="]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let tty = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !tty.isEmpty && tty != "??" && tty != "-" {
-                return tty.hasPrefix("/dev/") ? tty : "/dev/" + tty
-            }
-        } catch {}
-        return nil
+        // Don't wait for response — close immediately after send.
+        // The kernel buffer ensures the server receives the data.
     }
 }

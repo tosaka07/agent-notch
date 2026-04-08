@@ -181,6 +181,8 @@ struct NotchContentView: View {
             let gitBranch = userInfo["gitBranch"] as? String
             let isWT = userInfo["isWorktree"] as? Bool ?? false
             let msg = sanitizedMessage(userInfo["message"] as? String ?? "")
+            let pid = (userInfo["pid"] as? NSNumber)?.int32Value
+            let ttyVal = userInfo["tty"] as? String
             let itemId = sessionId
 
             let content = AnyView(
@@ -201,7 +203,8 @@ struct NotchContentView: View {
                 id: itemId,
                 content: content,
                 autoDismissAfter: msg.isEmpty ? 7 : nil,
-                createdAt: Date()
+                createdAt: Date(),
+                onTap: notificationTapAction(sessionId: sessionId, pid: pid, tty: ttyVal)
             )
             withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
                 notificationManager.enqueue(item)
@@ -246,6 +249,13 @@ struct NotchContentView: View {
         .onChange(of: viewModel.mode) { _, newMode in
             if newMode.isFullPanel {
                 notificationManager.dismissAll()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .agentNotchClosePanel)) { _ in
+            withAnimation(closeAnimation) {
+                notificationManager.dismissAll()
+                viewModel.notificationCount = 0
+                viewModel.mode = .compact
             }
         }
         .onChange(of: notificationManager.items.count) { _, count in
@@ -341,6 +351,8 @@ struct NotchContentView: View {
                             .padding(.horizontal, 14)
                             .padding(.vertical, 4)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture { item.onTap?() }
                             .transition(
                                 .asymmetric(
                                     insertion: .opacity.combined(with: .move(edge: .top)),
@@ -483,6 +495,19 @@ struct NotchContentView: View {
             .compactMap { $0.currentTool }
             .first { $0.status == .running }
             .map(\.name)
+    }
+
+    private func notificationTapAction(sessionId: String, pid: Int32?, tty: String?) -> () -> Void {
+        return { [weak viewModel] in
+            switch Defaults[.notificationTapAction] {
+            case .jumpToTerminal:
+                TerminalJumper.jump(pid: pid, tty: tty)
+            case .openSessionDetail:
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
+                    viewModel?.showSession(sessionId)
+                }
+            }
+        }
     }
 
     private func sanitizedMessage(_ message: String) -> String {

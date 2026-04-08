@@ -8,6 +8,7 @@ extension Notification.Name {
     static let agentNotchAutoExpand = Notification.Name("agentNotchAutoExpand")
     static let agentNotchSessionCompleted = Notification.Name("agentNotchSessionCompleted")
     static let agentNotchSessionSwept = Notification.Name("agentNotchSessionSwept")
+    static let agentNotchClosePanel = Notification.Name("agentNotchClosePanel")
 }
 
 @MainActor
@@ -117,41 +118,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Detect agent type from _agent_type field injected by CLI
                 let agentType: AgentType = (message["_agent_type"] as? String) == "codex" ? .codex : .claudeCode
 
-                // For PermissionRequest / AskQuestion: hold connection open
-                let isDeferred: Bool
-                switch event {
-                case .permissionRequested(let info):
-                    let toolUseId = info.toolUseId.isEmpty ? UUID().uuidString : info.toolUseId
-                    // Store pending response on the server via a posted notification
-                    let pending = PendingSocketResponse(
-                        sessionId: sessionId, toolUseId: toolUseId,
-                        connection: connection, receivedAt: Date()
-                    )
-                    Task { @MainActor in
-                        // Access socketServer on MainActor
-                        (NSApp.delegate as? AppDelegate)?.socketServer?.addPending(pending)
-                    }
-                    isDeferred = true
-                case .askQuestion(let info):
-                    let pending = PendingSocketResponse(
-                        sessionId: sessionId, toolUseId: info.toolUseId,
-                        connection: connection, receivedAt: Date()
-                    )
-                    Task { @MainActor in
-                        (NSApp.delegate as? AppDelegate)?.socketServer?.addPending(pending)
-                    }
-                    isDeferred = true
-                default:
-                    isDeferred = false
-                }
+                // All events respond immediately — never block Claude Code.
+                // PermissionRequest/AskQuestion update the UI but don't hold the connection.
+                let isDeferred = false
 
                 // Extract common fields available on all hook events
                 let cwd = message["cwd"] as? String
                 let transcriptPath = message["transcript_path"] as? String
-                let rawPid = message["_pid"]
-                let pid = (rawPid as? NSNumber)?.int32Value
+                let pid = (message["_pid"] as? NSNumber)?.int32Value
                 let tty = message["_tty"] as? String
-                print("[AppDelegate] raw _pid=\(rawPid as Any) (type=\(type(of: rawPid))), parsed=\(pid as Any), _tty=\(tty as Any)")
 
                 Task { @MainActor in
                     AppDelegate.processEvent(event, agentType: agentType, manager: manager)
@@ -165,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
 
-                return isDeferred ? nil : ["status": "ok"]
+                return isDeferred ? nil : [String: Any]()
             }
             server.start()
             socketServer = server
@@ -329,6 +304,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "gitBranch": session.gitBranch as Any,
                         "isWorktree": (session.worktreeName != nil),
                         "message": lastMessage,
+                        "pid": session.pid as Any,
+                        "tty": session.tty as Any,
                     ]
                 )
 

@@ -46,7 +46,20 @@ enum SessionTimeoutPreference: Int, Defaults.Serializable, CaseIterable, Sendabl
     }
 }
 
+enum NotificationTapAction: String, Defaults.Serializable, CaseIterable, Sendable {
+    case jumpToTerminal
+    case openSessionDetail
+
+    var label: String {
+        switch self {
+        case .jumpToTerminal: "ターミナルへ移動"
+        case .openSessionDetail: "セッション詳細を開く"
+        }
+    }
+}
+
 extension Defaults.Keys {
     static let textSize = Key<TextSizePreference>("textSize", default: .small)
     static let sessionTimeout = Key<SessionTimeoutPreference>("sessionTimeout", default: .oneDay)
+    static let notificationTapAction = Key<NotificationTapAction>("notificationTapAction", default: .jumpToTerminal)
 }

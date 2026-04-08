@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @Default(.textSize) var textSize
     @Default(.sessionTimeout) var sessionTimeout
+    @Default(.notificationTapAction) var notificationTapAction
     var onClose: (() -> Void)? = nil
 
     var body: some View {
@@ -24,6 +25,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section("通知") {
+                Picker("タップ時の動作", selection: $notificationTapAction) {
+                    ForEach(NotificationTapAction.allCases, id: \.self) { action in
+                        Text(action.label).tag(action)
+                    }
+                }
+            }
+
             Section("セッション") {
                 Picker("自動削除", selection: $sessionTimeout) {
                     ForEach(SessionTimeoutPreference.allCases, id: \.self) { pref in
@@ -36,6 +45,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 320, height: 260)
+        .frame(width: 320, height: 340)
     }
 }
