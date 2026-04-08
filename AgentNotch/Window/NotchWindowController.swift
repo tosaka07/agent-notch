@@ -7,7 +7,7 @@ final class NotchWindowController {
     private var panel: NotchPanel?
     private var hostingView: PassThroughHostingView<NotchContentView>?
     private var hotZoneTracker: HotZoneTracker?
-    private var modeObservation: AnyCancellable?
+    private var modeObservations: [AnyCancellable] = []
     private weak var viewModelRef: NotchViewModel?
     let geometry: NotchGeometry
     let screen: NSScreen
@@ -47,8 +47,8 @@ final class NotchWindowController {
     func close() {
         hotZoneTracker?.stop()
         hotZoneTracker = nil
-        modeObservation?.cancel()
-        modeObservation = nil
+        modeObservations.forEach { $0.cancel() }
+        modeObservations.removeAll()
         panel?.close()
         panel = nil
         hostingView = nil
@@ -89,8 +89,9 @@ final class NotchWindowController {
 
         func syncPanelState() {
             let expanded = viewModel.mode.isFullPanel
+            let interactive = expanded || viewModel.mode == .notification
             tracker.isExpanded = expanded
-            if expanded {
+            if interactive {
                 self.panel?.ignoresMouseEvents = false
                 self.panel?.makeKey()
             } else {
@@ -119,12 +120,22 @@ final class NotchWindowController {
         tracker.start()
         hotZoneTracker = tracker
 
-        // Observe auto-expand notifications
-        modeObservation = NotificationCenter.default.publisher(for: .agentNotchAutoExpand)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard self != nil else { return }
-                syncPanelState()
-            }
+        // Observe notifications that change mode and need panel state sync
+        let notifications: [Notification.Name] = [
+            .agentNotchAutoExpand,
+            .agentNotchSessionCompleted,
+            .agentNotchClosePanel,
+        ]
+        modeObservations = notifications.map { name in
+            NotificationCenter.default.publisher(for: name)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    guard self != nil else { return }
+                    // Delay slightly to let SwiftUI update mode first
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        syncPanelState()
+                    }
+                }
+        }
     }
 }

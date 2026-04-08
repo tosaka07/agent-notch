@@ -155,7 +155,7 @@ struct NotchContentView: View {
         )
         .shadow(color: isExpanded ? .black.opacity(0.6) : .clear, radius: 8)
         .animation(isExpanded ? openAnimation : closeAnimation, value: viewModel.mode)
-        .allowsHitTesting(viewModel.mode.isFullPanel)
+        .allowsHitTesting(viewModel.mode.isFullPanel || viewModel.mode == .notification)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: hasSessions) { _, newValue in
             viewModel.hasActivity = newValue
@@ -347,18 +347,15 @@ struct NotchContentView: View {
             if viewModel.mode == .notification {
                 VStack(spacing: 0) {
                     ForEach(notificationManager.items) { item in
-                        item.content
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 4)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture { item.onTap?() }
-                            .transition(
-                                .asymmetric(
-                                    insertion: .opacity.combined(with: .move(edge: .top)),
-                                    removal: .opacity.combined(with: .scale(scale: 0.95))
-                                )
+                        NotificationRowButton(content: item.content) {
+                            item.onTap?()
+                        }
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .scale(scale: 0.95))
                             )
+                        )
                     }
                 }
                 .padding(.top, 2)
