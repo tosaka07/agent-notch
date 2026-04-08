@@ -12,7 +12,14 @@ struct StatusIndicator: View {
         indicator
             .frame(width: size, height: size)
             .animation(animationForStatus, value: isAnimating)
-            .onAppear { isAnimating = true }
+            .onAppear {
+                isAnimating = true
+                if status == .done {
+                    withAnimation(.easeOut(duration: 0.5).delay(2.0)) {
+                        doneOpacity = 0
+                    }
+                }
+            }
             .onChange(of: status) { _, newStatus in
                 isAnimating = false
                 doneOpacity = 1.0
