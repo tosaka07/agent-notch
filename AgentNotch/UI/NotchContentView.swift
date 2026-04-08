@@ -159,6 +159,7 @@ struct NotchContentView: View {
                 ),
                 style: FillStyle(eoFill: true)
             )
+            .allowsHitTesting(false)
         )
         .shadow(color: isExpanded ? .black.opacity(0.6) : .clear, radius: 8)
         .animation(isExpanded ? openAnimation : closeAnimation, value: viewModel.mode)
@@ -275,6 +276,12 @@ struct NotchContentView: View {
             // Cancel completion glow
             withAnimation(.easeOut(duration: 0.5)) {
                 completionGlow = 0
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .agentNotchNotificationTapped)) { _ in
+            // Tapped via global monitor (panel is ignoresMouseEvents=true in notification mode)
+            if let item = notificationManager.items.last {
+                item.onTap?()
             }
         }
         .onChange(of: notificationManager.items.count) { _, count in

@@ -13,6 +13,7 @@ struct NotificationRowButton: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
                 .background(isHovered ? Color.white.opacity(0.08) : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
         }

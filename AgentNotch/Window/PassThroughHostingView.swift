@@ -14,4 +14,6 @@ final class PassThroughHostingView<Content: View>: NSHostingView<Content> {
         }
         return super.hitTest(point)
     }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

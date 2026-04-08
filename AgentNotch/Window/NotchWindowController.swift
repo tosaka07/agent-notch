@@ -89,17 +89,15 @@ final class NotchWindowController {
 
         func syncPanelState() {
             let expanded = viewModel.mode.isFullPanel
-            let isNotif = viewModel.mode == .notification
-            let interactive = expanded || isNotif
             tracker.isExpanded = expanded
-            tracker.isNotification = isNotif
-            if interactive {
+            tracker.isNotification = viewModel.mode == .notification
+            if expanded {
                 self.panel?.ignoresMouseEvents = false
                 self.panel?.makeKey()
             } else {
-                // Delay ignoresMouseEvents until close animation finishes
+                // Compact and notification: panel stays transparent to clicks
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    guard viewModel.mode == .compact else { return }
+                    guard !viewModel.mode.isFullPanel else { return }
                     self.panel?.ignoresMouseEvents = true
                 }
             }
@@ -121,14 +119,19 @@ final class NotchWindowController {
             syncPanelState()
         }
 
+        tracker.onNotificationClicked = {
+            NotificationCenter.default.post(name: .agentNotchNotificationTapped, object: nil)
+        }
+
         tracker.onNotchHoverChanged = { [weak self, weak viewModel] hovering in
             guard let self, let viewModel else { return }
+            guard viewModel.mode == .compact else { return }
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 viewModel.isHovering = hovering
             }
             if hovering {
                 self.panel?.ignoresMouseEvents = false
-            } else if viewModel.mode == .compact {
+            } else {
                 self.panel?.ignoresMouseEvents = true
             }
         }
