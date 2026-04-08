@@ -9,23 +9,26 @@ extension Notification.Name {
     static let agentNotchSessionCompleted = Notification.Name("agentNotchSessionCompleted")
     static let agentNotchSessionSwept = Notification.Name("agentNotchSessionSwept")
     static let agentNotchClosePanel = Notification.Name("agentNotchClosePanel")
+    static let agentNotchSessionResumed = Notification.Name("agentNotchSessionResumed")
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private var windowController: NotchWindowController?
+    /// displayID → controller. Single entry for followFocus/builtinOnly, multiple for allDisplays.
+    private var windowControllers: [CGDirectDisplayID: NotchWindowController] = [:]
     private var socketServer: SocketServer?
     private var screenObserver: ScreenObserver?
     private var focusedScreenTracker: FocusedScreenTracker?
     private var cleanupTimer: Timer?
+    private var displayModeObservations: [Any] = []
     let sessionManager = SessionManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
-        setupNotchOverlay(on: NSScreen.builtin ?? NSScreen.screens[0])
+        applyDisplayMode()
         setupScreenObserver()
-        setupFocusedScreenTracker()
+        observeDisplayModeSetting()
         startSocketServer()
         startSessionCleanupTimer()
         HookInstaller.installIfNeeded()
@@ -37,37 +40,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Notch Overlay
 
-    private func setupNotchOverlay(on screen: NSScreen, force: Bool = false) {
-        // Skip if already showing on this screen (unless forced by screen parameter change)
-        if !force, let current = windowController?.screen, current.displayID == screen.displayID { return }
-        let rawMode = windowController?.currentMode ?? .compact
-        // Notification state is @State-local and won't survive re-creation — reset to compact
-        let previousMode = rawMode == .notification ? .compact : rawMode
-        windowController?.close()
-        windowController = nil
+    /// Apply the current display mode setting: teardown everything and rebuild.
+    private func applyDisplayMode() {
+        // Teardown
+        focusedScreenTracker?.stop()
+        focusedScreenTracker = nil
+        for controller in windowControllers.values { controller.close() }
+        windowControllers.removeAll()
+
+        switch Defaults[.displayMode] {
+        case .followFocus:
+            let mouse = NSEvent.mouseLocation
+            let screen = NSScreen.screens.first { $0.frame.contains(mouse) }
+                ?? NSScreen.builtin ?? NSScreen.screens[0]
+            showNotch(on: screen)
+            setupFocusedScreenTracker()
+
+        case .allDisplays:
+            for screen in NSScreen.screens {
+                showNotch(on: screen)
+            }
+
+        case .builtinOnly:
+            if let builtin = NSScreen.builtin {
+                showNotch(on: builtin)
+            } else {
+                showNotch(on: NSScreen.screens[0])
+            }
+
+        case .specificDisplay:
+            let targetUUID = Defaults[.specificDisplayUUID]
+            let screen = NSScreen.screens.first { $0.displayUUID == targetUUID }
+                ?? NSScreen.builtin ?? NSScreen.screens[0]
+            showNotch(on: screen)
+        }
+    }
+
+    private func showNotch(on screen: NSScreen) {
+        let id = screen.displayID
+        if windowControllers[id] != nil { return }
         let controller = NotchWindowController(screen: screen)
         let contentView = NotchContentView(
-            sessionManager: sessionManager, notchSize: screen.notchSize, initialMode: previousMode
+            sessionManager: sessionManager, notchSize: screen.notchSize
         )
         controller.show(contentView: contentView)
-        windowController = controller
+        windowControllers[id] = controller
+    }
+
+    private func removeNotch(displayID: CGDirectDisplayID) {
+        windowControllers[displayID]?.close()
+        windowControllers.removeValue(forKey: displayID)
     }
 
     private func setupScreenObserver() {
         let observer = ScreenObserver()
         observer.onScreenChanged = { [weak self] in
             guard let self else { return }
-            // Screen params changed (display connected/disconnected). Re-evaluate target.
-            let currentID = self.windowController?.screen.displayID
-            if let currentID, NSScreen.screens.contains(where: { $0.displayID == currentID }) {
-                // Current screen still exists — recreate to pick up new geometry
-                if let screen = NSScreen.screens.first(where: { $0.displayID == currentID }) {
-                    self.setupNotchOverlay(on: screen, force: true)
-                }
-            } else {
-                // Current screen gone — fall back
-                self.setupNotchOverlay(on: NSScreen.builtin ?? NSScreen.screens[0])
-            }
+            self.applyDisplayMode()
         }
         screenObserver = observer
     }
@@ -75,10 +104,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupFocusedScreenTracker() {
         let tracker = FocusedScreenTracker()
         tracker.onScreenChanged = { [weak self] screen in
-            self?.setupNotchOverlay(on: screen)
+            guard let self else { return }
+            // In followFocus mode: move to the new screen
+            guard Defaults[.displayMode] == .followFocus else { return }
+            let newID = screen.displayID
+            // Close all others, show on new screen
+            for (id, controller) in self.windowControllers where id != newID {
+                controller.close()
+                self.windowControllers.removeValue(forKey: id)
+            }
+            self.showNotch(on: screen)
         }
         tracker.start()
         focusedScreenTracker = tracker
+    }
+
+    private func observeDisplayModeSetting() {
+        let handler: (Any) -> Void = { [weak self] _ in
+            Task { @MainActor in
+                self?.applyDisplayMode()
+            }
+        }
+        displayModeObservations = [
+            Defaults.observe(.displayMode) { handler($0) },
+            Defaults.observe(.specificDisplayUUID) { handler($0) },
+        ]
     }
 
     // MARK: - Session Cleanup
@@ -197,6 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let session = manager.session(for: sessionId)
                 ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
             session.status = .thinking
+            NotificationCenter.default.post(name: .agentNotchSessionResumed, object: sessionId)
 
         case let .toolStarted(info):
             let session = manager.session(for: info.sessionId)

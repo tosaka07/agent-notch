@@ -266,6 +266,17 @@ struct NotchContentView: View {
                 viewModel.mode = .compact
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .agentNotchSessionResumed)) { notification in
+            guard let sessionId = notification.object as? String else { return }
+            // Dismiss completion notification for this session
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                notificationManager.dismiss(id: sessionId)
+            }
+            // Cancel completion glow
+            withAnimation(.easeOut(duration: 0.5)) {
+                completionGlow = 0
+            }
+        }
         .onChange(of: notificationManager.items.count) { _, count in
             if count == 0, viewModel.mode == .notification {
                 // All notifications dismissed — collapse to compact in one animation

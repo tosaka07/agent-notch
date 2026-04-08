@@ -133,6 +133,7 @@ final class NotchWindowController {
         let notifications: [Notification.Name] = [
             .agentNotchAutoExpand,
             .agentNotchSessionCompleted,
+            .agentNotchSessionResumed,
             .agentNotchClosePanel,
         ]
         modeObservations = notifications.map { name in
