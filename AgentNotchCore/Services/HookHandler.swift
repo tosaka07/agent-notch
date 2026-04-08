@@ -14,8 +14,9 @@ public enum HookHandler {
             exit(0)
         }
 
-        // Add agent type (lightweight — no process spawning)
+        // Add process info and agent type
         json["_pid"] = getppid()
+        json["_tty"] = getTTY()
         json["_agent_type"] = agentType
 
         // Fire-and-forget: send to socket, don't wait for a meaningful response
@@ -60,5 +61,26 @@ public enum HookHandler {
         }
         // Don't wait for response — close immediately after send.
         // The kernel buffer ensures the server receives the data.
+    }
+
+    /// Discover the TTY of the parent process (the shell running Claude Code).
+    private static func getTTY() -> String? {
+        let ppid = getppid()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-p", "\(ppid)", "-o", "tty="]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let tty = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !tty.isEmpty, tty != "??", tty != "-" {
+                return tty.hasPrefix("/dev/") ? tty : "/dev/" + tty
+            }
+        } catch {}
+        return nil
     }
 }
