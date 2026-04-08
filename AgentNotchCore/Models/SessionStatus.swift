@@ -41,6 +41,16 @@ public enum SessionStatus: String, Codable, Sendable {
         }
     }
 
+    /// Whether this status means the session is actively doing work (thinking, running tools, etc.)
+    public var isRunning: Bool {
+        switch self {
+        case .thinking, .toolRunning, .subagentRunning, .compacting:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Whether this status represents active work (notch should show wings)
     public var isActive: Bool {
         switch self {

@@ -1,11 +1,13 @@
 import Foundation
 
-/// Manages Claude Code hook installation.
+/// Manages hook installation for Claude Code and Codex CLI.
 /// Hooks call `agent-notch hook` CLI binary, which forwards events to the socket.
 public enum HookInstaller {
     private static let hookIdentifier = "agent-notch"
 
-    private static let hookEvents: [(event: String, matcher: String?, timeout: Int?)] = [
+    // MARK: - Claude Code hooks (settings.json)
+
+    private static let claudeHookEvents: [(event: String, matcher: String?, timeout: Int?)] = [
         ("SessionStart", nil, nil),
         ("UserPromptSubmit", nil, nil),
         ("PreToolUse", "", nil),
@@ -22,54 +24,134 @@ public enum HookInstaller {
         ("PostCompact", nil, nil),
     ]
 
-    /// Install hooks using the CLI binary path.
+    // MARK: - Codex CLI hooks (hooks.json)
+
+    private static let codexHookEvents: [(event: String, matcher: String?, timeout: Int?)] = [
+        ("SessionStart", nil, nil),
+        ("UserPromptSubmit", nil, nil),
+        ("PreToolUse", "", nil),
+        ("PostToolUse", "", nil),
+        ("Stop", nil, nil),
+    ]
+
+    /// Install hooks for all supported agents.
     /// Called from the GUI app on launch.
     public static func installIfNeeded() {
         let cliPath = findCLIPath()
-        updateSettings(command: "\(cliPath) hook")
+        updateClaudeSettings(command: "\(cliPath) hook")
+        updateCodexHooks(command: "\(cliPath) hook --agent codex")
+        ensureCodexHooksEnabled()
     }
 
     /// Install hooks from the CLI itself (uses own binary path).
     public static func installCLI() {
         let cliPath = CommandLine.arguments[0]
-        updateSettings(command: "\(cliPath) hook")
+        updateClaudeSettings(command: "\(cliPath) hook")
+        updateCodexHooks(command: "\(cliPath) hook --agent codex")
+        ensureCodexHooksEnabled()
     }
 
-    /// Remove our hooks from settings.json
+    /// Remove our hooks from all agent settings.
     public static func uninstall() {
-        let settingsPath = settingsFilePath()
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
-              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              var hooks = json["hooks"] as? [String: Any] else { return }
-
-        for (event, value) in hooks {
-            guard var entries = value as? [[String: Any]] else { continue }
-            entries.removeAll { isOurHookEntry($0) }
-            if entries.isEmpty {
-                hooks.removeValue(forKey: event)
-            } else {
-                hooks[event] = entries
-            }
-        }
-
-        json["hooks"] = hooks.isEmpty ? nil : hooks
-
-        if let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: URL(fileURLWithPath: settingsPath))
-        }
+        uninstallClaude()
+        uninstallCodex()
     }
 
     public static func isInstalled() -> Bool {
-        let settingsPath = settingsFilePath()
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
+        isClaudeInstalled() || isCodexInstalled()
+    }
+
+    // MARK: - Claude Code
+
+    private static func isClaudeInstalled() -> Bool {
+        let path = claudeSettingsPath()
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let hooks = json["hooks"] as? [String: Any] else { return false }
-
-        for (_, value) in hooks {
-            guard let entries = value as? [[String: Any]] else { continue }
-            if entries.contains(where: { isOurHookEntry($0) }) { return true }
+        return hooks.values.contains { value in
+            (value as? [[String: Any]])?.contains(where: { isOurHookEntry($0) }) == true
         }
-        return false
+    }
+
+    private static func uninstallClaude() {
+        let path = claudeSettingsPath()
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var hooks = json["hooks"] as? [String: Any] else { return }
+        for (event, value) in hooks {
+            guard var entries = value as? [[String: Any]] else { continue }
+            entries.removeAll { isOurHookEntry($0) }
+            hooks[event] = entries.isEmpty ? nil : entries
+        }
+        json["hooks"] = hooks.isEmpty ? nil : hooks
+        if let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+    }
+
+    // MARK: - Codex CLI
+
+    private static func isCodexInstalled() -> Bool {
+        let path = codexHooksPath()
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let hooks = json["hooks"] as? [String: Any] else { return false }
+        return hooks.values.contains { value in
+            (value as? [[String: Any]])?.contains(where: { isOurHookEntry($0) }) == true
+        }
+    }
+
+    private static func uninstallCodex() {
+        let path = codexHooksPath()
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              var hooks = json["hooks"] as? [String: Any] else { return }
+        for (event, value) in hooks {
+            guard var entries = value as? [[String: Any]] else { continue }
+            entries.removeAll { isOurHookEntry($0) }
+            hooks[event] = entries.isEmpty ? nil : entries
+        }
+        json["hooks"] = hooks.isEmpty ? nil : hooks
+        if let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+    }
+
+    private static func updateCodexHooks(command: String) {
+        let hooksPath = codexHooksPath()
+        var root: [String: Any] = [:]
+
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: hooksPath)),
+           let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            root = existing
+        }
+
+        var hooks = root["hooks"] as? [String: Any] ?? [:]
+
+        for (event, matcher, timeout) in codexHookEvents {
+            var hookCmd: [String: Any] = ["type": "command", "command": command]
+            if let timeout { hookCmd["timeout"] = timeout }
+
+            var matcherEntry: [String: Any] = ["hooks": [hookCmd]]
+            if let matcher { matcherEntry["matcher"] = matcher }
+
+            if var existingEntries = hooks[event] as? [[String: Any]] {
+                existingEntries.removeAll { isOurHookEntry($0) }
+                existingEntries.append(matcherEntry)
+                hooks[event] = existingEntries
+            } else {
+                hooks[event] = [matcherEntry]
+            }
+        }
+
+        root["hooks"] = hooks
+
+        let dir = (hooksPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+        if let data = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: hooksPath))
+        }
     }
 
     // MARK: - Private
@@ -79,8 +161,8 @@ public enum HookInstaller {
         return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
     }
 
-    private static func updateSettings(command: String) {
-        let settingsPath = settingsFilePath()
+    private static func updateClaudeSettings(command: String) {
+        let settingsPath = claudeSettingsPath()
         var settings: [String: Any] = [:]
 
         if let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
@@ -90,7 +172,7 @@ public enum HookInstaller {
 
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
 
-        for (event, matcher, timeout) in hookEvents {
+        for (event, matcher, timeout) in claudeHookEvents {
             var hookCmd: [String: Any] = ["type": "command", "command": command]
             if let timeout { hookCmd["timeout"] = timeout }
 
@@ -148,7 +230,45 @@ public enum HookInstaller {
         return "agent-notch"
     }
 
-    private static func settingsFilePath() -> String {
+    private static func claudeSettingsPath() -> String {
         NSHomeDirectory() + "/.claude/settings.json"
+    }
+
+    private static func codexHooksPath() -> String {
+        NSHomeDirectory() + "/.codex/hooks.json"
+    }
+
+    private static func codexConfigPath() -> String {
+        NSHomeDirectory() + "/.codex/config.toml"
+    }
+
+    /// Ensure `codex_hooks = true` exists under `[features]` in ~/.codex/config.toml.
+    /// Preserves all existing content — only appends the flag if missing.
+    private static func ensureCodexHooksEnabled() {
+        let path = codexConfigPath()
+        let dir = (path as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+        let content = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+
+        // Already enabled — nothing to do
+        if content.range(of: #"codex_hooks\s*=\s*true"#, options: .regularExpression) != nil {
+            return
+        }
+
+        var lines = content.components(separatedBy: "\n")
+
+        if let featIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "[features]" }) {
+            // Insert right after the [features] line
+            lines.insert("codex_hooks = true", at: featIdx + 1)
+        } else {
+            // No [features] section — append at end
+            if let last = lines.last, !last.isEmpty { lines.append("") }
+            lines.append("[features]")
+            lines.append("codex_hooks = true")
+        }
+
+        let updated = lines.joined(separator: "\n")
+        try? updated.write(toFile: path, atomically: true, encoding: .utf8)
     }
 }

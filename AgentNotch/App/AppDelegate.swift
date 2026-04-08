@@ -5,6 +5,7 @@ import SwiftUI
 
 extension Notification.Name {
     static let agentNotchAutoExpand = Notification.Name("agentNotchAutoExpand")
+    static let agentNotchSessionCompleted = Notification.Name("agentNotchSessionCompleted")
 }
 
 @MainActor
@@ -34,7 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupNotchOverlay(on screen: NSScreen, force: Bool = false) {
         // Skip if already showing on this screen (unless forced by screen parameter change)
         if !force, let current = windowController?.screen, current.displayID == screen.displayID { return }
-        let previousMode = windowController?.currentMode ?? .compact
+        let rawMode = windowController?.currentMode ?? .compact
+        // Notification state is @State-local and won't survive re-creation — reset to compact
+        let previousMode = rawMode == .notification ? .compact : rawMode
         windowController?.close()
         windowController = nil
         let controller = NotchWindowController(screen: screen)
@@ -81,6 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let server = try SocketServer { message, connection in
                 let event = ClaudeEventParser.parse(message)
                 let sessionId = message["session_id"] as? String ?? ""
+                // Detect agent type from _agent_type field injected by CLI
+                let agentType: AgentType = (message["_agent_type"] as? String) == "codex" ? .codex : .claudeCode
 
                 // For PermissionRequest / AskQuestion: hold connection open
                 let isDeferred: Bool
@@ -115,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let transcriptPath = message["transcript_path"] as? String
 
                 Task { @MainActor in
-                    AppDelegate.processEvent(event, manager: manager)
+                    AppDelegate.processEvent(event, agentType: agentType, manager: manager)
                     // Backfill cwd/transcriptPath on every event (may have been missing on auto-created sessions)
                     if let session = manager.session(for: sessionId) {
                         if session.cwd == nil, let cwd { session.cwd = cwd }
@@ -165,12 +170,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Event Processing
 
     @MainActor
-    static func processEvent(_ event: ClaudeEvent, manager: SessionManager) {
+    static func processEvent(_ event: ClaudeEvent, agentType: AgentType = .claudeCode, manager: SessionManager) {
         defer { manager.notifyChange() }
 
         switch event {
         case let .sessionStarted(info):
-            let session = manager.getOrCreateSession(id: info.sessionId, agentType: .claudeCode)
+            let session = manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
             session.model = info.model
             session.cwd = info.cwd
             session.transcriptPath = info.transcriptPath
@@ -178,12 +183,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case let .userPrompt(sessionId):
             let session = manager.session(for: sessionId)
-                ?? manager.getOrCreateSession(id: sessionId, agentType: .claudeCode)
+                ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
             session.status = .thinking
 
         case let .toolStarted(info):
             let session = manager.session(for: info.sessionId)
-                ?? manager.getOrCreateSession(id: info.sessionId, agentType: .claudeCode)
+                ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
             session.status = .toolRunning
             session.currentTool = ToolInfo(
                 id: info.toolUseId, name: info.toolName, summary: info.summary,
@@ -216,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case let .permissionRequested(info):
             let session = manager.session(for: info.sessionId)
-                ?? manager.getOrCreateSession(id: info.sessionId, agentType: .claudeCode)
+                ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
             session.status = .permissionWaiting
             session.pendingPermissions.append(PermissionRequest(
                 id: UUID().uuidString, agentType: .claudeCode,
@@ -229,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case let .askQuestion(info):
             let session = manager.session(for: info.sessionId)
-                ?? manager.getOrCreateSession(id: info.sessionId, agentType: .claudeCode)
+                ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
             session.status = .permissionWaiting
             session.pendingQuestion = PendingQuestion(
                 toolUseId: info.toolUseId, question: info.question, options: info.options
@@ -239,18 +244,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case let .notification(sessionId, type, _):
             if type == "idle_prompt" {
                 let session = manager.session(for: sessionId)
-                    ?? manager.getOrCreateSession(id: sessionId, agentType: .claudeCode)
+                    ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
                 session.status = .idle
             }
 
         case let .subagentStarted(sessionId, _):
             let session = manager.session(for: sessionId)
-                ?? manager.getOrCreateSession(id: sessionId, agentType: .claudeCode)
+                ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
             session.status = .subagentRunning
 
         case let .stopFailure(sessionId, errorType):
             let session = manager.session(for: sessionId)
-                ?? manager.getOrCreateSession(id: sessionId, agentType: .claudeCode)
+                ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
             session.status = .error
             session.currentTool = nil
 
@@ -275,16 +280,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         outputTokens: usage.outputTokens, cachedTokens: usage.cachedTokens
                     )
                 }
+                // Post completion notification
+                let lastMessage = session.transcriptPath
+                    .flatMap { TranscriptParser.lastAssistantMessage(at: $0) } ?? ""
+                NotificationCenter.default.post(
+                    name: .agentNotchSessionCompleted,
+                    object: sessionId,
+                    userInfo: [
+                        "projectName": (session.cwd as NSString?)?.lastPathComponent ?? "Session",
+                        "gitBranch": session.gitBranch as Any,
+                        "message": lastMessage,
+                    ]
+                )
+
                 manager.notifyChange()
-                // Fade to idle after 3 seconds
-                let sid = sessionId
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(3))
-                    if manager.session(for: sid)?.status == .done {
-                        manager.session(for: sid)?.status = .idle
-                        manager.notifyChange()
-                    }
-                }
             }
 
         case let .sessionEnded(sessionId):

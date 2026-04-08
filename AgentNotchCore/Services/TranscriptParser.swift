@@ -36,4 +36,27 @@ public enum TranscriptParser {
 
         return total
     }
+
+    /// Returns the last assistant text message from the transcript (for completion notifications).
+    public static func lastAssistantMessage(at path: String) -> String? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let content = String(data: data, encoding: .utf8) else { return nil }
+
+        for line in content.components(separatedBy: .newlines).reversed() {
+            guard !line.isEmpty,
+                  let lineData = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  json["type"] as? String == "assistant",
+                  let message = json["message"] as? [String: Any],
+                  let contentArray = message["content"] as? [[String: Any]]
+            else { continue }
+
+            for block in contentArray where block["type"] as? String == "text" {
+                if let text = block["text"] as? String, !text.isEmpty {
+                    return text
+                }
+            }
+        }
+        return nil
+    }
 }

@@ -70,6 +70,19 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
         return String(content.dropFirst(prefix.count))
     }
 
+    /// The name of the original repository when in a worktree.
+    /// Derived from the gitdir pointer: `.../original-repo/.git/worktrees/wt-name`
+    public var originRepoName: String? {
+        guard let info = resolvedGitDir, info.worktreeName != nil else { return nil }
+        // gitDir = /path/to/original-repo/.git/worktrees/wt-name
+        // Go up 3 levels: worktrees → .git → original-repo
+        let p1 = (info.gitDir as NSString).deletingLastPathComponent  // .../original-repo/.git/worktrees
+        let p2 = (p1 as NSString).deletingLastPathComponent           // .../original-repo/.git
+        let repoPath = (p2 as NSString).deletingLastPathComponent     // .../original-repo
+        let name = (repoPath as NSString).lastPathComponent
+        return name.isEmpty ? nil : name
+    }
+
     public var worktreeName: String? {
         resolvedGitDir?.worktreeName
     }

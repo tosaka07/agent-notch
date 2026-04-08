@@ -88,7 +88,7 @@ final class NotchWindowController {
         tracker.contentScreenRect = { currentContentScreenRect() }
 
         func syncPanelState() {
-            let expanded = viewModel.mode != .compact
+            let expanded = viewModel.mode.isFullPanel
             tracker.isExpanded = expanded
             if expanded {
                 self.panel?.ignoresMouseEvents = false

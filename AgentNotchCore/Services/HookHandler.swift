@@ -7,7 +7,7 @@ public enum HookHandler {
     private static let socketPath = "/tmp/agent-notch-\(NSUserName()).sock"
     private static let timeout: TimeInterval = 300 // 5 min for permission decisions
 
-    public static func run() {
+    public static func run(agentType: String = "claude") {
         // Read all of stdin
         guard let inputData = try? FileHandle.standardInput.availableData,
               !inputData.isEmpty,
@@ -15,23 +15,42 @@ public enum HookHandler {
             exit(0)
         }
 
-        // Add process info
+        // Add process info and agent type
         json["_pid"] = ProcessInfo.processInfo.processIdentifier
         json["_tty"] = getTTY()
+        json["_agent_type"] = agentType
 
         // Forward to socket
         guard let response = sendToSocket(json) else {
-            // Socket not available — print empty JSON so Claude Code doesn't error
-            print("{}")
+            // Socket not available — exit cleanly
             exit(0)
         }
 
-        // Print response
-        if let responseData = try? JSONSerialization.data(withJSONObject: response),
-           let responseStr = String(data: responseData, encoding: .utf8) {
-            print(responseStr)
+        // Print response in the format the agent expects
+        if agentType == "codex" {
+            // Codex expects empty output or nothing for success (exit 0).
+            // Only print if there's a deferred permission decision to relay.
+            if let decision = response["decision"] as? String {
+                let codexResponse: [String: Any] = [
+                    "hookSpecificOutput": [
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": decision == "allow" ? "allow" : "deny",
+                    ]
+                ]
+                if let data = try? JSONSerialization.data(withJSONObject: codexResponse),
+                   let str = String(data: data, encoding: .utf8) {
+                    print(str)
+                }
+            }
+            // Otherwise: no output = success
         } else {
-            print("{}")
+            // Claude Code: print the socket response as-is
+            if let responseData = try? JSONSerialization.data(withJSONObject: response),
+               let responseStr = String(data: responseData, encoding: .utf8) {
+                print(responseStr)
+            } else {
+                print("{}")
+            }
         }
     }
 

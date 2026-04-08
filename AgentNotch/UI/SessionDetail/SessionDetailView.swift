@@ -1,4 +1,5 @@
 import AgentNotchCore
+import Defaults
 import SwiftUI
 
 struct SessionDetailView: View {
@@ -8,6 +9,10 @@ struct SessionDetailView: View {
 
     @State private var chatEntries: [ChatEntry] = []
     @State private var isLoading = true
+    @State private var isAtBottom = true
+    @Default(.textSize) private var textSize
+
+    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,17 +61,53 @@ struct SessionDetailView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 2) {
+                        Spacer(minLength: 0)
+                            .frame(maxHeight: .infinity)
+
+                        LazyVStack(alignment: .leading, spacing: 2) {
                             ForEach(chatEntries) { entry in
                                 ChatMessageView(entry: entry)
                                     .id(entry.id)
                             }
+
+                            if let tool = session.currentTool, tool.status == .running {
+                                ActiveToolIndicator(tool: tool)
+                                    .id("activeTool")
+                                    .transition(.opacity)
+                            }
+
+                            Color.clear
+                                .frame(height: 1)
+                                .id("bottom")
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                     }
+                    .defaultScrollAnchor(.bottom)
+                    .modifier(ScrollBottomTracker(isAtBottom: $isAtBottom))
+                    .overlay(alignment: .bottom) {
+                        if !isAtBottom {
+                            Button {
+                                withAnimation(.easeOut(duration: 0.25)) {
+                                    proxy.scrollTo("bottom", anchor: .bottom)
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: s(10), weight: .bold))
+                                    .foregroundStyle(.white.opacity(0.8))
+                                    .frame(width: 28, height: 28)
+                                    .background(.white.opacity(0.1))
+                                    .clipShape(Circle())
+                                    .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.bottom, 8)
+                            .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                        }
+                    }
+                    .animation(.easeOut(duration: 0.2), value: isAtBottom)
                     .onChange(of: chatEntries.count) { _, _ in
-                        scrollToBottom(proxy)
+                        if isAtBottom { scrollToBottom(proxy) }
                     }
                     .onReceive(sessionManager.objectWillChange) {
                         loadChatAsync()
@@ -81,7 +122,7 @@ struct SessionDetailView: View {
         HStack(spacing: 8) {
             Button { onBack() } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: s(10), weight: .bold))
                     .foregroundStyle(.white.opacity(0.5))
                     .frame(width: 20, height: 20)
             }
@@ -92,10 +133,10 @@ struct SessionDetailView: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
                     Text(session.agentType.displayName)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: s(11), weight: .medium))
                         .foregroundStyle(.white.opacity(0.92))
                     Text(projectName(session.cwd))
-                        .font(.system(size: 9, design: .monospaced))
+                        .font(.system(size: s(9), design: .monospaced))
                         .foregroundStyle(.white.opacity(0.35))
                         .lineLimit(1)
                 }
@@ -111,7 +152,7 @@ struct SessionDetailView: View {
                                 .foregroundStyle(.white.opacity(0.2))
                         }
                         Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 7))
+                            .font(.system(size: s(7)))
                             .foregroundStyle(isWorktree ? .cyan.opacity(0.5) : .white.opacity(0.3))
                         Text(branch)
                             .foregroundStyle(isWorktree ? .cyan.opacity(0.4) : .white.opacity(0.3))
@@ -119,14 +160,14 @@ struct SessionDetailView: View {
                             .truncationMode(.tail)
                     }
                 }
-                .font(.system(size: 8, design: .monospaced))
+                .font(.system(size: s(8), design: .monospaced))
             }
 
             Spacer()
 
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(RelativeTimeFormatter.format(since: session.startedAt, relativeTo: context.date))
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(.system(size: s(9), weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.4))
             }
         }
@@ -147,9 +188,7 @@ struct SessionDetailView: View {
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        if let last = chatEntries.last {
-            proxy.scrollTo(last.id, anchor: .bottom)
-        }
+        proxy.scrollTo("bottom", anchor: .bottom)
     }
 
     private func projectName(_ path: String?) -> String {

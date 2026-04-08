@@ -1,10 +1,24 @@
 import AgentNotchCore
+import Defaults
 import SwiftUI
 
 enum NotchMode: Equatable, Sendable {
     case compact
+    case notification
     case expanded
     case sessionDetail(sessionId: String)
+
+    var isSessionDetail: Bool {
+        if case .sessionDetail = self { return true }
+        return false
+    }
+
+    var isFullPanel: Bool {
+        switch self {
+        case .expanded, .sessionDetail: true
+        default: false
+        }
+    }
 }
 
 @MainActor
@@ -30,23 +44,34 @@ final class NotchViewModel {
 
     var notchWidth: CGFloat {
         switch mode {
-        case .compact: physicalNotchWidth + notchCornerMargin + (2 * sideWidth)
+        case .compact, .notification:
+            physicalNotchWidth + notchCornerMargin + (2 * sideWidth)
         case .expanded: 520
         case .sessionDetail: 620
         }
     }
 
+    var notificationCount: Int = 0
+
+    private let notificationItemHeight: CGFloat = 42
+
     var notchHeight: CGFloat {
         switch mode {
-        case .compact: physicalNotchHeight
-        case .expanded: 380
-        case .sessionDetail: 500
+        case .compact:
+            return physicalNotchHeight
+        case .notification:
+            let count = max(notificationCount, 1)
+            return physicalNotchHeight + notificationItemHeight * CGFloat(count) + 6
+        case .expanded:
+            return 380
+        case .sessionDetail:
+            return 500
         }
     }
 
     var topCornerRadius: CGFloat {
         switch mode {
-        case .compact: 6
+        case .compact, .notification: 6
         case .expanded, .sessionDetail: 12
         }
     }
@@ -54,13 +79,14 @@ final class NotchViewModel {
     var bottomCornerRadius: CGFloat {
         switch mode {
         case .compact: 14
+        case .notification: 16
         case .expanded, .sessionDetail: 24
         }
     }
 
     func toggle() {
         switch mode {
-        case .compact: mode = .expanded
+        case .compact, .notification: mode = .expanded
         case .expanded: mode = .compact
         case .sessionDetail: mode = .expanded
         }
@@ -73,7 +99,11 @@ final class NotchViewModel {
 
 struct NotchContentView: View {
     @State var viewModel: NotchViewModel
+    @State private var notificationManager = NotchNotificationManager()
     @ObservedObject var sessionManager: SessionManager
+    @Default(.textSize) private var textSize
+    @State private var completionGlow: CGFloat = 0
+    @State private var glowColor: Color = .green
 
     init(sessionManager: SessionManager, notchSize: CGSize = CGSize(width: 224, height: 38), initialMode: NotchMode = .compact) {
         self._viewModel = State(initialValue: NotchViewModel(notchSize: notchSize, initialMode: initialMode))
@@ -93,21 +123,31 @@ struct NotchContentView: View {
     var body: some View {
         let hasSessions = !sessionManager.activeSessions.isEmpty
         let _ = { viewModel.hasActivity = hasSessions }()
-        let isOpened = viewModel.mode != .compact
+        let isExpanded = viewModel.mode.isFullPanel
 
         VStack(spacing: 0) {
-            if isOpened {
-                openedContent
-            } else {
+            switch viewModel.mode {
+            case .compact, .notification:
                 compactContent
+            case .expanded, .sessionDetail:
+                openedContent
             }
         }
         .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
         .background(.black)
         .clipShape(currentNotchShape)
-        .shadow(color: isOpened ? .black.opacity(0.6) : .clear, radius: 8)
-        .animation(isOpened ? openAnimation : closeAnimation, value: viewModel.mode)
-        .allowsHitTesting(viewModel.mode != .compact)
+        .overlay(
+            NotchGlowBorder(
+                topCornerRadius: viewModel.topCornerRadius,
+                bottomCornerRadius: viewModel.bottomCornerRadius
+            )
+            .stroke(glowColor, lineWidth: 2)
+            .opacity(completionGlow)
+            .shadow(color: glowColor.opacity(completionGlow * 0.6), radius: 8)
+        )
+        .shadow(color: isExpanded ? .black.opacity(0.6) : .clear, radius: 8)
+        .animation(isExpanded ? openAnimation : closeAnimation, value: viewModel.mode)
+        .allowsHitTesting(viewModel.mode.isFullPanel)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: hasSessions) { _, newValue in
             viewModel.hasActivity = newValue
@@ -119,12 +159,52 @@ struct NotchContentView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .agentNotchSessionCompleted)) { notification in
+            guard let sessionId = notification.object as? String,
+                  let userInfo = notification.userInfo
+            else { return }
+
+            // Border glow animation
+            triggerCompletionGlow(color: .green)
+
+            guard viewModel.mode == .compact || viewModel.mode == .notification
+            else { return }
+            let item = NotchNotificationManager.Item(
+                id: sessionId,
+                projectName: userInfo["projectName"] as? String ?? "Session",
+                gitBranch: userInfo["gitBranch"] as? String,
+                message: userInfo["message"] as? String ?? "",
+                createdAt: Date()
+            )
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
+                notificationManager.enqueue(item)
+                viewModel.mode = .notification
+            }
+        }
+        .onChange(of: viewModel.mode) { _, newMode in
+            if newMode.isFullPanel {
+                notificationManager.dismissAll()
+            }
+        }
+        .onChange(of: notificationManager.items.count) { _, count in
+            if count == 0, viewModel.mode == .notification {
+                // All notifications dismissed — collapse to compact in one animation
+                withAnimation(.spring(response: 0.45, dampingFraction: 1.0)) {
+                    viewModel.notificationCount = 0
+                    viewModel.mode = .compact
+                }
+            } else {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    viewModel.notificationCount = count
+                }
+            }
+        }
     }
 
     @ViewBuilder
     private var openedContent: some View {
         switch viewModel.mode {
-        case .compact:
+        case .compact, .notification:
             EmptyView()
         case .expanded:
             expandedContent
@@ -147,26 +227,59 @@ struct NotchContentView: View {
         let urgentStatus = mostUrgentStatus(sessions)
         let wing = viewModel.sideWidth
 
-        HStack(spacing: 0) {
-            Group {
-                if !sessions.isEmpty {
-                    StatusIndicator(status: urgentStatus, size: 12)
+        VStack(spacing: 0) {
+            // Wing row (status dot + tool name + session count)
+            HStack(spacing: 0) {
+                // Left wing
+                ZStack {
+                    if !sessions.isEmpty {
+                        StatusIndicator(status: urgentStatus, size: 12)
+                    }
                 }
-            }
-            .frame(width: wing, height: viewModel.physicalNotchHeight)
+                .frame(width: wing, height: viewModel.physicalNotchHeight)
 
-            Spacer(minLength: 0)
-
-            Group {
-                if sessions.count > 1 {
-                    Text("\(sessions.count)")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.75))
+                // Center: tool ticker (fills remaining space between wings)
+                ZStack {
+                    if let toolName = activeToolName(sessions) {
+                        TickerText(
+                            text: toolName,
+                            font: .system(size: 9, weight: .medium, design: .monospaced),
+                            color: .white.opacity(0.6)
+                        )
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: viewModel.physicalNotchHeight)
+                .clipped()
+
+                // Right wing: count of actively running sessions
+                ZStack {
+                    let runningCount = sessions.filter(\.status.isRunning).count
+                    if runningCount > 1 {
+                        Text("\(runningCount)")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.75))
+                    }
+                }
+                .frame(width: wing, height: viewModel.physicalNotchHeight)
             }
-            .frame(width: wing, height: viewModel.physicalNotchHeight)
+
+            // Notification rows (stacked, only in .notification mode)
+            if viewModel.mode == .notification {
+                VStack(spacing: 0) {
+                    ForEach(notificationManager.items) { item in
+                        notificationRow(item: item)
+                            .transition(
+                                .asymmetric(
+                                    insertion: .opacity.combined(with: .move(edge: .top)),
+                                    removal: .opacity.combined(with: .scale(scale: 0.95))
+                                )
+                            )
+                    }
+                }
+                .padding(.top, 2)
+            }
         }
-        .frame(width: viewModel.notchWidth, height: viewModel.physicalNotchHeight)
+        .frame(width: viewModel.notchWidth)
     }
 
     // MARK: - Expanded
@@ -177,13 +290,13 @@ struct NotchContentView: View {
 
             HStack(spacing: 6) {
                 Text("Sessions")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: s(12), weight: .semibold))
                     .foregroundStyle(.white.opacity(0.75))
 
                 let count = sessionManager.activeSessions.count
                 if count > 0 {
                     Text("\(count)")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(.system(size: s(9), weight: .bold, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.45))
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(Color.white.opacity(0.08))
@@ -198,11 +311,19 @@ struct NotchContentView: View {
                         sessionManager.notifyChange()
                     } label: {
                         Image(systemName: "xmark.circle")
-                            .font(.system(size: 11))
+                            .font(.system(size: s(11)))
                             .foregroundStyle(.white.opacity(0.3))
                     }
                     .buttonStyle(.plain)
                 }
+                Button {
+                    SettingsWindowController.shared.show()
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: s(11)))
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 10)
@@ -211,16 +332,25 @@ struct NotchContentView: View {
             if sessions.isEmpty {
                 Spacer()
                 Text("No active sessions")
-                    .font(.system(size: 11))
+                    .font(.system(size: s(11)))
                     .foregroundStyle(.white.opacity(0.3))
                 Spacer()
             } else {
                 ScrollView {
                     VStack(spacing: 6) {
                         ForEach(sessions) { session in
-                            SessionCardView(session: session) {
-                                viewModel.showSession(session.id)
-                            }
+                            SessionCardView(
+                                session: session,
+                                onTap: {
+                                    viewModel.showSession(session.id)
+                                },
+                                onRemove: {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                        sessionManager.removeSession(id: session.id)
+                                        sessionManager.notifyChange()
+                                    }
+                                }
+                            )
                         }
                     }
                     .padding(.horizontal, 20)
@@ -231,6 +361,90 @@ struct NotchContentView: View {
     }
 
     // MARK: - Helpers
+
+    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+
+    @ViewBuilder
+    private func notificationRow(item: NotchNotificationManager.Item) -> some View {
+        let msg = sanitizedMessage(item.message)
+        let hasMarquee = !msg.isEmpty
+
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: s(9)))
+                    .foregroundStyle(.green)
+                Text(item.projectName)
+                    .font(.system(size: s(9), weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.7))
+                if let branch = item.gitBranch {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: s(7)))
+                        .foregroundStyle(.white.opacity(0.3))
+                    Text(branch)
+                        .font(.system(size: s(9), design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer()
+            }
+
+            if hasMarquee {
+                MarqueeText(
+                    text: msg,
+                    font: .system(size: s(10), weight: .medium),
+                    onCycleComplete: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            notificationManager.marqueeCompleted(id: item.id)
+                        }
+                    }
+                )
+                .foregroundStyle(.white.opacity(0.55))
+                .frame(height: s(14))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear {
+            if !hasMarquee {
+                notificationManager.scheduleStaticDismiss(id: item.id)
+            }
+        }
+    }
+
+    private func activeToolName(_ sessions: [UnifiedSession]) -> String? {
+        sessions.lazy
+            .compactMap { $0.currentTool }
+            .first { $0.status == .running }
+            .map(\.name)
+    }
+
+    private func sanitizedMessage(_ message: String) -> String {
+        let text = message
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        if text.count > 100 {
+            return String(text.prefix(100)) + "..."
+        }
+        return text
+    }
+
+    private func triggerCompletionGlow(color: Color) {
+        glowColor = color
+        withAnimation(.easeOut(duration: 0.3)) {
+            completionGlow = 1
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.4))
+            withAnimation(.easeOut(duration: 2.0)) {
+                completionGlow = 0
+            }
+        }
+    }
 
     private func mostUrgentStatus(_ sessions: [UnifiedSession]) -> SessionStatus {
         let priority: [SessionStatus] = [

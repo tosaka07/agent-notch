@@ -1,9 +1,13 @@
 import AgentNotchCore
+import Defaults
 import MarkdownUI
 import SwiftUI
 
 struct ChatMessageView: View {
     let entry: ChatEntry
+
+    @Default(.textSize) private var textSize
+    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -15,17 +19,17 @@ struct ChatMessageView: View {
             VStack(alignment: .leading, spacing: 4) {
                 if !entry.textContent.isEmpty {
                     Markdown(entry.textContent)
-                        .markdownTheme(AgentNotchMarkdownTheme.theme)
+                        .markdownTheme(AgentNotchMarkdownTheme.theme(scale: textSize.scale))
                         .textSelection(.enabled)
                 }
 
                 ForEach(Array(entry.toolUses.enumerated()), id: \.offset) { _, tool in
                     HStack(spacing: 4) {
                         Text(tool.name)
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .font(.system(size: s(9), weight: .medium, design: .monospaced))
                             .foregroundStyle(.green.opacity(0.7))
                         Text(tool.inputSummary)
-                            .font(.system(size: 9, design: .monospaced))
+                            .font(.system(size: s(9), design: .monospaced))
                             .foregroundStyle(.white.opacity(0.35))
                             .lineLimit(1)
                     }
@@ -39,18 +43,20 @@ struct ChatMessageView: View {
 
 @MainActor
 enum AgentNotchMarkdownTheme {
-    static var theme: MarkdownUI.Theme {
-        Theme.gitHub
+    static func theme(scale: CGFloat = 1.0) -> MarkdownUI.Theme {
+        let bodySize = (11 * scale * 2).rounded() / 2
+        let codeSize = (9 * scale * 2).rounded() / 2
+        return Theme.gitHub
             .text {
                 ForegroundColor(.white.opacity(0.85))
                 BackgroundColor(nil)
-                FontSize(11)
+                FontSize(bodySize)
             }
             .codeBlock { configuration in
                 configuration.label
                     .markdownTextStyle {
                         FontFamilyVariant(.monospaced)
-                        FontSize(9)
+                        FontSize(codeSize)
                         ForegroundColor(.white.opacity(0.75))
                     }
                     .padding(8)
