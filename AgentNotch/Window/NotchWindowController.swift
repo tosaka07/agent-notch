@@ -106,6 +106,7 @@ final class NotchWindowController {
 
         tracker.onNotchClicked = { [weak self, weak viewModel] in
             guard let self, let viewModel else { return }
+            viewModel.isHovering = false
             viewModel.toggle()
             syncPanelState()
         }
@@ -113,8 +114,16 @@ final class NotchWindowController {
         tracker.onClickedOutside = { [weak viewModel] in
             guard let viewModel else { return }
             guard viewModel.mode != .compact else { return }
+            viewModel.isHovering = false
             viewModel.close()
             syncPanelState()
+        }
+
+        tracker.onNotchHoverChanged = { [weak viewModel] hovering in
+            guard let viewModel else { return }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                viewModel.isHovering = hovering
+            }
         }
 
         tracker.start()

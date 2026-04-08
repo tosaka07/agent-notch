@@ -25,6 +25,7 @@ enum NotchMode: Equatable, Sendable {
 @Observable
 final class NotchViewModel {
     var mode: NotchMode = .compact
+    var isHovering: Bool = false
 
     var physicalNotchWidth: CGFloat
     var physicalNotchHeight: CGFloat
@@ -42,12 +43,18 @@ final class NotchViewModel {
         max(0, physicalNotchHeight - 12) + 10
     }
 
+    private var compactWidth: CGFloat {
+        physicalNotchWidth + notchCornerMargin + (2 * sideWidth)
+    }
+
     var notchWidth: CGFloat {
         switch mode {
-        case .compact, .notification:
-            physicalNotchWidth + notchCornerMargin + (2 * sideWidth)
-        case .expanded: 520
-        case .sessionDetail: 620
+        case .compact:
+            return isHovering ? compactWidth + 16 : compactWidth
+        case .notification:
+            return compactWidth
+        case .expanded: return 520
+        case .sessionDetail: return 620
         }
     }
 
@@ -58,7 +65,7 @@ final class NotchViewModel {
     var notchHeight: CGFloat {
         switch mode {
         case .compact:
-            return physicalNotchHeight
+            return isHovering ? physicalNotchHeight + 6 : physicalNotchHeight
         case .notification:
             let count = max(notificationCount, 1)
             return physicalNotchHeight + notificationItemHeight * CGFloat(count) + 6
@@ -155,6 +162,7 @@ struct NotchContentView: View {
         )
         .shadow(color: isExpanded ? .black.opacity(0.6) : .clear, radius: 8)
         .animation(isExpanded ? openAnimation : closeAnimation, value: viewModel.mode)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isHovering)
         .allowsHitTesting(viewModel.mode.isFullPanel || viewModel.mode == .notification)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: hasSessions) { _, newValue in

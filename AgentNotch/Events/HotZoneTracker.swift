@@ -9,14 +9,17 @@ final class HotZoneTracker {
 
     var onNotchClicked: (() -> Void)?
     var onClickedOutside: (() -> Void)?
+    var onNotchHoverChanged: ((Bool) -> Void)?
 
     var isExpanded = false
+    private var wasHovering = false
 
     /// Returns the current visible content rect in screen coordinates.
     /// Set by NotchWindowController; used to detect clicks on transparent panel area.
     var contentScreenRect: (() -> CGRect)?
 
     private let eventMonitor = MouseEventMonitor()
+    private var moveMonitor: Any?
 
     init(geometry: NotchGeometry) {
         self.geometry = geometry
@@ -32,10 +35,33 @@ final class HotZoneTracker {
                 self?.handleLocal(event) ?? false
             }
         )
+        // Global mouse move for hover detection
+        moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateHover()
+            }
+        }
     }
 
     func stop() {
         eventMonitor.stopMonitoring()
+        if let moveMonitor {
+            NSEvent.removeMonitor(moveMonitor)
+            self.moveMonitor = nil
+        }
+    }
+
+    private func updateHover() {
+        guard !isExpanded else {
+            if wasHovering { wasHovering = false; onNotchHoverChanged?(false) }
+            return
+        }
+        let location = NSEvent.mouseLocation
+        let hovering = geometry.isPointInNotch(location)
+        if hovering != wasHovering {
+            wasHovering = hovering
+            onNotchHoverChanged?(hovering)
+        }
     }
 
     // MARK: - Global (clicks outside our app)
