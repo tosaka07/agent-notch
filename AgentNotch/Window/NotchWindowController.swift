@@ -121,10 +121,15 @@ final class NotchWindowController {
             syncPanelState()
         }
 
-        tracker.onNotchHoverChanged = { [weak viewModel] hovering in
-            guard let viewModel else { return }
+        tracker.onNotchHoverChanged = { [weak self, weak viewModel] hovering in
+            guard let self, let viewModel else { return }
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 viewModel.isHovering = hovering
+            }
+            if hovering {
+                self.panel?.ignoresMouseEvents = false
+            } else if viewModel.mode == .compact {
+                self.panel?.ignoresMouseEvents = true
             }
         }
 
