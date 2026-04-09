@@ -150,7 +150,6 @@ struct NotchContentView: View {
 
     var body: some View {
         let hasSessions = !sessionManager.activeSessions.isEmpty
-        let _ = { viewModel.hasActivity = hasSessions }()
         let isExpanded = viewModel.mode.isFullPanel
 
         VStack(spacing: 0) {
@@ -183,10 +182,13 @@ struct NotchContentView: View {
             .allowsHitTesting(false)
         )
         .shadow(color: isExpanded ? .black.opacity(0.6) : .clear, radius: 8)
-        .animation(isExpanded ? openAnimation : closeAnimation, value: viewModel.mode)
+        .animation(.spring(response: 0.42, dampingFraction: 0.85), value: viewModel.mode)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isHovering)
         .allowsHitTesting(viewModel.mode.isFullPanel || viewModel.mode == .notification)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onAppear {
+            viewModel.hasActivity = hasSessions
+        }
         .onChange(of: hasSessions) { _, newValue in
             viewModel.hasActivity = newValue
         }

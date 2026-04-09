@@ -95,7 +95,7 @@ struct SessionCardView: View {
                         TerminalJumper.jump(pid: session.pid, tty: session.tty)
                     } label: {
                         HStack(spacing: 3) {
-                            if let icon = TerminalJumper.terminalIcon(pid: session.pid) {
+                            if let icon = session.terminalAppIcon as? NSImage {
                                 Image(nsImage: icon)
                                     .resizable()
                                     .frame(width: s(12), height: s(12))

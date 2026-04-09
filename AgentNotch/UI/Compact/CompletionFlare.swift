@@ -13,32 +13,31 @@ struct CompletionFlare: View {
     @State private var pulse4: CGFloat = 0
 
     var body: some View {
-        ZStack {
-            // Layer 0: Ultra-wide ambient haze
-            shape
-                .stroke(color.opacity(0.15), lineWidth: 16 + pulse4 * 10)
-                .blur(radius: 24 + pulse4 * 12)
+        if intensity > 0 {
+            ZStack {
+                // Layer 0: Ultra-wide ambient haze
+                shape
+                    .stroke(color.opacity(0.15), lineWidth: 16 + pulse4 * 10)
+                    .blur(radius: 24 + pulse4 * 12)
 
-            // Layer 1: Wide soft glow (corona)
-            shape
-                .stroke(color.opacity(0.3), lineWidth: 10 + pulse1 * 8)
-                .blur(radius: 16 + pulse1 * 10)
+                // Layer 1: Wide soft glow (corona)
+                shape
+                    .stroke(color.opacity(0.3), lineWidth: 10 + pulse1 * 8)
+                    .blur(radius: 16 + pulse1 * 10)
 
-            // Layer 2: Medium glow (chromosphere)
-            shape
-                .stroke(color.opacity(0.5), lineWidth: 6 + pulse2 * 5)
-                .blur(radius: 8 + pulse2 * 6)
+                // Layer 2: Medium glow (chromosphere)
+                shape
+                    .stroke(color.opacity(0.5), lineWidth: 6 + pulse2 * 5)
+                    .blur(radius: 8 + pulse2 * 6)
 
-            // Layer 3: Tight bright core
-            shape
-                .stroke(color, lineWidth: 2 + pulse3 * 1.5)
-                .blur(radius: 1.5)
-                .shadow(color: color.opacity(0.9), radius: 6 + pulse3 * 4)
-        }
-        .opacity(intensity)
-        .onAppear { startFlare() }
-        .onChange(of: intensity) { _, newVal in
-            if newVal > 0 { startFlare() }
+                // Layer 3: Tight bright core
+                shape
+                    .stroke(color, lineWidth: 2 + pulse3 * 1.5)
+                    .blur(radius: 1.5)
+                    .shadow(color: color.opacity(0.9), radius: 6 + pulse3 * 4)
+            }
+            .opacity(intensity)
+            .onAppear { startFlare() }
         }
     }
 

@@ -107,18 +107,7 @@ enum TerminalJumper {
         return nil
     }
 
-    /// Cached terminal icons by PID to avoid repeated PID tree walks on every render.
-    @MainActor private static var iconCache: [Int32: NSImage] = [:]
-
-    /// Get the app icon for a session's terminal. Cached after first lookup.
-    @MainActor
-    static func terminalIcon(pid: Int32?) -> NSImage? {
-        guard let pid else { return nil }
-        if let cached = iconCache[pid] { return cached }
-        guard let icon = findTerminalApp(forChildPID: pid)?.icon else { return nil }
-        iconCache[pid] = icon
-        return icon
-    }
+    // Icon is now cached on UnifiedSession.terminalAppIcon via resolveTerminalInfo()
 
     // MARK: - PID tree walk
 

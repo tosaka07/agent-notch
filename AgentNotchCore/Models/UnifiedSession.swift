@@ -30,6 +30,8 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var transcriptPath: String?
     /// Resolved terminal app name (e.g. "iTerm2", "WezTerm")
     public var terminalAppName: String?
+    /// Resolved terminal app icon (stored as Any to avoid AppKit dependency in Core)
+    public var terminalAppIcon: Any?
     /// Resolved tmux pane target (e.g. "main:2.1")
     public var tmuxPaneTarget: String?
     /// Whether terminal info resolution has been attempted (prevents repeated retries)

@@ -199,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 await MainActor.run {
                                     if let s = manager.session(for: sid) {
                                         s.terminalAppName = info?.appName
+                                        s.terminalAppIcon = info?.appIcon
                                         s.tmuxPaneTarget = info?.tmuxTarget
                                         manager.notifyChange()
                                     }
