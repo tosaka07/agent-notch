@@ -182,9 +182,15 @@ struct NotchContentView: View {
             .allowsHitTesting(false)
         )
         .shadow(color: isExpanded ? .black.opacity(0.6) : .clear, radius: 8)
+        .contentShape(currentNotchShape)
+        .onHover { hovering in
+            guard viewModel.mode == .compact else { return }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                viewModel.isHovering = hovering
+            }
+        }
         .animation(.spring(response: 0.42, dampingFraction: 0.85), value: viewModel.mode)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: viewModel.isHovering)
-        .allowsHitTesting(viewModel.mode.isFullPanel || viewModel.mode == .notification)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             viewModel.hasActivity = hasSessions

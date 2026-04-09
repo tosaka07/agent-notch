@@ -6,7 +6,6 @@ import SwiftUI
 @MainActor
 final class NotchWindowController {
     private var panel: NotchPanel?
-    private var hostingView: PassThroughHostingView<NotchContentView>?
     private var hotZoneTracker: HotZoneTracker?
     private var modeObservations: [AnyCancellable] = []
     private weak var viewModelRef: NotchViewModel?
@@ -23,25 +22,39 @@ final class NotchWindowController {
         )
     }
 
+    // MARK: - Window sizing (boring.notch pattern)
+    // Window is fixed at max content size. SwiftUI animates inside it.
+    // No setFrame after creation — only setFrameOrigin for positioning.
+
+    /// Max content dimensions + shadow padding
+    private static let maxContentWidth: CGFloat = 640
+    private static let maxContentHeight: CGFloat = 520
+    private static let shadowPadding: CGFloat = 40  // for CompletionFlare bleed
+
+    /// Width: padding on both sides. Height: padding on bottom only (top is flush with screen edge).
+    private var windowSize: CGSize {
+        CGSize(
+            width: Self.maxContentWidth + Self.shadowPadding * 2,
+            height: Self.maxContentHeight + Self.shadowPadding
+        )
+    }
+
     func show(contentView: NotchContentView) {
-        // Fixed large window — covers the area the notch content can expand into.
-        let windowHeight: CGFloat = 750
-        let windowFrame = NSRect(
-            x: screen.frame.origin.x,
-            y: screen.frame.maxY - windowHeight,
-            width: screen.frame.width,
-            height: windowHeight
+        let size = windowSize
+        let frame = NSRect(
+            x: screen.frame.midX - size.width / 2,
+            y: screen.frame.maxY - size.height,
+            width: size.width,
+            height: size.height
         )
 
-        let panel = NotchPanel(contentRect: windowFrame)
-        let hosting = PassThroughHostingView(rootView: contentView)
+        let panel = NotchPanel(contentRect: frame)
+        let hosting = NotchHostingView(rootView: contentView)
         panel.contentView = hosting
         panel.orderFrontRegardless()
-        self.panel = panel
-        self.hostingView = hosting
 
+        self.panel = panel
         self.viewModelRef = contentView.viewModel
-        setupHitTestRect(viewModel: contentView.viewModel, hosting: hosting)
         setupHotZoneTracker(viewModel: contentView.viewModel)
     }
 
@@ -52,96 +65,43 @@ final class NotchWindowController {
         modeObservations.removeAll()
         panel?.close()
         panel = nil
-        hostingView = nil
     }
 
-    private func setupHitTestRect(viewModel: NotchViewModel, hosting: PassThroughHostingView<NotchContentView>) {
-        hosting.hitTestRect = { [weak self] in
-            guard let self else { return .zero }
-            let screenFrame = self.screen.frame
-            let w = viewModel.notchWidth
-            let h = viewModel.notchHeight
-            let screenX = screenFrame.midX - w / 2
-            let screenY = screenFrame.maxY - h
-            // Convert to hosting view's local coordinates
-            let windowFrame = self.panel?.frame ?? screenFrame
-            return CGRect(x: screenX - windowFrame.origin.x,
-                          y: screenY - windowFrame.origin.y,
-                          width: w, height: h)
-        }
-    }
+    // MARK: - HotZoneTracker
 
     private func setupHotZoneTracker(viewModel: NotchViewModel) {
         let tracker = HotZoneTracker(geometry: geometry)
 
-        // Content rect in screen coordinates — shared between hitTest and HotZoneTracker
         let screenFrame = self.geometry.screenFrame
-        func currentContentScreenRect() -> CGRect {
+        tracker.contentScreenRect = {
             let w = viewModel.notchWidth
             let h = viewModel.notchHeight
-            return CGRect(
-                x: screenFrame.midX - w / 2,
-                y: screenFrame.maxY - h,
-                width: w, height: h
-            )
+            return CGRect(x: screenFrame.midX - w / 2, y: screenFrame.maxY - h, width: w, height: h)
         }
 
-        tracker.contentScreenRect = { currentContentScreenRect() }
-
-        func syncPanelState() {
-            Log.panel.debug("syncPanelState mode=\(String(describing: viewModel.mode)) ignoresMouse=\(self.panel?.ignoresMouseEvents ?? true)")
+        func syncState() {
+            Log.panel.debug("syncState mode=\(String(describing: viewModel.mode))")
             tracker.isExpanded = viewModel.mode.isFullPanel
-            switch viewModel.mode {
-            case .expanded, .sessionDetail:
-                self.panel?.ignoresMouseEvents = false
-                self.panel?.makeKey()
-            default:
-                // Compact and notification: ignoresMouseEvents = true.
-                // Hover tracker dynamically sets false when mouse is over content.
-                viewModel.isHovering = false
-                self.panel?.ignoresMouseEvents = true
-            }
         }
-        syncPanelState()
+        syncState()
 
-        tracker.onNotchClicked = { [weak self, weak viewModel] in
-            guard let self, let viewModel else { return }
+        tracker.onNotchClicked = { [weak viewModel] in
+            guard let viewModel else { return }
             viewModel.isHovering = false
             viewModel.toggle()
-            syncPanelState()
+            syncState()
         }
 
         tracker.onClickedOutside = { [weak viewModel] in
-            guard let viewModel else { return }
-            guard viewModel.mode != .compact else { return }
+            guard let viewModel, viewModel.mode != .compact else { return }
             viewModel.isHovering = false
             viewModel.close()
-            syncPanelState()
-        }
-
-        tracker.onNotchHoverChanged = { [weak self, weak viewModel] hovering in
-            guard let self, let viewModel else { return }
-            // Skip if panel is already fully interactive (expanded/sessionDetail)
-            guard !viewModel.mode.isFullPanel else { return }
-            // Visual hover effect only in compact
-            if viewModel.mode == .compact {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    viewModel.isHovering = hovering
-                }
-            }
-            // Toggle mouse events: false when hovering (panel captures), true when not
-            self.panel?.ignoresMouseEvents = !hovering
-            if hovering {
-                Log.panel.debug("Hover: ignoresMouseEvents=false")
-            } else {
-                Log.panel.debug("Hover: ignoresMouseEvents=true")
-            }
+            syncState()
         }
 
         tracker.start()
         hotZoneTracker = tracker
 
-        // Observe notifications that change mode and need panel state sync
         let notifications: [Notification.Name] = [
             .agentNotchAutoExpand,
             .agentNotchSessionCompleted,
@@ -153,9 +113,8 @@ final class NotchWindowController {
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in
                     guard self != nil else { return }
-                    // Delay slightly to let SwiftUI update mode first
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        syncPanelState()
+                        syncState()
                     }
                 }
         }

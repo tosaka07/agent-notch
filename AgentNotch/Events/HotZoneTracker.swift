@@ -2,26 +2,23 @@ import AgentNotchCore
 import AppKit
 
 /// Handles click detection for the notch area.
-/// - Global monitor: detects notch clicks (compact) and outside clicks (expanded, other apps).
-/// - Local monitor: detects notch clicks and outside-content clicks when panel is active.
+/// - Global monitor: detects notch clicks (compact mode, panel is canBecomeKey=false).
+/// - Local monitor: detects notch toggle clicks and outside-content clicks (expanded mode).
+///
+/// Hover is handled by SwiftUI .onHover — no AppKit mouse move monitors needed.
 @MainActor
 final class HotZoneTracker {
     let geometry: NotchGeometry
 
     var onNotchClicked: (() -> Void)?
     var onClickedOutside: (() -> Void)?
-    var onNotchHoverChanged: ((Bool) -> Void)?
 
     var isExpanded = false
-    private var wasHovering = false
 
-    /// Returns the current visible content rect in screen coordinates.
-    /// Set by NotchWindowController; used to detect clicks on transparent panel area.
+    /// Current visible content rect in screen coordinates.
     var contentScreenRect: (() -> CGRect)?
 
     private let eventMonitor = MouseEventMonitor()
-    private var moveMonitor: Any?
-    private var localMoveMonitor: Any?
 
     init(geometry: NotchGeometry) {
         self.geometry = geometry
@@ -30,101 +27,51 @@ final class HotZoneTracker {
     func start() {
         eventMonitor.startMonitoring(
             mask: .leftMouseDown,
-            globalHandler: { [weak self] event in
-                self?.handleGlobal(event)
-            },
-            localHandler: { [weak self] event in
-                self?.handleLocal(event) ?? false
-            }
+            globalHandler: { [weak self] event in self?.handleGlobal(event) },
+            localHandler: { [weak self] event in self?.handleLocal(event) ?? false }
         )
-        // Mouse move for hover detection (both global and local)
-        moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.updateHover()
-            }
-        }
-        localMoveMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            MainActor.assumeIsolated {
-                self?.updateHover()
-            }
-            return event
-        }
     }
 
     func stop() {
         eventMonitor.stopMonitoring()
-        if let moveMonitor {
-            NSEvent.removeMonitor(moveMonitor)
-            self.moveMonitor = nil
-        }
-        if let localMoveMonitor {
-            NSEvent.removeMonitor(localMoveMonitor)
-            self.localMoveMonitor = nil
-        }
     }
 
-    /// Check if point is in the visible notch content area (wings included).
-    private func isPointInNotchContent(_ point: CGPoint) -> Bool {
-        if let rect = contentScreenRect?() {
-            return rect.contains(point)
-        }
-        return geometry.isPointInNotch(point)
-    }
-
-    private func updateHover() {
-        guard !isExpanded else {
-            if wasHovering { wasHovering = false; onNotchHoverChanged?(false) }
-            return
-        }
-        let location = NSEvent.mouseLocation
-        let hovering = isPointInNotchContent(location)
-        if hovering != wasHovering {
-            wasHovering = hovering
-            Log.input.debug("Hover changed: \(hovering)")
-            onNotchHoverChanged?(hovering)
-        }
-    }
-
-    // MARK: - Global (clicks outside our app)
+    // MARK: - Global (clicks when another app is focused)
 
     private func handleGlobal(_ event: NSEvent) {
         let location = NSEvent.mouseLocation
-        // Physical notch area → toggle (works in all modes because panel is ignoresMouseEvents)
         if geometry.isPointInNotch(location) {
-            Log.input.debug("Global: notchClicked at \(location.debugDescription)")
+            Log.input.debug("Global: notchClicked")
             onNotchClicked?()
         } else if isExpanded {
-            Log.input.debug("Global: clickedOutside at \(location.debugDescription)")
+            Log.input.debug("Global: clickedOutside")
             onClickedOutside?()
         }
     }
 
-    // MARK: - Local (clicks on our panel window)
+    // MARK: - Local (clicks on our panel)
 
     private func handleLocal(_ event: NSEvent) -> Bool {
         let location = NSEvent.mouseLocation
 
-        // Physical notch area → toggle (all modes)
+        // Physical notch area → toggle
         if geometry.notchScreenRect.contains(location) {
-            Log.input.debug("Local: notchClicked at \(location.debugDescription)")
+            Log.input.debug("Local: notchClicked")
             onNotchClicked?()
             return true
         }
 
-        // Non-expanded: let SwiftUI handle (notification buttons, etc.)
-        guard isExpanded else {
-            Log.input.debug("Local: passthrough to SwiftUI at \(location.debugDescription)")
-            return false
-        }
+        // Non-expanded: let SwiftUI handle (buttons, notification rows, etc.)
+        guard isExpanded else { return false }
 
-        // Click on the panel's transparent area (outside visible content) → close
+        // Expanded: click outside content → close
         if let rect = contentScreenRect?(), !rect.contains(location) {
-            Log.input.debug("Local: clickedOutside at \(location.debugDescription)")
+            Log.input.debug("Local: clickedOutside")
             onClickedOutside?()
             return true
         }
 
-        // Inside visible content — let SwiftUI handle it
+        // Inside content — let SwiftUI handle
         return false
     }
 }

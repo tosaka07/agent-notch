@@ -24,7 +24,7 @@ public enum Log {
             return handler
         }
     }
-    /// Window panel lifecycle, sizing, ignoresMouseEvents
+    /// Window panel lifecycle, sizing, mode transitions
     public static let panel = Logger(label: "panel")
 
     /// Hook events, ClaudeEventParser, session state transitions

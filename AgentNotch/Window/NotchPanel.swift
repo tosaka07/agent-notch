@@ -22,9 +22,9 @@ final class NotchPanel: NSPanel {
             .canJoinAllSpaces,
             .ignoresCycle,
         ]
-        ignoresMouseEvents = true
+        // No ignoresMouseEvents — small window + canBecomeKey=false handles passthrough.
     }
 
-    override var canBecomeKey: Bool { true }
+    override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
