@@ -12,11 +12,15 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/Defaults.git", from: "9.0.0"),
         .package(url: "https://github.com/sindresorhus/LaunchAtLogin-Modern.git", from: "1.1.0"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui.git", from: "2.4.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
     ],
     targets: [
         // Shared library — models, services, utilities (no UI dependency)
         .target(
             name: "AgentNotchCore",
+            dependencies: [
+                .product(name: "Logging", package: "swift-log"),
+            ],
             path: "AgentNotchCore"
         ),
         // GUI app
