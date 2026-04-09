@@ -6,7 +6,14 @@ struct StatusIndicator: View {
     var size: CGFloat = 8
 
     @State private var isAnimating = false
-    @State private var doneOpacity: Double = 1.0
+    @State private var doneOpacity: Double
+
+    init(status: SessionStatus, size: CGFloat = 8) {
+        self.status = status
+        self.size = size
+        // If already .done at init time, start hidden — no flash
+        self._doneOpacity = State(initialValue: status == .done ? 0 : 1)
+    }
 
     var body: some View {
         indicator
@@ -14,11 +21,6 @@ struct StatusIndicator: View {
             .animation(animationForStatus, value: isAnimating)
             .onAppear {
                 isAnimating = true
-                if status == .done {
-                    withAnimation(.easeOut(duration: 0.5).delay(2.0)) {
-                        doneOpacity = 0
-                    }
-                }
             }
             .onChange(of: status) { _, newStatus in
                 isAnimating = false
