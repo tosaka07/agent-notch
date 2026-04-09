@@ -37,27 +37,35 @@ public enum HookInstaller {
     /// Called from the GUI app on launch.
     public static func installIfNeeded() {
         let cliPath = findCLIPath()
+        Log.hooks.info("Installing hooks, CLI path: \(cliPath)")
         updateClaudeSettings(command: "\(cliPath) hook")
         updateCodexHooks(command: "\(cliPath) hook --agent codex")
         ensureCodexHooksEnabled()
+        Log.hooks.info("Hook installation complete")
     }
 
     /// Install hooks from the CLI itself (uses own binary path).
     public static func installCLI() {
         let cliPath = CommandLine.arguments[0]
+        Log.hooks.info("Installing hooks from CLI, path: \(cliPath)")
         updateClaudeSettings(command: "\(cliPath) hook")
         updateCodexHooks(command: "\(cliPath) hook --agent codex")
         ensureCodexHooksEnabled()
+        Log.hooks.info("CLI hook installation complete")
     }
 
     /// Remove our hooks from all agent settings.
     public static func uninstall() {
+        Log.hooks.info("Uninstalling all hooks")
         uninstallClaude()
         uninstallCodex()
+        Log.hooks.info("Hook uninstallation complete")
     }
 
     public static func isInstalled() -> Bool {
-        isClaudeInstalled() || isCodexInstalled()
+        let installed = isClaudeInstalled() || isCodexInstalled()
+        Log.hooks.debug("Hook installed check: \(installed)")
+        return installed
     }
 
     // MARK: - Claude Code

@@ -1,3 +1,4 @@
+import AgentNotchCore
 import SwiftUI
 
 @MainActor @Observable
@@ -20,10 +21,15 @@ final class NotchNotificationManager {
     var hasNotification: Bool { !items.isEmpty }
 
     func enqueue(_ item: Item) {
-        guard !items.contains(where: { $0.id == item.id }) else { return }
+        guard !items.contains(where: { $0.id == item.id }) else {
+            Log.notification.debug("Enqueue skipped, duplicate id=\(item.id)")
+            return
+        }
         if items.count >= maxVisible {
+            Log.notification.debug("Queue full, evicting id=\(self.items[0].id)")
             dismiss(id: items[0].id)
         }
+        Log.notification.info("Enqueue notification id=\(item.id)")
         items.append(item)
 
         if let delay = item.autoDismissAfter {
@@ -35,6 +41,7 @@ final class NotchNotificationManager {
 
     /// Called from content view (e.g. marquee complete) to dismiss after a short linger.
     func requestDismiss(id: String, afterLinger: TimeInterval = 2) {
+        Log.notification.debug("requestDismiss id=\(id) linger=\(afterLinger)s")
         dismissTasks[id]?.cancel()
         dismissTasks[id] = Task {
             try? await Task.sleep(for: .seconds(afterLinger))
@@ -44,6 +51,7 @@ final class NotchNotificationManager {
     }
 
     func dismiss(id: String) {
+        Log.notification.info("Dismiss notification id=\(id)")
         dismissTasks[id]?.cancel()
         dismissTasks.removeValue(forKey: id)
         items.removeAll { $0.id == id }

@@ -1,3 +1,4 @@
+import AgentNotchCore
 import AppKit
 
 /// Handles click detection for the notch area.
@@ -70,6 +71,7 @@ final class HotZoneTracker {
         let hovering = isPointInNotchContent(location)
         if hovering != wasHovering {
             wasHovering = hovering
+            Log.input.debug("Hover changed: \(hovering)")
             onNotchHoverChanged?(hovering)
         }
     }
@@ -81,6 +83,7 @@ final class HotZoneTracker {
         if isNotification {
             // Panel is ignoresMouseEvents=true, so we handle clicks via global monitor
             if let rect = contentScreenRect?(), rect.contains(location) {
+                Log.input.debug("Global: notificationClicked at \(location.debugDescription)")
                 onNotificationClicked?()
             }
             return
@@ -90,8 +93,10 @@ final class HotZoneTracker {
             ? geometry.isPointInNotch(location)
             : isPointInNotchContent(location)
         if isNotchClick {
+            Log.input.debug("Global: notchClicked at \(location.debugDescription)")
             onNotchClicked?()
         } else if isExpanded {
+            Log.input.debug("Global: clickedOutside at \(location.debugDescription)")
             onClickedOutside?()
         }
     }
@@ -103,6 +108,7 @@ final class HotZoneTracker {
 
         if isNotification {
             if let rect = contentScreenRect?(), rect.contains(location) {
+                Log.input.debug("Local: notificationClicked at \(location.debugDescription)")
                 onNotificationClicked?()
                 return true
             }
@@ -113,6 +119,7 @@ final class HotZoneTracker {
             ? geometry.notchScreenRect.contains(location)
             : isPointInNotchContent(location)
         if isNotchClick {
+            Log.input.debug("Local: notchClicked at \(location.debugDescription)")
             onNotchClicked?()
             return true
         }
@@ -121,6 +128,7 @@ final class HotZoneTracker {
 
         // Click on the panel's transparent area (outside visible content) → close
         if let rect = contentScreenRect?(), !rect.contains(location) {
+            Log.input.debug("Local: clickedOutside at \(location.debugDescription)")
             onClickedOutside?()
             return true
         }

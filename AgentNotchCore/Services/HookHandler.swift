@@ -11,8 +11,13 @@ public enum HookHandler {
         guard let inputData = FileHandle.standardInput.availableData as Data?,
               !inputData.isEmpty,
               var json = try? JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+            Log.hooks.error("Hook invoked but no valid JSON on stdin")
             exit(0)
         }
+
+        let event = json["event"] as? String ?? "unknown"
+        let session = json["session_id"] as? String ?? "?"
+        Log.hooks.info("Hook event=\(event) agent=\(agentType) session=\(session)")
 
         // Add process info and agent type
         json["_pid"] = getppid()
@@ -48,7 +53,10 @@ public enum HookHandler {
                 connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        guard connectResult == 0 else { return }
+        guard connectResult == 0 else {
+            Log.hooks.error("Socket connect failed, errno=\(errno)")
+            return
+        }
 
         // Send: 4-byte length prefix + JSON
         guard let payload = try? JSONSerialization.data(withJSONObject: message) else { return }

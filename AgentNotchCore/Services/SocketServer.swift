@@ -41,7 +41,7 @@ public final class SocketServer: Sendable {
             case .ready:
                 break
             case let .failed(error):
-                print("[SocketServer] listener failed: \(error)")
+                Log.socket.error("listener failed: \(error)")
             default:
                 break
             }

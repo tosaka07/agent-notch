@@ -181,6 +181,7 @@ struct NotchContentView: View {
                   let userInfo = notification.userInfo
             else { return }
 
+            Log.notification.info("Completion flare for session=\(sessionId)")
             triggerCompletionGlow(color: .green)
 
             guard viewModel.mode == .compact || viewModel.mode == .notification
@@ -269,6 +270,7 @@ struct NotchContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .agentNotchSessionResumed)) { notification in
             guard let sessionId = notification.object as? String else { return }
+            Log.notification.info("Session resumed, dismissing notification session=\(sessionId)")
             // Dismiss completion notification for this session
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 notificationManager.dismiss(id: sessionId)

@@ -1,3 +1,4 @@
+import AgentNotchCore
 import AppKit
 import Combine
 import SwiftUI
@@ -88,6 +89,7 @@ final class NotchWindowController {
         tracker.contentScreenRect = { currentContentScreenRect() }
 
         func syncPanelState() {
+            Log.panel.debug("syncPanelState mode=\(String(describing: viewModel.mode))")
             let expanded = viewModel.mode.isFullPanel
             tracker.isExpanded = expanded
             tracker.isNotification = viewModel.mode == .notification

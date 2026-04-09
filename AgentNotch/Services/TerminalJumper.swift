@@ -1,3 +1,4 @@
+import AgentNotchCore
 import AppKit
 import Combine
 import Foundation
@@ -9,8 +10,11 @@ enum TerminalJumper {
     @discardableResult
     @MainActor
     static func jump(pid: Int32?, tty: String?) -> Bool {
+        Log.terminal.info("jump pid=\(pid.map(String.init) ?? "nil") tty=\(tty ?? "nil")")
+
         // Strategy 1: PID tree walk (non-tmux)
         if let pid, let app = findTerminalApp(forChildPID: pid) {
+            Log.terminal.info("PID tree → \(app.localizedName ?? "?") (\(app.processIdentifier))")
             app.activate()
             closeNotch()
             return true
@@ -19,12 +23,15 @@ enum TerminalJumper {
         // Strategy 2: TTY → tmux resolution → switch-client + select + activate
         if let tty {
             if let tmuxInfo = tmuxResolve(paneTTY: tty) {
+                Log.terminal.info("tmux pane=\(tmuxInfo.paneTarget) clientPID=\(tmuxInfo.clientPID)")
                 selectTmuxPane(target: tmuxInfo.paneTarget)
                 if let app = findTerminalApp(forChildPID: tmuxInfo.clientPID) {
+                    Log.terminal.info("tmux client → \(app.localizedName ?? "?") (\(app.processIdentifier))")
                     app.activate()
                     closeNotch()
                     return true
                 }
+                Log.terminal.error("tmux client PID \(tmuxInfo.clientPID): no GUI app found")
             }
 
             // Fallback: direct TTY lookup
@@ -32,6 +39,7 @@ enum TerminalJumper {
             if let pids = pidsForTTY(ttyName) {
                 for p in pids {
                     if let app = findTerminalApp(forChildPID: p) {
+                        Log.terminal.info("TTY fallback → \(app.localizedName ?? "?") (\(app.processIdentifier))")
                         app.activate()
                         closeNotch()
                         return true
@@ -40,6 +48,7 @@ enum TerminalJumper {
             }
         }
 
+        Log.terminal.error("all strategies failed")
         return false
     }
 

@@ -196,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             server.start()
             socketServer = server
         } catch {
-            print("[AgentNotch] Failed to start socket server: \(error)")
+            Log.socket.error("Failed to start socket server: \(error)")
         }
     }
 
@@ -238,6 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch event {
         case let .sessionStarted(info):
+            Log.events.info("sessionStarted id=\(info.sessionId) model=\(info.model ?? "?") cwd=\(info.cwd ?? "?")")
             let session = manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
             session.model = info.model
             session.cwd = info.cwd
@@ -245,6 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             session.status = .idle
 
         case let .userPrompt(sessionId):
+            Log.events.info("userPrompt id=\(sessionId)")
             let session = manager.session(for: sessionId)
                 ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
             session.status = .thinking
@@ -318,6 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             session.status = .subagentRunning
 
         case let .stopFailure(sessionId, errorType):
+            Log.events.error("stopFailure id=\(sessionId) error=\(errorType)")
             let session = manager.session(for: sessionId)
                 ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
             session.status = .error
@@ -329,6 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case let .sessionIdle(sessionId):
+            Log.events.info("sessionIdle (done) id=\(sessionId)")
             if let session = manager.session(for: sessionId) {
                 session.status = .done
                 session.currentTool = nil
@@ -365,6 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
         case let .sessionEnded(sessionId):
+            Log.events.info("sessionEnded id=\(sessionId)")
             manager.removeSession(id: sessionId)
 
         case let .compacting(sessionId):
