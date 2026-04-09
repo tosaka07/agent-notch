@@ -1,10 +1,29 @@
+import Foundation
 import Logging
 
 /// Centralized loggers for Agent Notch.
 /// Usage: `Log.panel.info("message")`, `Log.socket.error("failed: \(err)")`
 ///
-/// Outputs to stdout — visible in the terminal when running via `swift build && .build/debug/AgentNotch`.
+/// Outputs to stderr — visible in the terminal when running via `swift build && .build/debug/AgentNotch`.
+/// Set `AGENT_NOTCH_LOG=debug` env var to enable debug-level output.
 public enum Log {
+    /// Call once at app startup to configure log level.
+    /// Reads `AGENT_NOTCH_LOG` env var: "debug", "info" (default), "error", "trace".
+    public static func bootstrap() {
+        let envLevel = ProcessInfo.processInfo.environment["AGENT_NOTCH_LOG"]?.lowercased()
+        let level: Logger.Level = switch envLevel {
+        case "trace": .trace
+        case "debug": .debug
+        case "info": .info
+        case "error": .error
+        default: .info
+        }
+        LoggingSystem.bootstrap { label in
+            var handler = StreamLogHandler.standardError(label: label)
+            handler.logLevel = level
+            return handler
+        }
+    }
     /// Window panel lifecycle, sizing, ignoresMouseEvents
     public static let panel = Logger(label: "panel")
 

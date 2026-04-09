@@ -7,6 +7,7 @@ import Foundation
 ///   agent-notch install                        Install hooks for all agents
 ///   agent-notch remove                         Remove hooks for all agents
 
+Log.bootstrap()
 let args = Array(CommandLine.arguments.dropFirst())
 let command = args.first ?? "hook"
 

@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let sessionManager = SessionManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Log.bootstrap()
         setupStatusItem()
         applyDisplayMode()
         setupScreenObserver()
