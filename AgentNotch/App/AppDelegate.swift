@@ -163,53 +163,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startSocketServer() {
         let manager = sessionManager
         do {
-            let server = try SocketServer { message, connection in
-                let event = ClaudeEventParser.parse(message)
-                let sessionId = message["session_id"] as? String ?? ""
-                // Detect agent type from _agent_type field injected by CLI
-                let agentType: AgentType = (message["_agent_type"] as? String) == "codex" ? .codex : .claudeCode
-
-                // All events respond immediately — never block Claude Code.
-                // PermissionRequest/AskQuestion update the UI but don't hold the connection.
-                let isDeferred = false
-
-                // Extract common fields available on all hook events
+            let server = try SocketServer { message, _ in
+                // Parse off MainActor — pure data processing
+                let parsed = EventProcessor.parseMessage(message)
+                // Capture needed fields before crossing isolation boundary
                 let cwd = message["cwd"] as? String
                 let transcriptPath = message["transcript_path"] as? String
                 let pid = (message["_pid"] as? NSNumber)?.int32Value
                 let tty = message["_tty"] as? String
 
+                // Apply state changes on MainActor
                 Task { @MainActor in
-                    AppDelegate.processEvent(event, agentType: agentType, manager: manager)
-                    // Backfill fields on every event (may have been missing on auto-created sessions)
-                    if let session = manager.session(for: sessionId) {
-                        session.lastActivityAt = Date()
-                        if session.cwd == nil, let cwd { session.cwd = cwd }
-                        if session.transcriptPath == nil, let transcriptPath { session.transcriptPath = transcriptPath }
-                        if session.pid == nil, let pid { session.pid = pid }
-                        if session.tty == nil, let tty { session.tty = tty }
-                        // Resolve terminal info once (off main thread to avoid blocking UI)
-                        if !session.terminalInfoResolved, (session.pid != nil || session.tty != nil) {
-                            session.terminalInfoResolved = true
-                            let sPid = session.pid
-                            let sTty = session.tty
-                            let sid = sessionId
-                            Task.detached {
-                                let info = await TerminalJumper.resolveTerminalInfo(pid: sPid, tty: sTty)
-                                await MainActor.run {
-                                    if let s = manager.session(for: sid) {
-                                        s.terminalAppName = info?.appName
-                                        s.terminalAppIcon = info?.appIcon
-                                        s.tmuxPaneTarget = info?.tmuxTarget
-                                        manager.notifyChange()
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
+                    EventProcessor.backfillSession(
+                        parsed.sessionId, cwd: cwd, transcriptPath: transcriptPath,
+                        pid: pid, tty: tty, manager: manager
+                    )
                 }
 
-                return isDeferred ? nil : [String: Any]()
+                // Never block the agent — respond immediately
+                return [String: Any]()
             }
             server.start()
             socketServer = server
@@ -245,156 +218,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             session.pendingQuestion = nil
             session.status = .thinking
             sessionManager.notifyChange()
-        }
-    }
-
-    // MARK: - Event Processing
-
-    @MainActor
-    static func processEvent(_ event: ClaudeEvent, agentType: AgentType = .claudeCode, manager: SessionManager) {
-        defer { manager.notifyChange() }
-
-        switch event {
-        case let .sessionStarted(info):
-            Log.events.info("sessionStarted id=\(info.sessionId) model=\(info.model ?? "?") cwd=\(info.cwd ?? "?")")
-            let session = manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
-            session.model = info.model
-            session.cwd = info.cwd
-            session.transcriptPath = info.transcriptPath
-            session.status = .idle
-
-        case let .userPrompt(sessionId):
-            Log.events.info("userPrompt id=\(sessionId)")
-            let session = manager.session(for: sessionId)
-                ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
-            session.status = .thinking
-            NotificationCenter.default.post(name: .agentNotchSessionResumed, object: sessionId)
-
-        case let .toolStarted(info):
-            let session = manager.session(for: info.sessionId)
-                ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
-            session.status = .toolRunning
-            session.currentTool = ToolInfo(
-                id: info.toolUseId, name: info.toolName, summary: info.summary,
-                input: info.toolInput, startedAt: Date(), status: .running
-            )
-            session.toolCallCount += 1
-
-        case let .toolCompleted(info):
-            if let session = manager.session(for: info.sessionId) {
-                if var tool = session.currentTool, tool.id == info.toolUseId {
-                    tool.status = .succeeded
-                    tool.completedAt = Date()
-                    session.recentTools.insert(tool, at: 0)
-                    if session.recentTools.count > 50 { session.recentTools.removeLast() }
-                }
-                session.currentTool = nil
-                session.status = .thinking
-            }
-
-        case let .toolFailed(info):
-            if let session = manager.session(for: info.sessionId) {
-                if var tool = session.currentTool, tool.id == info.toolUseId {
-                    tool.status = .failed; tool.completedAt = Date()
-                    session.recentTools.insert(tool, at: 0)
-                    if session.recentTools.count > 50 { session.recentTools.removeLast() }
-                }
-                session.currentTool = nil
-                session.status = .thinking
-            }
-
-        case let .permissionRequested(info):
-            let session = manager.session(for: info.sessionId)
-                ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
-            session.status = .permissionWaiting
-            session.pendingPermissions.append(PermissionRequest(
-                id: UUID().uuidString, agentType: .claudeCode,
-                sessionId: info.sessionId, toolName: info.toolName,
-                toolInput: info.toolInput, toolUseId: info.toolUseId,
-                timestamp: Date(), canRespond: true
-            ))
-            // Auto-expand notch
-            NotificationCenter.default.post(name: .agentNotchAutoExpand, object: info.sessionId)
-
-        case let .askQuestion(info):
-            let session = manager.session(for: info.sessionId)
-                ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
-            session.status = .permissionWaiting
-            session.pendingQuestion = PendingQuestion(
-                toolUseId: info.toolUseId, question: info.question, options: info.options
-            )
-            NotificationCenter.default.post(name: .agentNotchAutoExpand, object: info.sessionId)
-
-        case let .notification(sessionId, type, _):
-            if type == "idle_prompt" {
-                let session = manager.session(for: sessionId)
-                    ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
-                session.status = .idle
-            }
-
-        case let .subagentStarted(sessionId, _):
-            let session = manager.session(for: sessionId)
-                ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
-            session.status = .subagentRunning
-
-        case let .stopFailure(sessionId, errorType):
-            Log.events.error("stopFailure id=\(sessionId) error=\(errorType)")
-            let session = manager.session(for: sessionId)
-                ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
-            session.status = .error
-            session.currentTool = nil
-
-        case let .compactingDone(sessionId):
-            if let session = manager.session(for: sessionId) {
-                session.status = .thinking
-            }
-
-        case let .sessionIdle(sessionId):
-            Log.events.info("sessionIdle (done) id=\(sessionId)")
-            if let session = manager.session(for: sessionId) {
-                session.status = .done
-                session.currentTool = nil
-                session.pendingPermissions.removeAll()
-                session.pendingQuestion = nil
-                if let path = session.transcriptPath, let model = session.model {
-                    let usage = TranscriptParser.parseCumulativeUsage(at: path)
-                    session.totalInputTokens = usage.inputTokens
-                    session.totalOutputTokens = usage.outputTokens
-                    session.totalCachedTokens = usage.cachedTokens
-                    session.estimatedCost = CostCalculator.estimateCost(
-                        model: model, inputTokens: usage.inputTokens,
-                        outputTokens: usage.outputTokens, cachedTokens: usage.cachedTokens
-                    )
-                }
-                // Post completion notification
-                let lastMessage = session.transcriptPath
-                    .flatMap { TranscriptParser.lastAssistantMessage(at: $0) } ?? ""
-                NotificationCenter.default.post(
-                    name: .agentNotchSessionCompleted,
-                    object: sessionId,
-                    userInfo: [
-                        "projectName": session.originRepoName
-                            ?? (session.cwd as NSString?)?.lastPathComponent ?? "Session",
-                        "gitBranch": session.gitBranch as Any,
-                        "isWorktree": (session.worktreeName != nil),
-                        "message": lastMessage,
-                        "pid": session.pid as Any,
-                        "tty": session.tty as Any,
-                    ]
-                )
-
-                manager.notifyChange()
-            }
-
-        case let .sessionEnded(sessionId):
-            Log.events.info("sessionEnded id=\(sessionId)")
-            manager.removeSession(id: sessionId)
-
-        case let .compacting(sessionId):
-            manager.session(for: sessionId)?.status = .compacting
-
-        case .subagentStopped, .unknown:
-            break
         }
     }
 

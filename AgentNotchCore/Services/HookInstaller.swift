@@ -125,17 +125,35 @@ public enum HookInstaller {
     }
 
     private static func updateCodexHooks(command: String) {
-        let hooksPath = codexHooksPath()
-        var root: [String: Any] = [:]
+        updateHooksFile(path: codexHooksPath(), events: codexHookEvents, command: command)
+    }
 
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: hooksPath)),
+    private static func updateClaudeSettings(command: String) {
+        updateHooksFile(path: claudeSettingsPath(), events: claudeHookEvents, command: command)
+    }
+
+    // MARK: - Private
+
+    private static func isOurHookEntry(_ entry: [String: Any]) -> Bool {
+        guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
+        return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
+    }
+
+    /// Shared logic for writing hooks into a JSON settings file (Claude or Codex).
+    private static func updateHooksFile(
+        path: String,
+        events: [(event: String, matcher: String?, timeout: Int?)],
+        command: String
+    ) {
+        var root: [String: Any] = [:]
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
            let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             root = existing
         }
 
         var hooks = root["hooks"] as? [String: Any] ?? [:]
 
-        for (event, matcher, timeout) in codexHookEvents {
+        for (event, matcher, timeout) in events {
             var hookCmd: [String: Any] = ["type": "command", "command": command]
             if let timeout { hookCmd["timeout"] = timeout }
 
@@ -153,56 +171,11 @@ public enum HookInstaller {
 
         root["hooks"] = hooks
 
-        let dir = (hooksPath as NSString).deletingLastPathComponent
+        let dir = (path as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
 
         if let data = try? JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: URL(fileURLWithPath: hooksPath))
-        }
-    }
-
-    // MARK: - Private
-
-    private static func isOurHookEntry(_ entry: [String: Any]) -> Bool {
-        guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
-        return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
-    }
-
-    private static func updateClaudeSettings(command: String) {
-        let settingsPath = claudeSettingsPath()
-        var settings: [String: Any] = [:]
-
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: settingsPath)),
-           let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            settings = existing
-        }
-
-        var hooks = settings["hooks"] as? [String: Any] ?? [:]
-
-        for (event, matcher, timeout) in claudeHookEvents {
-            var hookCmd: [String: Any] = ["type": "command", "command": command]
-            if let timeout { hookCmd["timeout"] = timeout }
-
-            var matcherEntry: [String: Any] = ["hooks": [hookCmd]]
-            if let matcher { matcherEntry["matcher"] = matcher }
-
-            if var existingEntries = hooks[event] as? [[String: Any]] {
-                // Remove any old version of our hook, then add current
-                existingEntries.removeAll { isOurHookEntry($0) }
-                existingEntries.append(matcherEntry)
-                hooks[event] = existingEntries
-            } else {
-                hooks[event] = [matcherEntry]
-            }
-        }
-
-        settings["hooks"] = hooks
-
-        let claudeDir = (settingsPath as NSString).deletingLastPathComponent
-        try? FileManager.default.createDirectory(atPath: claudeDir, withIntermediateDirectories: true)
-
-        if let data = try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: URL(fileURLWithPath: settingsPath))
+            try? data.write(to: URL(fileURLWithPath: path))
         }
     }
 

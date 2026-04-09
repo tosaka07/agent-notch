@@ -20,8 +20,8 @@ public final class SocketServer: Sendable {
     private let queue = DispatchQueue(label: "com.agentnotch.socketserver", qos: .userInitiated)
     public let onMessage: @Sendable ([String: Any], NWConnection) -> [String: Any]?
 
-    private let _connections = NWProtocolFramer.LockedArray<SocketConnection>()
-    private let _pending = NWProtocolFramer.LockedDict<String, PendingSocketResponse>()
+    private let _connections = LockedArray<SocketConnection>()
+    private let _pending = LockedDict<String, PendingSocketResponse>()
 
     public init(onMessage: @escaping @Sendable ([String: Any], NWConnection) -> [String: Any]?) throws {
         self.onMessage = onMessage
@@ -107,9 +107,9 @@ public final class SocketServer: Sendable {
     }
 }
 
-// Thread-safe array helper scoped inside NWProtocolFramer for namespace
-extension NWProtocolFramer {
-    final class LockedArray<Element: Sendable>: @unchecked Sendable {
+// MARK: - Thread-safe collections
+
+final class LockedArray<Element: Sendable>: @unchecked Sendable {
         private var elements: [Element] = []
         private let lock = NSLock()
 
@@ -126,27 +126,26 @@ extension NWProtocolFramer {
             lock.unlock()
             return copy
         }
+}
+
+final class LockedDict<Key: Hashable & Sendable, Value: Sendable>: @unchecked Sendable {
+    private var dict: [Key: Value] = [:]
+    private let lock = NSLock()
+
+    func set(_ key: Key, _ value: Value) {
+        lock.lock(); dict[key] = value; lock.unlock()
     }
 
-    final class LockedDict<Key: Hashable & Sendable, Value: Sendable>: @unchecked Sendable {
-        private var dict: [Key: Value] = [:]
-        private let lock = NSLock()
+    @discardableResult
+    func remove(_ key: Key) -> Value? {
+        lock.lock(); let v = dict.removeValue(forKey: key); lock.unlock(); return v
+    }
 
-        func set(_ key: Key, _ value: Value) {
-            lock.lock(); dict[key] = value; lock.unlock()
-        }
+    func all() -> [(Key, Value)] {
+        lock.lock(); let items = Array(dict); lock.unlock(); return items
+    }
 
-        @discardableResult
-        func remove(_ key: Key) -> Value? {
-            lock.lock(); let v = dict.removeValue(forKey: key); lock.unlock(); return v
-        }
-
-        func all() -> [(Key, Value)] {
-            lock.lock(); let items = Array(dict); lock.unlock(); return items
-        }
-
-        func removeAll() {
-            lock.lock(); dict.removeAll(); lock.unlock()
-        }
+    func removeAll() {
+        lock.lock(); dict.removeAll(); lock.unlock()
     }
 }
