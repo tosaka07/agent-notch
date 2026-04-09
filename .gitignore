@@ -1,5 +1,37 @@
+# Build
 .build/
-.swiftpm/
-*.xcodeproj/
 DerivedData/
+*.xcodeproj/
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# Xcode
+*.xcworkspace/
+xcuserdata/
+*.xcscmblueprint
+*.playground/
+
+# macOS
 .DS_Store
+._*
+
+# IDE
+*.swp
+*~
+.idea/
+.vscode/
+
+# Archives & distribution
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.app
+*.dmg
+
+# Secrets & local config
+.env
+*.pem
+*.p12
+*.mobileprovision
