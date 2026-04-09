@@ -89,19 +89,17 @@ final class NotchWindowController {
         tracker.contentScreenRect = { currentContentScreenRect() }
 
         func syncPanelState() {
-            Log.panel.debug("syncPanelState mode=\(String(describing: viewModel.mode))")
+            Log.panel.debug("syncPanelState mode=\(String(describing: viewModel.mode)) ignoresMouse=\(self.panel?.ignoresMouseEvents ?? true)")
             tracker.isExpanded = viewModel.mode.isFullPanel
             switch viewModel.mode {
             case .expanded, .sessionDetail:
                 self.panel?.ignoresMouseEvents = false
                 self.panel?.makeKey()
-            case .notification:
-                self.panel?.ignoresMouseEvents = false
-            case .compact:
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    guard viewModel.mode == .compact, !viewModel.isHovering else { return }
-                    self.panel?.ignoresMouseEvents = true
-                }
+            default:
+                // Compact and notification: ignoresMouseEvents = true.
+                // Hover tracker dynamically sets false when mouse is over content.
+                viewModel.isHovering = false
+                self.panel?.ignoresMouseEvents = true
             }
         }
         syncPanelState()
@@ -123,14 +121,20 @@ final class NotchWindowController {
 
         tracker.onNotchHoverChanged = { [weak self, weak viewModel] hovering in
             guard let self, let viewModel else { return }
-            guard viewModel.mode == .compact else { return }
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                viewModel.isHovering = hovering
+            // Skip if panel is already fully interactive (expanded/sessionDetail)
+            guard !viewModel.mode.isFullPanel else { return }
+            // Visual hover effect only in compact
+            if viewModel.mode == .compact {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    viewModel.isHovering = hovering
+                }
             }
+            // Toggle mouse events: false when hovering (panel captures), true when not
+            self.panel?.ignoresMouseEvents = !hovering
             if hovering {
-                self.panel?.ignoresMouseEvents = false
+                Log.panel.debug("Hover: ignoresMouseEvents=false")
             } else {
-                self.panel?.ignoresMouseEvents = true
+                Log.panel.debug("Hover: ignoresMouseEvents=true")
             }
         }
 
