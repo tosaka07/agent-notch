@@ -10,7 +10,6 @@ extension Notification.Name {
     static let agentNotchSessionSwept = Notification.Name("agentNotchSessionSwept")
     static let agentNotchClosePanel = Notification.Name("agentNotchClosePanel")
     static let agentNotchSessionResumed = Notification.Name("agentNotchSessionResumed")
-    static let agentNotchNotificationTapped = Notification.Name("agentNotchNotificationTapped")
 }
 
 @MainActor

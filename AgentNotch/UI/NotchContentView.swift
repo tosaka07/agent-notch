@@ -301,12 +301,6 @@ struct NotchContentView: View {
                 completionGlow = 0
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .agentNotchNotificationTapped)) { _ in
-            // Tapped via global monitor (panel is ignoresMouseEvents=true in notification mode)
-            if let item = notificationManager.items.last {
-                item.onTap?()
-            }
-        }
         .onChange(of: notificationManager.items.count) { _, count in
             if count == 0, viewModel.mode == .notification {
                 // All notifications dismissed — collapse to compact in one animation

@@ -92,7 +92,6 @@ final class NotchWindowController {
             Log.panel.debug("syncPanelState mode=\(String(describing: viewModel.mode))")
             let expanded = viewModel.mode.isFullPanel
             tracker.isExpanded = expanded
-            tracker.isNotification = viewModel.mode == .notification
             if expanded {
                 self.panel?.ignoresMouseEvents = false
                 self.panel?.makeKey()
@@ -119,10 +118,6 @@ final class NotchWindowController {
             viewModel.isHovering = false
             viewModel.close()
             syncPanelState()
-        }
-
-        tracker.onNotificationClicked = {
-            NotificationCenter.default.post(name: .agentNotchNotificationTapped, object: nil)
         }
 
         tracker.onNotchHoverChanged = { [weak self, weak viewModel] hovering in
