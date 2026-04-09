@@ -2,7 +2,7 @@ import AgentNotchCore
 import Defaults
 import SwiftUI
 
-enum NotchMode: Equatable, Sendable {
+enum NotchMode: Equatable, Sendable, CustomStringConvertible {
     case compact
     case notification
     case expanded
@@ -19,13 +19,34 @@ enum NotchMode: Equatable, Sendable {
         default: false
         }
     }
+
+    var description: String {
+        switch self {
+        case .compact: "compact"
+        case .notification: "notification"
+        case .expanded: "expanded"
+        case .sessionDetail(let id): "sessionDetail(\(id.prefix(8)))"
+        }
+    }
 }
 
 @MainActor
 @Observable
 final class NotchViewModel {
-    var mode: NotchMode = .compact
-    var isHovering: Bool = false
+    var mode: NotchMode = .compact {
+        didSet {
+            if mode != oldValue {
+                Log.panel.info("Mode: \(oldValue) → \(mode)")
+            }
+        }
+    }
+    var isHovering: Bool = false {
+        didSet {
+            if isHovering != oldValue {
+                Log.panel.debug("Hovering: \(isHovering)")
+            }
+        }
+    }
 
     var physicalNotchWidth: CGFloat
     var physicalNotchHeight: CGFloat
