@@ -90,15 +90,16 @@ final class NotchWindowController {
 
         func syncPanelState() {
             Log.panel.debug("syncPanelState mode=\(String(describing: viewModel.mode))")
-            let expanded = viewModel.mode.isFullPanel
-            tracker.isExpanded = expanded
-            if expanded {
+            tracker.isExpanded = viewModel.mode.isFullPanel
+            switch viewModel.mode {
+            case .expanded, .sessionDetail:
                 self.panel?.ignoresMouseEvents = false
                 self.panel?.makeKey()
-            } else {
-                // Compact and notification: panel stays transparent to clicks
+            case .notification:
+                self.panel?.ignoresMouseEvents = false
+            case .compact:
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    guard !viewModel.mode.isFullPanel else { return }
+                    guard viewModel.mode == .compact, !viewModel.isHovering else { return }
                     self.panel?.ignoresMouseEvents = true
                 }
             }

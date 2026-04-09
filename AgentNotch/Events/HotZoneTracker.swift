@@ -78,11 +78,8 @@ final class HotZoneTracker {
 
     private func handleGlobal(_ event: NSEvent) {
         let location = NSEvent.mouseLocation
-        // When compact: use full content rect (wings). When expanded: use physical notch only.
-        let isNotchClick = isExpanded
-            ? geometry.isPointInNotch(location)
-            : isPointInNotchContent(location)
-        if isNotchClick {
+        // Physical notch area → toggle (works in all modes because panel is ignoresMouseEvents)
+        if geometry.isPointInNotch(location) {
             Log.input.debug("Global: notchClicked at \(location.debugDescription)")
             onNotchClicked?()
         } else if isExpanded {
@@ -96,16 +93,18 @@ final class HotZoneTracker {
     private func handleLocal(_ event: NSEvent) -> Bool {
         let location = NSEvent.mouseLocation
 
-        let isNotchClick = isExpanded
-            ? geometry.notchScreenRect.contains(location)
-            : isPointInNotchContent(location)
-        if isNotchClick {
+        // Physical notch area → toggle (all modes)
+        if geometry.notchScreenRect.contains(location) {
             Log.input.debug("Local: notchClicked at \(location.debugDescription)")
             onNotchClicked?()
             return true
         }
 
-        guard isExpanded else { return false }
+        // Non-expanded: let SwiftUI handle (notification buttons, etc.)
+        guard isExpanded else {
+            Log.input.debug("Local: passthrough to SwiftUI at \(location.debugDescription)")
+            return false
+        }
 
         // Click on the panel's transparent area (outside visible content) → close
         if let rect = contentScreenRect?(), !rect.contains(location) {
