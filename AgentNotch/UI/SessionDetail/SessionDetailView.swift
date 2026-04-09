@@ -113,9 +113,29 @@ struct SessionDetailView: View {
                 Button {
                     TerminalJumper.jump(pid: session.pid, tty: session.tty)
                 } label: {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .font(.system(size: s(10)))
-                        .foregroundStyle(.white.opacity(0.4))
+                    HStack(spacing: 5) {
+                        VStack(alignment: .trailing, spacing: 1) {
+                            if let name = session.terminalAppName {
+                                Text(name)
+                                    .font(.system(size: s(8), design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.35))
+                            }
+                            if let tmux = session.tmuxPaneTarget {
+                                Text("tmux:\(tmux)")
+                                    .font(.system(size: s(7), design: .monospaced))
+                                    .foregroundStyle(.cyan.opacity(0.35))
+                            }
+                        }
+                        if let icon = session.terminalAppIcon as? NSImage {
+                            Image(nsImage: icon)
+                                .resizable()
+                                .frame(width: s(16), height: s(16))
+                        } else {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .font(.system(size: s(10)))
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
                 .help("Jump to terminal")
