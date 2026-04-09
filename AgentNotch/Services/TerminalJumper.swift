@@ -56,6 +56,70 @@ enum TerminalJumper {
         NotificationCenter.default.post(name: .agentNotchClosePanel, object: nil)
     }
 
+    // MARK: - Terminal Info Resolution
+
+    struct TerminalInfo {
+        let appName: String       // e.g. "iTerm2"
+        let appIcon: NSImage?     // app icon
+        let tmuxTarget: String?   // e.g. "main:2.1" or nil
+    }
+
+    /// Resolve terminal app and tmux info for a session. Call once and cache results.
+    @MainActor
+    static func resolveTerminalInfo(pid: Int32?, tty: String?) -> TerminalInfo? {
+        // Try PID tree first
+        if let pid, let app = findTerminalApp(forChildPID: pid) {
+            let tmux = tty.flatMap { tmuxResolve(paneTTY: $0) }
+            return TerminalInfo(
+                appName: app.localizedName ?? "Terminal",
+                appIcon: app.icon,
+                tmuxTarget: tmux?.paneTarget
+            )
+        }
+
+        // Try TTY → tmux
+        if let tty, let tmux = tmuxResolve(paneTTY: tty) {
+            if let app = findTerminalApp(forChildPID: tmux.clientPID) {
+                return TerminalInfo(
+                    appName: app.localizedName ?? "Terminal",
+                    appIcon: app.icon,
+                    tmuxTarget: tmux.paneTarget
+                )
+            }
+        }
+
+        // TTY fallback
+        if let tty {
+            let ttyName = tty.hasPrefix("/dev/") ? String(tty.dropFirst(5)) : tty
+            if let pids = pidsForTTY(ttyName) {
+                for p in pids {
+                    if let app = findTerminalApp(forChildPID: p) {
+                        return TerminalInfo(
+                            appName: app.localizedName ?? "Terminal",
+                            appIcon: app.icon,
+                            tmuxTarget: nil
+                        )
+                    }
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Cached terminal icons by PID to avoid repeated PID tree walks on every render.
+    @MainActor private static var iconCache: [Int32: NSImage] = [:]
+
+    /// Get the app icon for a session's terminal. Cached after first lookup.
+    @MainActor
+    static func terminalIcon(pid: Int32?) -> NSImage? {
+        guard let pid else { return nil }
+        if let cached = iconCache[pid] { return cached }
+        guard let icon = findTerminalApp(forChildPID: pid)?.icon else { return nil }
+        iconCache[pid] = icon
+        return icon
+    }
+
     // MARK: - PID tree walk
 
     private static func findTerminalApp(forChildPID childPID: Int32) -> NSRunningApplication? {

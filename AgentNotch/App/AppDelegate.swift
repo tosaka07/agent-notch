@@ -188,6 +188,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         if session.transcriptPath == nil, let transcriptPath { session.transcriptPath = transcriptPath }
                         if session.pid == nil, let pid { session.pid = pid }
                         if session.tty == nil, let tty { session.tty = tty }
+                        // Resolve terminal info once (off main thread to avoid blocking UI)
+                        if !session.terminalInfoResolved, (session.pid != nil || session.tty != nil) {
+                            session.terminalInfoResolved = true
+                            let sPid = session.pid
+                            let sTty = session.tty
+                            let sid = sessionId
+                            Task.detached {
+                                let info = await TerminalJumper.resolveTerminalInfo(pid: sPid, tty: sTty)
+                                await MainActor.run {
+                                    if let s = manager.session(for: sid) {
+                                        s.terminalAppName = info?.appName
+                                        s.tmuxPaneTarget = info?.tmuxTarget
+                                        manager.notifyChange()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

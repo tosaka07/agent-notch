@@ -94,9 +94,26 @@ struct SessionCardView: View {
                     Button {
                         TerminalJumper.jump(pid: session.pid, tty: session.tty)
                     } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.system(size: s(9)))
-                            .foregroundStyle(.white.opacity(0.3))
+                        HStack(spacing: 3) {
+                            if let icon = TerminalJumper.terminalIcon(pid: session.pid) {
+                                Image(nsImage: icon)
+                                    .resizable()
+                                    .frame(width: s(12), height: s(12))
+                            }
+                            if let name = session.terminalAppName {
+                                Text(name)
+                                    .font(.system(size: s(8), design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.3))
+                            }
+                            if let tmux = session.tmuxPaneTarget {
+                                Text("tmux:\(tmux)")
+                                    .font(.system(size: s(7), design: .monospaced))
+                                    .foregroundStyle(.cyan.opacity(0.35))
+                            }
+                            Image(systemName: "arrow.right.circle")
+                                .font(.system(size: s(8)))
+                                .foregroundStyle(.white.opacity(0.25))
+                        }
                     }
                     .buttonStyle(.plain)
                 }

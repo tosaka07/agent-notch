@@ -21,6 +21,7 @@ final class HotZoneTracker {
 
     private let eventMonitor = MouseEventMonitor()
     private var moveMonitor: Any?
+    private var localMoveMonitor: Any?
 
     init(geometry: NotchGeometry) {
         self.geometry = geometry
@@ -36,11 +37,17 @@ final class HotZoneTracker {
                 self?.handleLocal(event) ?? false
             }
         )
-        // Global mouse move for hover detection
+        // Mouse move for hover detection (both global and local)
         moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.updateHover()
             }
+        }
+        localMoveMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+            MainActor.assumeIsolated {
+                self?.updateHover()
+            }
+            return event
         }
     }
 
@@ -49,6 +56,10 @@ final class HotZoneTracker {
         if let moveMonitor {
             NSEvent.removeMonitor(moveMonitor)
             self.moveMonitor = nil
+        }
+        if let localMoveMonitor {
+            NSEvent.removeMonitor(localMoveMonitor)
+            self.localMoveMonitor = nil
         }
     }
 

@@ -28,6 +28,12 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var pid: Int32?
     public var tty: String?
     public var transcriptPath: String?
+    /// Resolved terminal app name (e.g. "iTerm2", "WezTerm")
+    public var terminalAppName: String?
+    /// Resolved tmux pane target (e.g. "main:2.1")
+    public var tmuxPaneTarget: String?
+    /// Whether terminal info resolution has been attempted (prevents repeated retries)
+    public var terminalInfoResolved: Bool = false
     public var pendingQuestion: PendingQuestion?
     public var lastActivityAt: Date
 
