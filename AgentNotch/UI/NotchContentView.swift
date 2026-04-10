@@ -130,9 +130,8 @@ struct NotchContentView: View {
     @State private var notificationManager = NotchNotificationManager()
     @ObservedObject var sessionManager: SessionManager
     @Default(.textSize) private var textSize
-    @State private var completionFlash: CGFloat = 0
-    @State private var completionScale: CGFloat = 1
-    @State private var flashColor: Color = .green
+    @State private var completionGlow: CGFloat = 0
+    @State private var glowColor: Color = .green
 
     init(sessionManager: SessionManager, notchSize: CGSize = CGSize(width: 224, height: 38), initialMode: NotchMode = .compact) {
         self._viewModel = State(initialValue: NotchViewModel(notchSize: notchSize, initialMode: initialMode))
@@ -163,14 +162,25 @@ struct NotchContentView: View {
         }
         .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
         .background(.black)
-        .overlay {
-            // Completion flash: color overlay inside the notch
-            currentNotchShape
-                .fill(flashColor.opacity(completionFlash * 0.3))
-                .allowsHitTesting(false)
-        }
         .clipShape(currentNotchShape)
-        .scaleEffect(completionScale)
+        .overlay(
+            CompletionFlare(
+                shape: NotchGlowBorder(
+                    topCornerRadius: viewModel.topCornerRadius,
+                    bottomCornerRadius: viewModel.bottomCornerRadius
+                ),
+                color: glowColor,
+                intensity: completionGlow
+            )
+            .clipShape(
+                NotchOuterMask(
+                    topCornerRadius: viewModel.topCornerRadius,
+                    bottomCornerRadius: viewModel.bottomCornerRadius
+                ),
+                style: FillStyle(eoFill: true)
+            )
+            .allowsHitTesting(false)
+        )
         .shadow(color: isExpanded ? .black.opacity(0.6) : .clear, radius: 8)
         .contentShape(currentNotchShape)
         .onHover { hovering in
