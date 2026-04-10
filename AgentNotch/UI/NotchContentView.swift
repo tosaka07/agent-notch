@@ -631,8 +631,18 @@ struct NotchContentView: View {
             return nil
         case 0x24:  // Return
             let idx = min(notificationFocusIndex, items.count - 1)
-            items[idx].onTap?()
-            unfocusNotifications()
+            let item = items[idx]
+            item.onTap?()
+            // Dismiss only the acted-upon notification
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                notificationManager.dismiss(id: item.id)
+            }
+            // If more remain, keep focus and clamp index
+            if notificationManager.items.isEmpty {
+                unfocusNotifications()
+            } else {
+                notificationFocusIndex = min(notificationFocusIndex, notificationManager.items.count - 1)
+            }
             return nil
         case 0x35:  // Escape
             unfocusNotifications()
