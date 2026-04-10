@@ -128,6 +128,8 @@ final class NotchWindowController {
                     self.panel?.allowKeyFocus = enable
                     if enable {
                         self.panel?.makeKey()
+                    } else {
+                        self.panel?.resignKey()
                     }
                 }
         )

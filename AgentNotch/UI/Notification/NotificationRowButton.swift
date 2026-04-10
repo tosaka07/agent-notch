@@ -8,31 +8,34 @@ struct NotificationRowButton: View {
 
     @State private var isHovered = false
 
-    private var highlightColor: Color {
-        if isFocused { return Color.blue.opacity(0.15) }
-        if isHovered { return Color.white.opacity(0.08) }
+    private var backgroundColor: Color {
+        if isFocused { return Color.white.opacity(0.10) }
+        if isHovered { return Color.white.opacity(0.06) }
         return Color.clear
     }
 
     var body: some View {
         Button(action: action) {
             content
-                .padding(.horizontal, 14)
-                .padding(.vertical, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .background(highlightColor)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    isFocused
-                        ? RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.blue.opacity(0.4), lineWidth: 1)
-                        : nil
-                )
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
         }
         .buttonStyle(.plain)
+        .background(backgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(
+                    isFocused ? Color.blue.opacity(0.5) : Color.clear,
+                    lineWidth: 1
+                )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 8))
         .onHover { isHovered = $0 }
-        .padding(.horizontal, 4)
-        .animation(.easeOut(duration: 0.15), value: isFocused)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 1)
+        .animation(.easeOut(duration: 0.12), value: isFocused)
+        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 }
