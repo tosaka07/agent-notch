@@ -289,6 +289,10 @@ struct NotchContentView: View {
             if newMode.isFullPanel {
                 notificationManager.dismissAll()
             }
+            // Kill glow instantly on any mode change to prevent border shrink artifact
+            if newMode != .notification && newMode != .compact {
+                completionGlow = 0
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .agentNotchClosePanel)) { _ in
             withAnimation(closeAnimation) {
@@ -311,10 +315,16 @@ struct NotchContentView: View {
         }
         .onChange(of: notificationManager.items.count) { _, count in
             if count == 0, viewModel.mode == .notification {
-                // All notifications dismissed — collapse to compact in one animation
-                withAnimation(.spring(response: 0.45, dampingFraction: 1.0)) {
-                    viewModel.notificationCount = 0
-                    viewModel.mode = .compact
+                // Fade glow out quickly, then collapse to compact after glow is gone
+                withAnimation(.easeOut(duration: 0.25)) {
+                    completionGlow = 0
+                }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(280))
+                    withAnimation(.spring(response: 0.45, dampingFraction: 1.0)) {
+                        viewModel.notificationCount = 0
+                        viewModel.mode = .compact
+                    }
                 }
             } else {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
@@ -575,9 +585,14 @@ struct NotchContentView: View {
         withAnimation(.easeOut(duration: 0.4)) {
             completionGlow = 1
         }
+        // Glow stays on while notifications are visible.
+        // Faded out by onChange(of: notificationManager.items.count) when count hits 0,
+        // or by onChange(of: viewModel.mode) on panel expansion.
+        // Fallback: fade after 8s in case notifications were skipped (e.g. expanded mode).
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2.5))
-            withAnimation(.easeOut(duration: 2.5)) {
+            try? await Task.sleep(for: .seconds(8))
+            guard completionGlow > 0 else { return }
+            withAnimation(.easeOut(duration: 1.5)) {
                 completionGlow = 0
             }
         }

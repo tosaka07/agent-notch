@@ -1,58 +1,80 @@
 import SwiftUI
 
-/// Multi-layer solar flare glow effect for the notch border on session completion.
+/// Animated gradient border that flows around the notch shape on session completion.
+/// Uses an angular gradient with the base color and neighboring hues, rotating continuously.
 struct CompletionFlare: View {
     let shape: NotchGlowBorder
     let color: Color
     let intensity: CGFloat // 0…1, controls master opacity
 
-    // Each layer pulses at a different phase/speed for organic flicker
-    @State private var pulse1: CGFloat = 0
-    @State private var pulse2: CGFloat = 0
-    @State private var pulse3: CGFloat = 0
-    @State private var pulse4: CGFloat = 0
+    @State private var rotation: CGFloat = 0
 
-    var body: some View {
-        if intensity > 0 {
-            ZStack {
-                // Layer 0: Ultra-wide ambient haze
-                shape
-                    .stroke(color.opacity(0.15), lineWidth: 16 + pulse4 * 10)
-                    .blur(radius: 24 + pulse4 * 12)
-
-                // Layer 1: Wide soft glow (corona)
-                shape
-                    .stroke(color.opacity(0.3), lineWidth: 10 + pulse1 * 8)
-                    .blur(radius: 16 + pulse1 * 10)
-
-                // Layer 2: Medium glow (chromosphere)
-                shape
-                    .stroke(color.opacity(0.5), lineWidth: 6 + pulse2 * 5)
-                    .blur(radius: 8 + pulse2 * 6)
-
-                // Layer 3: Tight bright core
-                shape
-                    .stroke(color, lineWidth: 2 + pulse3 * 1.5)
-                    .blur(radius: 1.5)
-                    .shadow(color: color.opacity(0.9), radius: 6 + pulse3 * 4)
-            }
-            .opacity(intensity)
-            .onAppear { startFlare() }
+    /// Generate a rich palette from the base color and its neighbors on the hue wheel.
+    private var gradientColors: [Color] {
+        let neighbors: [(CGFloat, CGFloat, CGFloat)] = [
+            (0.0, 1.0, 1.0),     // base
+            (-0.06, 0.8, 1.0),   // cooler neighbor
+            (-0.12, 0.6, 0.9),   // further cool
+            (0.0, 1.0, 1.0),     // base again
+            (0.06, 0.8, 1.0),    // warmer neighbor
+            (0.12, 0.6, 0.9),    // further warm
+            (0.0, 1.0, 1.0),     // base (close loop)
+        ]
+        return neighbors.map { offset, sat, bri in
+            shiftHue(color, by: offset, saturationScale: sat, brightnessScale: bri)
         }
     }
 
-    private func startFlare() {
-        withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-            pulse4 = 1
+    var body: some View {
+        ZStack {
+            // Core bright border
+            shape
+                .stroke(
+                    AngularGradient(
+                        colors: gradientColors,
+                        center: .center,
+                        angle: .degrees(rotation)
+                    ),
+                    lineWidth: 2.5
+                )
+
+            // Soft wider glow layer
+            shape
+                .stroke(
+                    AngularGradient(
+                        colors: gradientColors,
+                        center: .center,
+                        angle: .degrees(rotation + 60)
+                    ),
+                    lineWidth: 5
+                )
+                .blur(radius: 6)
+                .opacity(0.6)
         }
-        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true).delay(0.15)) {
-            pulse1 = 1
+        .opacity(intensity)
+        .onChange(of: intensity) { _, newVal in
+            if newVal > 0 && rotation == 0 {
+                startAnimation()
+            }
         }
-        withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true).delay(0.3)) {
-            pulse2 = 1
+    }
+
+    private func startAnimation() {
+        withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
+            rotation = 360
         }
-        withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true).delay(0.45)) {
-            pulse3 = 1
-        }
+    }
+
+    /// Shift a Color's hue by a fraction (e.g. +0.05 = 5% warmer on the color wheel).
+    private func shiftHue(_ color: Color, by hueOffset: CGFloat, saturationScale: CGFloat, brightnessScale: CGFloat) -> Color {
+        let nsColor = NSColor(color)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        let converted = nsColor.usingColorSpace(.sRGB) ?? nsColor
+        converted.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        let newH = (h + hueOffset).truncatingRemainder(dividingBy: 1.0)
+        return Color(hue: newH < 0 ? newH + 1 : newH,
+                     saturation: min(s * saturationScale, 1),
+                     brightness: min(b * brightnessScale, 1),
+                     opacity: a)
     }
 }
