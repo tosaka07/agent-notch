@@ -1,4 +1,5 @@
 import Defaults
+import KeyboardShortcuts
 import SwiftUI
 
 struct SettingsView: View {
@@ -58,6 +59,11 @@ struct SettingsView: View {
                 }
             }
 
+            Section("ショートカット") {
+                KeyboardShortcuts.Recorder("通知にジャンプ", name: .jumpToNotification)
+                KeyboardShortcuts.Recorder("ターミナルにジャンプ", name: .jumpToTerminal)
+            }
+
             Section("サウンド") {
                 Toggle("サウンドを有効にする", isOn: $soundEnabled)
 
@@ -80,7 +86,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 360, height: soundEnabled ? 560 : 460)
+        .frame(width: 360, height: soundEnabled ? 620 : 520)
         .onAppear {
             // Auto-select first display if none set
             if displayMode == .specificDisplay, specificDisplayUUID.isEmpty,

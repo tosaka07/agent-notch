@@ -13,6 +13,7 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/LaunchAtLogin-Modern.git", from: "1.1.0"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui.git", from: "2.4.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
+        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts.git", from: "2.2.0"),
     ],
     targets: [
         // Shared library — models, services, utilities (no UI dependency)
@@ -31,6 +32,7 @@ let package = Package(
                 "Defaults",
                 .product(name: "LaunchAtLogin", package: "LaunchAtLogin-Modern"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
+                "KeyboardShortcuts",
             ],
             path: "AgentNotch",
             exclude: ["Info.plist"],

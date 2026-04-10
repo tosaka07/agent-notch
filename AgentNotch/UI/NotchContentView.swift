@@ -305,6 +305,18 @@ struct NotchContentView: View {
                 completionGlow = 0
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .agentNotchHotKeyJumpNotification)) { _ in
+            // ⌥⇧N: jump to latest notification's session
+            guard let item = notificationManager.items.last else { return }
+            item.onTap?()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .agentNotchHotKeyJumpTerminal)) { _ in
+            // ⌥⇧J: jump to current session detail's terminal
+            if case .sessionDetail(let sessionId) = viewModel.mode,
+               let session = sessionManager.session(for: sessionId) {
+                TerminalJumper.jump(pid: session.pid, tty: session.tty)
+            }
+        }
         .onChange(of: notificationManager.items.count) { _, count in
             if count == 0, viewModel.mode == .notification {
                 // All at once: glow fades + notch shrinks simultaneously

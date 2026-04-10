@@ -1,6 +1,7 @@
 import AgentNotchCore
 import AppKit
 import Defaults
+import KeyboardShortcuts
 import Network
 import SwiftUI
 
@@ -10,6 +11,8 @@ extension Notification.Name {
     static let agentNotchSessionSwept = Notification.Name("agentNotchSessionSwept")
     static let agentNotchClosePanel = Notification.Name("agentNotchClosePanel")
     static let agentNotchSessionResumed = Notification.Name("agentNotchSessionResumed")
+    static let agentNotchHotKeyJumpNotification = Notification.Name("agentNotchHotKeyJumpNotification")
+    static let agentNotchHotKeyJumpTerminal = Notification.Name("agentNotchHotKeyJumpTerminal")
 }
 
 @MainActor
@@ -32,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observeDisplayModeSetting()
         startSocketServer()
         startSessionCleanupTimer()
+        setupGlobalHotKeys()
         HookInstaller.installIfNeeded()
     }
 
@@ -130,6 +134,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Defaults.observe(.displayMode) { handler($0) },
             Defaults.observe(.specificDisplayUUID) { handler($0) },
         ]
+    }
+
+    // MARK: - Global Hot Keys
+
+    private func setupGlobalHotKeys() {
+        KeyboardShortcuts.onKeyUp(for: .jumpToNotification) {
+            NotificationCenter.default.post(name: .agentNotchHotKeyJumpNotification, object: nil)
+        }
+        KeyboardShortcuts.onKeyUp(for: .jumpToTerminal) {
+            NotificationCenter.default.post(name: .agentNotchHotKeyJumpTerminal, object: nil)
+        }
     }
 
     // MARK: - Session Cleanup
