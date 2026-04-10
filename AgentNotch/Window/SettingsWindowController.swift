@@ -10,13 +10,13 @@ final class SettingsWindowController {
     func show() {
         if let window, window.isVisible {
             window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
             return
         }
 
         let hostingView = NSHostingView(rootView: SettingsView())
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 500),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -25,8 +25,9 @@ final class SettingsWindowController {
         window.contentView = hostingView
         window.center()
         window.isReleasedWhenClosed = false
+        window.level = .floating  // Above other windows so Recorder can capture keys
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         self.window = window
     }
 }

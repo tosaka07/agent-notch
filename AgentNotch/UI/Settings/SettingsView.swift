@@ -62,6 +62,10 @@ struct SettingsView: View {
             Section("ショートカット") {
                 KeyboardShortcuts.Recorder("通知にジャンプ", name: .jumpToNotification)
                 KeyboardShortcuts.Recorder("ターミナルにジャンプ", name: .jumpToTerminal)
+                Button("デフォルトに戻す") {
+                    KeyboardShortcuts.reset(.jumpToNotification, .jumpToTerminal)
+                }
+                .font(.caption)
             }
 
             Section("サウンド") {
