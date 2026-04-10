@@ -74,6 +74,65 @@ enum DisplayModePreference: String, Defaults.Serializable, CaseIterable, Sendabl
     }
 }
 
+// MARK: - Sound
+
+/// Represents a sound source: system sound, custom file, or none.
+struct SoundChoice: Codable, Defaults.Serializable, Equatable, Sendable {
+    enum Kind: String, Codable, Sendable {
+        case none
+        case system    // /System/Library/Sounds/{name}.aiff
+        case custom    // User-provided file path
+    }
+
+    var kind: Kind
+    var name: String  // System sound name (e.g. "Glass") or custom file path
+
+    static let none = SoundChoice(kind: .none, name: "")
+    static func system(_ name: String) -> SoundChoice { SoundChoice(kind: .system, name: name) }
+    static func custom(_ path: String) -> SoundChoice { SoundChoice(kind: .custom, name: path) }
+
+    var displayName: String {
+        switch kind {
+        case .none: "なし"
+        case .system: name
+        case .custom: (name as NSString).lastPathComponent
+        }
+    }
+
+    /// All available macOS system sounds.
+    static let systemSounds: [String] = {
+        let dir = "/System/Library/Sounds"
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
+        return files
+            .filter { $0.hasSuffix(".aiff") }
+            .map { ($0 as NSString).deletingPathExtension }
+            .sorted()
+    }()
+}
+
+/// Which events can trigger sounds.
+enum SoundEvent: String, CaseIterable, Sendable {
+    case sessionCompleted
+    case permissionWaiting
+    case error
+
+    var label: String {
+        switch self {
+        case .sessionCompleted: "完了"
+        case .permissionWaiting: "権限待ち"
+        case .error: "エラー"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .sessionCompleted: "checkmark.circle"
+        case .permissionWaiting: "exclamationmark.triangle"
+        case .error: "xmark.circle"
+        }
+    }
+}
+
 extension Defaults.Keys {
     static let textSize = Key<TextSizePreference>("textSize", default: .small)
     static let sessionTimeout = Key<SessionTimeoutPreference>("sessionTimeout", default: .oneDay)
@@ -81,4 +140,10 @@ extension Defaults.Keys {
     static let displayMode = Key<DisplayModePreference>("displayMode", default: .followFocus)
     /// UUID of the specific display chosen when displayMode == .specificDisplay
     static let specificDisplayUUID = Key<String>("specificDisplayUUID", default: "")
+
+    // Sound settings per event
+    static let soundCompleted = Key<SoundChoice>("soundCompleted", default: .system("Glass"))
+    static let soundPermission = Key<SoundChoice>("soundPermission", default: .system("Funk"))
+    static let soundError = Key<SoundChoice>("soundError", default: .system("Basso"))
+    static let soundEnabled = Key<Bool>("soundEnabled", default: true)
 }

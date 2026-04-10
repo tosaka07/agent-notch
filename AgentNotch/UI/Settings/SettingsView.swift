@@ -7,6 +7,10 @@ struct SettingsView: View {
     @Default(.notificationTapAction) var notificationTapAction
     @Default(.displayMode) var displayMode
     @Default(.specificDisplayUUID) var specificDisplayUUID
+    @Default(.soundEnabled) var soundEnabled
+    @Default(.soundCompleted) var soundCompleted
+    @Default(.soundPermission) var soundPermission
+    @Default(.soundError) var soundError
     var onClose: (() -> Void)? = nil
 
     var body: some View {
@@ -54,6 +58,16 @@ struct SettingsView: View {
                 }
             }
 
+            Section("サウンド") {
+                Toggle("サウンドを有効にする", isOn: $soundEnabled)
+
+                if soundEnabled {
+                    SoundPickerView(event: .sessionCompleted, choice: $soundCompleted)
+                    SoundPickerView(event: .permissionWaiting, choice: $soundPermission)
+                    SoundPickerView(event: .error, choice: $soundError)
+                }
+            }
+
             Section("セッション") {
                 Picker("自動削除", selection: $sessionTimeout) {
                     ForEach(SessionTimeoutPreference.allCases, id: \.self) { pref in
@@ -66,7 +80,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 320, height: displayMode == .specificDisplay ? 420 : 380)
+        .frame(width: 360, height: soundEnabled ? 560 : 460)
         .onAppear {
             // Auto-select first display if none set
             if displayMode == .specificDisplay, specificDisplayUUID.isEmpty,

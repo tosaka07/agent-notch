@@ -70,6 +70,7 @@ enum EventProcessor {
             let session = manager.session(for: info.sessionId)
                 ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
             session.status = .permissionWaiting
+            SoundPlayer.play(.permissionWaiting)
             session.pendingPermissions.append(PermissionRequest(
                 id: UUID().uuidString, agentType: agentType,
                 sessionId: info.sessionId, toolName: info.toolName,
@@ -105,6 +106,7 @@ enum EventProcessor {
                 ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
             session.status = .error
             session.currentTool = nil
+            SoundPlayer.play(.error)
 
         case let .compactingDone(sessionId):
             if let session = manager.session(for: sessionId) {
@@ -168,6 +170,7 @@ enum EventProcessor {
                                 "tty": tty as Any,
                             ]
                         )
+                        SoundPlayer.play(.sessionCompleted)
                         manager.notifyChange()
                     }
                 }
