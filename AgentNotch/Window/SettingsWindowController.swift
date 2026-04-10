@@ -10,7 +10,7 @@ final class SettingsWindowController {
     func show() {
         if let window, window.isVisible {
             window.makeKeyAndOrderFront(nil)
-            NSApp.activate()
+            activateApp()
             return
         }
 
@@ -25,9 +25,14 @@ final class SettingsWindowController {
         window.contentView = hostingView
         window.center()
         window.isReleasedWhenClosed = false
-        window.level = .floating  // Above other windows so Recorder can capture keys
+        // Above notch panel (mainMenu+3) so key events go to settings, not through to other apps
+        window.level = .init(NSWindow.Level.mainMenu.rawValue + 10)
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        activateApp()
         self.window = window
+    }
+
+    private func activateApp() {
+        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
     }
 }
