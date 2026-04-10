@@ -231,17 +231,13 @@ struct NotchContentView: View {
                     gitBranch: gitBranch,
                     isWorktree: isWT,
                     message: msg,
-                    onMarqueeComplete: {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                            notificationManager.requestDismiss(id: itemId)
-                        }
-                    }
+                    onMarqueeComplete: {}
                 )
             )
             let item = NotchNotificationManager.Item(
                 id: itemId,
                 content: content,
-                autoDismissAfter: msg.isEmpty ? 7 : nil,
+                autoDismissAfter: 10,
                 createdAt: Date(),
                 onTap: notificationTapAction(sessionId: sessionId, pid: pid, tty: ttyVal)
             )
@@ -266,17 +262,13 @@ struct NotchContentView: View {
                     projectName: projectName,
                     gitBranch: nil,
                     message: msg,
-                    onMarqueeComplete: {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                            notificationManager.requestDismiss(id: itemId)
-                        }
-                    }
+                    onMarqueeComplete: {}
                 )
             )
             let item = NotchNotificationManager.Item(
                 id: itemId,
                 content: content,
-                autoDismissAfter: msg.isEmpty ? 7 : nil,
+                autoDismissAfter: 10,
                 createdAt: Date()
             )
             triggerCompletionGlow(color: .orange)
@@ -315,16 +307,11 @@ struct NotchContentView: View {
         }
         .onChange(of: notificationManager.items.count) { _, count in
             if count == 0, viewModel.mode == .notification {
-                // Fade glow out quickly, then collapse to compact after glow is gone
-                withAnimation(.easeOut(duration: 0.25)) {
+                // All at once: glow fades + notch shrinks simultaneously
+                withAnimation(.easeOut(duration: 0.5)) {
                     completionGlow = 0
-                }
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(280))
-                    withAnimation(.spring(response: 0.45, dampingFraction: 1.0)) {
-                        viewModel.notificationCount = 0
-                        viewModel.mode = .compact
-                    }
+                    viewModel.notificationCount = 0
+                    viewModel.mode = .compact
                 }
             } else {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
@@ -414,7 +401,7 @@ struct NotchContentView: View {
                         .transition(
                             .asymmetric(
                                 insertion: .opacity.combined(with: .move(edge: .top)),
-                                removal: .opacity.combined(with: .scale(scale: 0.95))
+                                removal: .opacity.combined(with: .move(edge: .top))
                             )
                         )
                     }

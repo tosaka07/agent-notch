@@ -15,7 +15,7 @@ final class NotchNotificationManager {
     private var dismissTasks: [String: Task<Void, Never>] = [:]
 
     private let maxVisible = 4
-    private let fallbackTimeout: TimeInterval = 30
+    private let fallbackTimeout: TimeInterval = 12
 
     var isEmpty: Bool { items.isEmpty }
     var hasNotification: Bool { !items.isEmpty }

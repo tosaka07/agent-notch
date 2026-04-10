@@ -59,7 +59,11 @@ struct MarqueeText: View {
 
     private func scrollToEnd() {
         let distance = textWidth - containerWidth
-        guard distance > 0 else { return }
+        guard distance > 0 else {
+            // Text fits — no scroll needed, report complete
+            reportCycleComplete()
+            return
+        }
         let duration = distance / speed
 
         withAnimation(.linear(duration: duration)) {
