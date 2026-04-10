@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class SettingsWindowController {
+final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let shared = SettingsWindowController()
 
     private var window: NSWindow?
@@ -10,7 +10,7 @@ final class SettingsWindowController {
     func show() {
         if let window, window.isVisible {
             window.makeKeyAndOrderFront(nil)
-            activateApp()
+            activateForSettings()
             return
         }
 
@@ -25,14 +25,23 @@ final class SettingsWindowController {
         window.contentView = hostingView
         window.center()
         window.isReleasedWhenClosed = false
-        // Above notch panel (mainMenu+3) so key events go to settings, not through to other apps
-        window.level = .init(NSWindow.Level.mainMenu.rawValue + 10)
+        window.delegate = self
         window.makeKeyAndOrderFront(nil)
-        activateApp()
+        activateForSettings()
         self.window = window
     }
 
-    private func activateApp() {
-        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+    /// Temporarily become a regular app so we can receive key events.
+    private func activateForSettings() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Go back to accessory (LSUIElement) when settings close.
+    func windowWillClose(_ notification: Notification) {
+        // Small delay to let the window fully close
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 }
