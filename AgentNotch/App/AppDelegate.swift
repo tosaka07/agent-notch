@@ -13,6 +13,8 @@ extension Notification.Name {
     static let agentNotchSessionResumed = Notification.Name("agentNotchSessionResumed")
     static let agentNotchHotKeyJumpNotification = Notification.Name("agentNotchHotKeyJumpNotification")
     static let agentNotchHotKeyJumpTerminal = Notification.Name("agentNotchHotKeyJumpTerminal")
+    /// object: Bool — true to enable key focus, false to disable
+    static let agentNotchSetKeyFocus = Notification.Name("agentNotchSetKeyFocus")
 }
 
 @MainActor

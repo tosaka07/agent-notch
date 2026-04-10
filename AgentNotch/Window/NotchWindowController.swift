@@ -118,5 +118,18 @@ final class NotchWindowController {
                     }
                 }
         }
+
+        // Key focus toggle for keyboard navigation
+        modeObservations.append(
+            NotificationCenter.default.publisher(for: .agentNotchSetKeyFocus)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] notification in
+                    guard let self, let enable = notification.object as? Bool else { return }
+                    self.panel?.allowKeyFocus = enable
+                    if enable {
+                        self.panel?.makeKey()
+                    }
+                }
+        )
     }
 }

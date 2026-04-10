@@ -132,6 +132,9 @@ struct NotchContentView: View {
     @Default(.textSize) private var textSize
     @State private var completionGlow: CGFloat = 0
     @State private var glowColor: Color = .green
+    @State private var notificationFocused: Bool = false
+    @State private var notificationFocusIndex: Int = 0
+    @State private var keyMonitor: Any?
 
     init(sessionManager: SessionManager, notchSize: CGSize = CGSize(width: 224, height: 38), initialMode: NotchMode = .compact) {
         self._viewModel = State(initialValue: NotchViewModel(notchSize: notchSize, initialMode: initialMode))
@@ -306,9 +309,15 @@ struct NotchContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .agentNotchHotKeyJumpNotification)) { _ in
-            // ⌥⇧N: jump to latest notification's session
-            guard let item = notificationManager.items.last else { return }
-            item.onTap?()
+            // ⌥⇧N: toggle notification focus
+            if notificationFocused {
+                unfocusNotifications()
+            } else if notificationManager.hasNotification {
+                focusNotifications()
+            } else {
+                // No notifications → expand notch
+                withAnimation(openAnimation) { viewModel.toggle() }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .agentNotchHotKeyJumpTerminal)) { _ in
             // ⌥⇧J: jump to current session detail's terminal
@@ -318,8 +327,12 @@ struct NotchContentView: View {
             }
         }
         .onChange(of: notificationManager.items.count) { _, count in
+            // Clamp focus index
+            if notificationFocused, count > 0 {
+                notificationFocusIndex = min(notificationFocusIndex, count - 1)
+            }
             if count == 0, viewModel.mode == .notification {
-                // All at once: glow fades + notch shrinks simultaneously
+                if notificationFocused { unfocusNotifications() }
                 withAnimation(.easeOut(duration: 0.5)) {
                     completionGlow = 0
                     viewModel.notificationCount = 0
@@ -406,8 +419,11 @@ struct NotchContentView: View {
             // Notification rows (stacked, only in .notification mode)
             if viewModel.mode == .notification {
                 VStack(spacing: 0) {
-                    ForEach(notificationManager.items) { item in
-                        NotificationRowButton(content: item.content) {
+                    ForEach(Array(notificationManager.items.enumerated()), id: \.element.id) { index, item in
+                        NotificationRowButton(
+                            content: item.content,
+                            isFocused: notificationFocused && index == notificationFocusIndex
+                        ) {
                             item.onTap?()
                         }
                         .transition(
@@ -564,6 +580,65 @@ struct NotchContentView: View {
                     viewModel?.showSession(sessionId)
                 }
             }
+        }
+    }
+
+    // MARK: - Notification keyboard focus
+
+    private func focusNotifications() {
+        notificationFocused = true
+        notificationFocusIndex = notificationManager.items.count - 1  // latest
+        notificationManager.pauseAutoDismiss = true
+        NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: true)
+        // Install local key monitor for j/k/Enter/Esc navigation
+        if keyMonitor == nil {
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
+                self.handleNotificationKeyNav(event)
+            }
+        }
+        Log.notification.info("Keyboard focus ON, index=\(notificationFocusIndex)")
+    }
+
+    private func unfocusNotifications() {
+        notificationFocused = false
+        notificationManager.pauseAutoDismiss = false
+        NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: false)
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
+        Log.notification.info("Keyboard focus OFF")
+    }
+
+    private func handleNotificationKeyNav(_ event: NSEvent) -> NSEvent? {
+        guard notificationFocused, !notificationManager.items.isEmpty else { return event }
+        let items = notificationManager.items
+        let keyCode = event.keyCode
+        let ctrl = event.modifierFlags.contains(.control)
+
+        switch keyCode {
+        case 0x28 where !ctrl, 0x7E:  // k, ↑
+            notificationFocusIndex = max(0, notificationFocusIndex - 1)
+            return nil
+        case 0x23 where ctrl:  // Ctrl+P
+            notificationFocusIndex = max(0, notificationFocusIndex - 1)
+            return nil
+        case 0x26 where !ctrl, 0x7D:  // j, ↓
+            notificationFocusIndex = min(items.count - 1, notificationFocusIndex + 1)
+            return nil
+        case 0x2D where ctrl:  // Ctrl+N
+            notificationFocusIndex = min(items.count - 1, notificationFocusIndex + 1)
+            return nil
+        case 0x24:  // Return
+            let idx = min(notificationFocusIndex, items.count - 1)
+            items[idx].onTap?()
+            unfocusNotifications()
+            return nil
+        case 0x35:  // Escape
+            unfocusNotifications()
+            return nil
+        default:
+            return event
         }
     }
 

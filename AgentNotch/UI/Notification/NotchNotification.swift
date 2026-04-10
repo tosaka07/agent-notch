@@ -19,6 +19,22 @@ final class NotchNotificationManager {
 
     var isEmpty: Bool { items.isEmpty }
     var hasNotification: Bool { !items.isEmpty }
+    /// When true, all auto-dismiss timers are paused (keyboard focus mode).
+    var pauseAutoDismiss: Bool = false {
+        didSet {
+            if pauseAutoDismiss {
+                // Cancel all pending dismiss timers
+                for task in dismissTasks.values { task.cancel() }
+                dismissTasks.removeAll()
+            } else {
+                // Re-schedule dismiss for all items
+                for item in items {
+                    let delay = item.autoDismissAfter ?? fallbackTimeout
+                    scheduleDismiss(id: item.id, after: delay)
+                }
+            }
+        }
+    }
 
     func enqueue(_ item: Item) {
         guard !items.contains(where: { $0.id == item.id }) else {
@@ -41,6 +57,7 @@ final class NotchNotificationManager {
 
     /// Called from content view (e.g. marquee complete) to dismiss after a short linger.
     func requestDismiss(id: String, afterLinger: TimeInterval = 2) {
+        guard !pauseAutoDismiss else { return }
         Log.notification.debug("requestDismiss id=\(id) linger=\(afterLinger)s")
         dismissTasks[id]?.cancel()
         dismissTasks[id] = Task {
@@ -63,7 +80,8 @@ final class NotchNotificationManager {
         items.removeAll()
     }
 
-    private func scheduleDismiss(id: String, after delay: TimeInterval) {
+    func scheduleDismiss(id: String, after delay: TimeInterval) {
+        guard !pauseAutoDismiss else { return }
         dismissTasks[id]?.cancel()
         dismissTasks[id] = Task {
             try? await Task.sleep(for: .seconds(delay))

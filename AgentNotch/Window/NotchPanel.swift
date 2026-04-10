@@ -2,6 +2,9 @@ import AppKit
 
 @MainActor
 final class NotchPanel: NSPanel {
+    /// Set to true temporarily when keyboard focus is needed (e.g. notification navigation).
+    var allowKeyFocus: Bool = false
+
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
@@ -22,9 +25,8 @@ final class NotchPanel: NSPanel {
             .canJoinAllSpaces,
             .ignoresCycle,
         ]
-        // No ignoresMouseEvents — small window + canBecomeKey=false handles passthrough.
     }
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { allowKeyFocus }
     override var canBecomeMain: Bool { false }
 }
