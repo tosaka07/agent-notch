@@ -60,10 +60,10 @@ final class NotchNotificationManager {
         guard !pauseAutoDismiss else { return }
         Log.notification.debug("requestDismiss id=\(id) linger=\(afterLinger)s")
         dismissTasks[id]?.cancel()
-        dismissTasks[id] = Task {
+        dismissTasks[id] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(afterLinger))
             guard !Task.isCancelled else { return }
-            dismiss(id: id)
+            self?.dismiss(id: id)
         }
     }
 
@@ -83,10 +83,10 @@ final class NotchNotificationManager {
     func scheduleDismiss(id: String, after delay: TimeInterval) {
         guard !pauseAutoDismiss else { return }
         dismissTasks[id]?.cancel()
-        dismissTasks[id] = Task {
+        dismissTasks[id] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
-            dismiss(id: id)
+            self?.dismiss(id: id)
         }
     }
 }
