@@ -36,65 +36,32 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var tmuxPaneTarget: String?
     /// Whether terminal info resolution has been attempted (prevents repeated retries)
     public var terminalInfoResolved: Bool = false
+    /// Session title from transcript (customTitle or slug)
+    public var sessionTitle: String?
+    /// Whether session title has been resolved from transcript
+    public var sessionTitleResolved: Bool = false
     public var pendingQuestion: PendingQuestion?
     public var lastActivityAt: Date
+
+    /// `GitInfoResolver.resolve(cwd:)` で非同期に解決された git メタ情報のキャッシュ。
+    /// 未解決の間は nil。`EventProcessor.backfillSession` が初回に一度だけセットする。
+    public var gitInfo: GitInfo?
+    /// `gitInfo` の解決が試行済みかのフラグ（リゾルブが nil を返した時の再試行を防ぐ）。
+    public var gitInfoResolved: Bool = false
 
     public var elapsedTime: TimeInterval {
         let end = endedAt ?? Date()
         return end.timeIntervalSince(startedAt)
     }
 
-    /// Resolves the git directory — handles both normal repos and worktrees.
-    /// Normal: `{cwd}/.git/` is a directory → returns it.
-    /// Worktree: `{cwd}/.git` is a file containing `gitdir: ...` → follows the pointer.
-    private var resolvedGitDir: (gitDir: String, worktreeName: String?)? {
-        guard let cwd else { return nil }
-        let dotGit = (cwd as NSString).appendingPathComponent(".git")
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: dotGit, isDirectory: &isDir) else { return nil }
-        if isDir.boolValue {
-            return (dotGit, nil)
-        }
-        // Worktree: .git is a file like "gitdir: /path/to/main/.git/worktrees/wt-name"
-        guard let content = try? String(contentsOfFile: dotGit, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
-              content.hasPrefix("gitdir: ") else { return nil }
-        let gitDir = String(content.dropFirst("gitdir: ".count))
-        // Extract worktree name from path: .../worktrees/{name}
-        let parts = (gitDir as NSString).pathComponents
-        let wtName: String?
-        if parts.count >= 2, parts[parts.count - 2] == "worktrees" {
-            wtName = parts.last
-        } else {
-            wtName = nil
-        }
-        return (gitDir, wtName)
-    }
+    /// 解決済みの branch 名（未解決 or git 管理外なら nil）。
+    public var gitBranch: String? { gitInfo?.branch }
 
-    public var gitBranch: String? {
-        guard let info = resolvedGitDir else { return nil }
-        let headPath = (info.gitDir as NSString).appendingPathComponent("HEAD")
-        guard let content = try? String(contentsOfFile: headPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
-        let prefix = "ref: refs/heads/"
-        guard content.hasPrefix(prefix) else { return nil }
-        return String(content.dropFirst(prefix.count))
-    }
+    /// worktree の場合の元リポジトリ名。
+    public var originRepoName: String? { gitInfo?.originRepoName }
 
-    /// The name of the original repository when in a worktree.
-    /// Derived from the gitdir pointer: `.../original-repo/.git/worktrees/wt-name`
-    public var originRepoName: String? {
-        guard let info = resolvedGitDir, info.worktreeName != nil else { return nil }
-        // gitDir = /path/to/original-repo/.git/worktrees/wt-name
-        // Go up 3 levels: worktrees → .git → original-repo
-        let p1 = (info.gitDir as NSString).deletingLastPathComponent  // .../original-repo/.git/worktrees
-        let p2 = (p1 as NSString).deletingLastPathComponent           // .../original-repo/.git
-        let repoPath = (p2 as NSString).deletingLastPathComponent     // .../original-repo
-        let name = (repoPath as NSString).lastPathComponent
-        return name.isEmpty ? nil : name
-    }
-
-    public var worktreeName: String? {
-        resolvedGitDir?.worktreeName
-    }
+    /// worktree 名（worktree でなければ nil）。
+    public var worktreeName: String? { gitInfo?.worktreeName }
 
     public init(
         id: String,
