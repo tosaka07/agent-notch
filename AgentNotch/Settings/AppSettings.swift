@@ -1,5 +1,12 @@
+import AgentNotchCore
 import Defaults
 import SwiftUI
+
+// MARK: - Defaults conformance for Core types
+
+extension SessionSortOrder: Defaults.Serializable {}
+extension SessionGrouping: Defaults.Serializable {}
+extension SessionUserState: Defaults.Serializable {}
 
 enum TextSizePreference: String, Defaults.Serializable, CaseIterable, Sendable {
     case small
@@ -146,4 +153,14 @@ extension Defaults.Keys {
     static let soundPermission = Key<SoundChoice>("soundPermission", default: .system("Funk"))
     static let soundError = Key<SoundChoice>("soundError", default: .system("Basso"))
     static let soundEnabled = Key<Bool>("soundEnabled", default: true)
+
+    // Session list sort / grouping
+    static let sessionSortOrder = Key<SessionSortOrder>("sessionSortOrder", default: .latestActivity)
+    static let sessionGrouping = Key<SessionGrouping>("sessionGrouping", default: .none)
+    /// 折りたたまれているグループキーの集合（keys は groupKey 文字列）。
+    static let collapsedGroupIDs = Key<Set<String>>("collapsedGroupIDs", default: [])
+
+    /// セッションに対する user state（pin/mute/markedDoneAt）。キーは session ID。
+    /// SessionManager からの変更通知で同期される。session 削除時にエントリも削除。
+    static let sessionUserStates = Key<[String: SessionUserState]>("sessionUserStates", default: [:])
 }

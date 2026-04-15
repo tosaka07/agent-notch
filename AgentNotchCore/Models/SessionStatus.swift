@@ -60,4 +60,21 @@ public enum SessionStatus: String, Codable, Sendable {
             return false
         }
     }
+
+    /// 要介入度のランク（0 が最も緊急、値が大きいほど緊急度が低い）。
+    /// CompactPageView の `mostUrgentStatus()` と整合する優先度。
+    public var urgencyRank: Int {
+        switch self {
+        case .permissionWaiting: return 0
+        case .error: return 1
+        case .toolRunning: return 2
+        case .thinking: return 3
+        case .subagentRunning: return 4
+        case .compacting: return 5
+        case .done: return 6
+        case .idle: return 7
+        case .starting: return 8
+        case .completed: return 9
+        }
+    }
 }

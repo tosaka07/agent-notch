@@ -29,6 +29,7 @@ enum SessionFinalizer {
         let isWorktree = session.worktreeName != nil
         let pid = session.pid
         let tty = session.tty
+        let muted = manager.isMuted(sessionId)
 
         Task.detached {
             let metrics = computeMetrics(transcriptPath: transcriptPath, model: model)
@@ -40,20 +41,22 @@ enum SessionFinalizer {
                     s.totalCachedTokens = metrics.cachedTokens
                     s.estimatedCost = metrics.estimatedCost
                 }
-                NotificationCenter.default.post(
-                    name: .agentNotchSessionCompleted,
-                    object: sessionId,
-                    userInfo: [
-                        "projectName": projectName,
-                        "sessionTitle": sessionTitle as Any,
-                        "gitBranch": gitBranch as Any,
-                        "isWorktree": isWorktree,
-                        "message": metrics.lastMessage,
-                        "pid": pid as Any,
-                        "tty": tty as Any,
-                    ]
-                )
-                SoundPlayer.play(.sessionCompleted)
+                if !muted {
+                    NotificationCenter.default.post(
+                        name: .agentNotchSessionCompleted,
+                        object: sessionId,
+                        userInfo: [
+                            "projectName": projectName,
+                            "sessionTitle": sessionTitle as Any,
+                            "gitBranch": gitBranch as Any,
+                            "isWorktree": isWorktree,
+                            "message": metrics.lastMessage,
+                            "pid": pid as Any,
+                            "tty": tty as Any,
+                        ]
+                    )
+                    SoundPlayer.play(.sessionCompleted)
+                }
                 manager.notifyChange()
             }
         }

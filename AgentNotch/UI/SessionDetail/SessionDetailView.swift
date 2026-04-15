@@ -47,8 +47,8 @@ struct SessionDetailView: View {
             }
 
             if let q = session.pendingQuestion {
-                QuestionBanner(question: q.question, options: q.options) { answer in
-                    permissionActions.answerQuestion(session.id, q.toolUseId, answer)
+                QuestionBanner(questions: q.questions) { answers in
+                    permissionActions.answerQuestion(session.id, q.toolUseId, answers)
                 }
                 .padding(.horizontal, 14).padding(.top, 8)
             }
@@ -153,7 +153,31 @@ struct SessionDetailView: View {
                     .font(.system(size: s(9), weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.4))
             }
+
+            actionMenu
         }
+    }
+
+    // MARK: - Action menu
+
+    private var actionMenu: some View {
+        let userState = sessionManager.userState(for: session.id)
+        let isUserDone = sessionManager.isUserDone(session)
+        return SessionActionMenu(
+            userState: userState,
+            isUserDone: isUserDone,
+            onTogglePin: { sessionManager.setPinned(session.id, !userState.pinned) },
+            onToggleMute: { sessionManager.setMuted(session.id, !userState.muted) },
+            onToggleDone: {
+                isUserDone ? sessionManager.unmarkDone(session.id) : sessionManager.markDone(session.id)
+            },
+            onRemove: {
+                sessionManager.removeSession(id: session.id)
+                sessionManager.notifyChange()
+                onBack()
+            },
+            labelSize: s(10)
+        )
     }
 
     // MARK: - Stats Bar

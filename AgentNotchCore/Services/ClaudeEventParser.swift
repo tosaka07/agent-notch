@@ -40,8 +40,46 @@ public struct PermissionInfo: Sendable {
 public struct AskQuestionInfo: Sendable {
     public let sessionId: String
     public let toolUseId: String
-    public let question: String
-    public let options: [String]
+    public let questions: [Question]
+
+    public init(sessionId: String, toolUseId: String, questions: [Question]) {
+        self.sessionId = sessionId
+        self.toolUseId = toolUseId
+        self.questions = questions
+    }
+
+    /// 1 問分の質問。Claude Code の AskUserQuestion は 1-4 問まで同時に送れる。
+    public struct Question: Sendable, Identifiable, Hashable {
+        public let question: String
+        public let header: String?
+        public let multiSelect: Bool
+        public let options: [Option]
+
+        /// 質問文を ID として使う（同一 bundle 内で重複しない前提）。
+        public var id: String { question }
+
+        public init(question: String, header: String?, multiSelect: Bool, options: [Option]) {
+            self.question = question
+            self.header = header
+            self.multiSelect = multiSelect
+            self.options = options
+        }
+    }
+
+    /// 選択肢 1 つ。`label` が表示文字列かつ応答値、`description` は補足説明。
+    public struct Option: Sendable, Identifiable, Hashable {
+        public let label: String
+        public let description: String?
+        public let preview: String?
+
+        public var id: String { label }
+
+        public init(label: String, description: String?, preview: String?) {
+            self.label = label
+            self.description = description
+            self.preview = preview
+        }
+    }
 }
 
 // MARK: - ClaudeEvent
@@ -96,13 +134,9 @@ public enum ClaudeEventParser {
 
             // AskUserQuestion — special handling
             if toolName == "AskUserQuestion" {
-                let questions = rawInput["questions"] as? [[String: Any]] ?? []
-                let firstQ = questions.first
-                let question = firstQ?["question"] as? String ?? "Question from Claude"
-                let options = firstQ?["options"] as? [String] ?? []
+                guard let questions = parseAskQuestions(rawInput: rawInput) else { return .unknown }
                 return .askQuestion(AskQuestionInfo(
-                    sessionId: sessionId, toolUseId: toolUseId,
-                    question: question, options: options
+                    sessionId: sessionId, toolUseId: toolUseId, questions: questions
                 ))
             }
 
@@ -139,6 +173,16 @@ public enum ClaudeEventParser {
             let toolName = json["tool_name"] as? String ?? ""
             let toolUseId = json["tool_use_id"] as? String ?? ""
             let rawInput = json["tool_input"] as? [String: Any] ?? [:]
+
+            // AskUserQuestion は PermissionRequest 経由で届くのが正規ルート。
+            // hook response 側で tool_response を注入できる唯一の経路。
+            if toolName == "AskUserQuestion" {
+                guard let questions = parseAskQuestions(rawInput: rawInput) else { return .unknown }
+                return .askQuestion(AskQuestionInfo(
+                    sessionId: sessionId, toolUseId: toolUseId, questions: questions
+                ))
+            }
+
             let toolInput = rawInput.reduce(into: [String: String]()) { result, pair in
                 result[pair.key] = "\(pair.value)"
             }
@@ -178,5 +222,30 @@ public enum ClaudeEventParser {
         default:
             return .unknown
         }
+    }
+
+    /// `tool_input.questions` を型付きの `[AskQuestionInfo.Question]` にパースする。
+    /// 1 問も取れなければ `nil`。PreToolUse / PermissionRequest の両経路から呼ぶ。
+    private static func parseAskQuestions(rawInput: [String: Any]) -> [AskQuestionInfo.Question]? {
+        let rawQuestions = rawInput["questions"] as? [[String: Any]] ?? []
+        let questions: [AskQuestionInfo.Question] = rawQuestions.compactMap { q in
+            guard let text = q["question"] as? String else { return nil }
+            let rawOptions = q["options"] as? [[String: Any]] ?? []
+            let options: [AskQuestionInfo.Option] = rawOptions.compactMap { o in
+                guard let label = o["label"] as? String else { return nil }
+                return AskQuestionInfo.Option(
+                    label: label,
+                    description: o["description"] as? String,
+                    preview: o["preview"] as? String
+                )
+            }
+            return AskQuestionInfo.Question(
+                question: text,
+                header: q["header"] as? String,
+                multiSelect: q["multiSelect"] as? Bool ?? false,
+                options: options
+            )
+        }
+        return questions.isEmpty ? nil : questions
     }
 }

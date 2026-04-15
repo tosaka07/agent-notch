@@ -2,14 +2,27 @@ import Foundation
 import Network
 
 public struct PendingSocketResponse: Sendable {
+    /// どの hook イベントに応答するか。respondToPermission が stdout (hookSpecificOutput)
+    /// を組み立てるときのイベント名として使う。
+    public enum Kind: String, Sendable {
+        /// PreToolUse hook の AskUserQuestion ツール呼び出しに対する応答
+        case askUserQuestion
+        /// PermissionRequest hook への応答
+        case permissionRequest
+    }
+
+    public let kind: Kind
     public let sessionId: String
     public let toolUseId: String
     public let connection: NWConnection
     public let receivedAt: Date
 
-    public init(sessionId: String, toolUseId: String, connection: NWConnection, receivedAt: Date) {
-        self.sessionId = sessionId; self.toolUseId = toolUseId
-        self.connection = connection; self.receivedAt = receivedAt
+    public init(kind: Kind, sessionId: String, toolUseId: String, connection: NWConnection, receivedAt: Date) {
+        self.kind = kind
+        self.sessionId = sessionId
+        self.toolUseId = toolUseId
+        self.connection = connection
+        self.receivedAt = receivedAt
     }
 }
 
@@ -75,19 +88,49 @@ public final class SocketServer: Sendable {
         _pending.set(response.toolUseId, response)
     }
 
+    /// 通常の PermissionRequest（tool allow/deny）の応答を送る。
     public func respondToPermission(toolUseId: String, decision: String, reason: String?) {
-        guard let pending = _pending.remove(toolUseId) else { return }
         let response: [String: Any] = [
             "hookSpecificOutput": [
                 "hookEventName": "PermissionRequest",
                 "decision": ["behavior": decision, "message": reason ?? ""]
             ]
         ]
-        if let data = try? SocketProtocol.encode(response) {
-            pending.connection.send(content: data, completion: .contentProcessed { _ in
-                pending.connection.cancel()
-            })
+        sendDeferredResponse(toolUseId: toolUseId, response: response, logContext: "permission decision=\(decision)")
+    }
+
+    /// AskUserQuestion の回答を送る。
+    /// Claude Code 内部の期待形式: `hookSpecificOutput.decision.updatedInput.answers` に
+    /// `{question_text: answer_label}` の dict を入れる。
+    public func respondToAskQuestion(toolUseId: String, answers: [String: String]) {
+        let response: [String: Any] = [
+            "hookSpecificOutput": [
+                "hookEventName": "PermissionRequest",
+                "decision": [
+                    "behavior": "allow",
+                    "updatedInput": [
+                        "answers": answers
+                    ]
+                ]
+            ]
+        ]
+        sendDeferredResponse(toolUseId: toolUseId, response: response, logContext: "askUserQuestion answers=\(answers.count)")
+    }
+
+    private func sendDeferredResponse(toolUseId: String, response: [String: Any], logContext: String) {
+        guard let pending = _pending.remove(toolUseId) else {
+            Log.socket.error("sendDeferredResponse: no pending for toolUseId=\(toolUseId) (\(logContext))")
+            return
         }
+        Log.socket.info("sendDeferredResponse kind=\(pending.kind.rawValue) toolUseId=\(toolUseId) \(logContext)")
+        guard let data = try? SocketProtocol.encode(response) else {
+            Log.socket.error("sendDeferredResponse: encode failed")
+            pending.connection.cancel()
+            return
+        }
+        pending.connection.send(content: data, completion: .contentProcessed { _ in
+            pending.connection.cancel()
+        })
     }
 
     public func cancelPending(sessionId: String) {

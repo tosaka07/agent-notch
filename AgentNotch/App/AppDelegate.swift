@@ -14,9 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionActions: socket.permissionActions
     )
     private lazy var sweep = SessionSweepCoordinator(sessionManager: sessionManager)
+    private lazy var userStatePersistence = UserStatePersistenceCoordinator(sessionManager: sessionManager)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.bootstrap()
+        userStatePersistence.start()
         statusBar.install()
         socket.start()
         display.start()
@@ -26,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        userStatePersistence.stop()
         sweep.stop()
         display.stop()
         socket.stop()

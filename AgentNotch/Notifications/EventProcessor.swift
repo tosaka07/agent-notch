@@ -142,14 +142,17 @@ enum EventProcessor {
         let session = manager.session(for: info.sessionId)
             ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
         session.status = .permissionWaiting
-        SoundPlayer.play(.permissionWaiting)
+        let muted = manager.isMuted(info.sessionId)
+        if !muted { SoundPlayer.play(.permissionWaiting) }
         session.pendingPermissions.append(PermissionRequest(
             id: UUID().uuidString, agentType: agentType,
             sessionId: info.sessionId, toolName: info.toolName,
             toolInput: info.toolInput, toolUseId: info.toolUseId,
             timestamp: Date(), canRespond: true
         ))
-        NotificationCenter.default.post(name: .agentNotchAutoExpand, object: info.sessionId)
+        if !muted {
+            NotificationCenter.default.post(name: .agentNotchAutoExpand, object: info.sessionId)
+        }
     }
 
     @MainActor
@@ -160,9 +163,11 @@ enum EventProcessor {
             ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
         session.status = .permissionWaiting
         session.pendingQuestion = PendingQuestion(
-            toolUseId: info.toolUseId, question: info.question, options: info.options
+            toolUseId: info.toolUseId, questions: info.questions
         )
-        NotificationCenter.default.post(name: .agentNotchAutoExpand, object: info.sessionId)
+        if !manager.isMuted(info.sessionId) {
+            NotificationCenter.default.post(name: .agentNotchAutoExpand, object: info.sessionId)
+        }
     }
 
     @MainActor
@@ -193,7 +198,9 @@ enum EventProcessor {
             ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
         session.status = .error
         session.currentTool = nil
-        SoundPlayer.play(.error)
+        if !manager.isMuted(sessionId) {
+            SoundPlayer.play(.error)
+        }
     }
 
     // MARK: - Backfill (socket メッセージに付随するメタ情報を Session に埋める)

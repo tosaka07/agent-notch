@@ -2,10 +2,12 @@ import Foundation
 
 public struct PendingQuestion: Sendable {
     public let toolUseId: String
-    public let question: String
-    public let options: [String]
-    public init(toolUseId: String, question: String, options: [String]) {
-        self.toolUseId = toolUseId; self.question = question; self.options = options
+    /// AskUserQuestion は 1-4 問まとめて送られる。
+    public let questions: [AskQuestionInfo.Question]
+
+    public init(toolUseId: String, questions: [AskQuestionInfo.Question]) {
+        self.toolUseId = toolUseId
+        self.questions = questions
     }
 }
 

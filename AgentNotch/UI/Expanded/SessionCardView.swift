@@ -2,10 +2,20 @@ import AgentNotchCore
 import Defaults
 import SwiftUI
 
+/// SessionCardView の 5 種のコールバックを集約。初期値は全て no-op。
+struct SessionCardActions {
+    var tap: () -> Void = {}
+    var remove: () -> Void = {}
+    var togglePin: () -> Void = {}
+    var toggleMute: () -> Void = {}
+    var toggleDone: () -> Void = {}
+}
+
 struct SessionCardView: View {
     let session: UnifiedSession
-    var onTap: (() -> Void)?
-    var onRemove: (() -> Void)?
+    var userState: SessionUserState = .empty
+    var isUserDone: Bool = false
+    var actions: SessionCardActions = SessionCardActions()
 
     @Default(.textSize) private var textSize
 
@@ -13,9 +23,20 @@ struct SessionCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            // Row 1: Status + Title ... Duration + ×
+            // Row 1: Pin + Status + Title ... Mute + Duration + ⋯ Menu
             HStack(spacing: 6) {
+                if userState.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: s(8), weight: .semibold))
+                        .foregroundStyle(.yellow.opacity(0.7))
+                        .rotationEffect(.degrees(45))
+                }
                 StatusIndicator(status: session.status, size: 7)
+                if userState.muted {
+                    Image(systemName: "speaker.slash.fill")
+                        .font(.system(size: s(8)))
+                        .foregroundStyle(.white.opacity(0.35))
+                }
                 Text(sessionDisplayName)
                     .font(.system(size: s(11), weight: .medium))
                     .foregroundStyle(.white.opacity(0.92))
@@ -26,16 +47,7 @@ struct SessionCardView: View {
                         .font(.system(size: s(9), weight: .medium, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.45))
                 }
-                Button {
-                    onRemove?()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: s(7), weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.25))
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                actionMenu
             }
 
             // Row 2: Model · Project · Branch ... Agent badge
@@ -136,8 +148,26 @@ struct SessionCardView: View {
                     lineWidth: session.status == .done ? 1 : 0.5
                 )
         )
+        .opacity(isUserDone ? 0.5 : 1.0)
         .contentShape(Rectangle())
-        .onTapGesture { onTap?() }
+        .onTapGesture { actions.tap() }
+    }
+
+    // MARK: - Action menu
+
+    private var actionMenu: some View {
+        SessionActionMenu(
+            userState: userState,
+            isUserDone: isUserDone,
+            showTerminalJump: session.pid != nil || session.tty != nil,
+            onTogglePin: actions.togglePin,
+            onToggleMute: actions.toggleMute,
+            onToggleDone: actions.toggleDone,
+            onJumpToTerminal: { TerminalJumper.jump(pid: session.pid, tty: session.tty) },
+            onRemove: actions.remove,
+            labelSize: s(9),
+            labelFrame: CGSize(width: 18, height: 16)
+        )
     }
 
     private var cardBorderColor: Color {

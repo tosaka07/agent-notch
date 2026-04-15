@@ -11,7 +11,9 @@ import SwiftUI
 struct PermissionActions: Sendable {
     var approve: @MainActor (_ sessionId: String, _ toolUseId: String) -> Void = { _, _ in }
     var deny: @MainActor (_ sessionId: String, _ toolUseId: String, _ reason: String?) -> Void = { _, _, _ in }
-    var answerQuestion: @MainActor (_ sessionId: String, _ toolUseId: String, _ answer: String) -> Void = { _, _, _ in }
+    /// AskUserQuestion への応答。`answers` は `{question: [選ばれたラベル]}` の map。
+    /// multiSelect でも single でも配列で渡し、single は要素 1 の配列にする。
+    var answerQuestion: @MainActor (_ sessionId: String, _ toolUseId: String, _ answers: [String: [String]]) -> Void = { _, _, _ in }
 }
 
 extension EnvironmentValues {

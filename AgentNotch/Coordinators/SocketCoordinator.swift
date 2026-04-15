@@ -7,6 +7,10 @@ import Foundation
 final class SocketCoordinator {
     private let sessionManager: SessionManager
     private var socketServer: SocketServer?
+    /// onMessage クロージャから SocketServer 自身を参照するための holder。
+    /// SocketCoordinator が所有することで start() を抜けても解放されない。
+    /// server は weak で持つので循環しない（強参照は socketServer property が担う）。
+    private let serverBox = ServerBox()
 
     init(sessionManager: SessionManager) {
         self.sessionManager = sessionManager
@@ -14,11 +18,13 @@ final class SocketCoordinator {
 
     func start() {
         let manager = sessionManager
+        let serverBox = self.serverBox
+
         do {
-            let server = try SocketServer { message, _ in
+            let server = try SocketServer { [serverBox] message, connection in
                 // Parse off MainActor — pure data processing
                 let parsed = EventProcessor.parseMessage(message)
-                // Capture needed fields before crossing isolation boundary
+                let hookEvent = message["hook_event_name"] as? String ?? ""
                 let cwd = message["cwd"] as? String
                 let transcriptPath = message["transcript_path"] as? String
                 let pid = (message["_pid"] as? NSNumber)?.int32Value
@@ -32,14 +38,42 @@ final class SocketCoordinator {
                     )
                 }
 
-                // Never block the agent — respond immediately
-                return [String: Any]()
+                // `PermissionRequest` hook 経由のときだけ deferred にする（tool_response を注入できる唯一の経路）。
+                // `PreToolUse` 経由の AskUserQuestion は即時応答しないと agent がブロックされる上、
+                // 応答しても tool_response にならないので pass-through。
+                let deferred: (kind: PendingSocketResponse.Kind, sessionId: String, toolUseId: String)?
+                switch parsed.event {
+                case let .askQuestion(info) where hookEvent == "PermissionRequest":
+                    deferred = (.askUserQuestion, info.sessionId, info.toolUseId)
+                case let .permissionRequested(info):
+                    deferred = (.permissionRequest, info.sessionId, info.toolUseId)
+                default:
+                    deferred = nil
+                }
+
+                guard let d = deferred else { return [String: Any]() }
+                serverBox.server?.addPending(PendingSocketResponse(
+                    kind: d.kind,
+                    sessionId: d.sessionId,
+                    toolUseId: d.toolUseId,
+                    connection: connection,
+                    receivedAt: Date()
+                ))
+                Log.socket.info("Deferred \(d.kind.rawValue) toolUseId=\(d.toolUseId)")
+                return nil
             }
+            serverBox.server = server
             server.start()
             socketServer = server
         } catch {
             Log.socket.error("Failed to start socket server: \(error)")
         }
+    }
+
+    /// onMessage クロージャから SocketServer 自身を参照するための holder。
+    /// `server` は weak 参照。強参照は SocketCoordinator.socketServer が持つので循環しない。
+    private final class ServerBox: @unchecked Sendable {
+        weak var server: SocketServer?
     }
 
     func stop() {
@@ -58,37 +92,41 @@ final class SocketCoordinator {
             deny: { [weak self] sessionId, toolUseId, reason in
                 self?.deny(sessionId: sessionId, toolUseId: toolUseId, reason: reason)
             },
-            answerQuestion: { [weak self] sessionId, toolUseId, answer in
-                self?.answer(sessionId: sessionId, toolUseId: toolUseId, answer: answer)
+            answerQuestion: { [weak self] sessionId, toolUseId, answers in
+                self?.answer(sessionId: sessionId, toolUseId: toolUseId, answers: answers)
             }
         )
     }
 
     private func approve(sessionId: String, toolUseId: String) {
         socketServer?.respondToPermission(toolUseId: toolUseId, decision: "allow", reason: nil)
-        if let session = sessionManager.session(for: sessionId) {
-            session.pendingPermissions.removeAll { $0.toolUseId == toolUseId }
-            session.status = .thinking
-            sessionManager.notifyChange()
-        }
+        clearPendingPermission(sessionId: sessionId, toolUseId: toolUseId)
     }
 
     private func deny(sessionId: String, toolUseId: String, reason: String?) {
         socketServer?.respondToPermission(toolUseId: toolUseId, decision: "deny", reason: reason)
-        if let session = sessionManager.session(for: sessionId) {
-            session.pendingPermissions.removeAll { $0.toolUseId == toolUseId }
-            session.status = .thinking
-            sessionManager.notifyChange()
-        }
+        clearPendingPermission(sessionId: sessionId, toolUseId: toolUseId)
     }
 
-    private func answer(sessionId: String, toolUseId: String, answer: String) {
-        // AskUserQuestion response format
-        socketServer?.respondToPermission(toolUseId: toolUseId, decision: "allow", reason: answer)
+    /// AskUserQuestion の回答を Claude Code の仕様に合わせて送る。
+    /// `decision.updatedInput.answers` に `{question: answer}` 形式で注入される。
+    /// multi-select の場合は value を " / " で結合する（Claude Code は単一文字列を期待）。
+    private func answer(sessionId: String, toolUseId: String, answers: [String: [String]]) {
+        let flatAnswers = answers.reduce(into: [String: String]()) { result, pair in
+            result[pair.key] = pair.value.joined(separator: " / ")
+        }
+        socketServer?.respondToAskQuestion(toolUseId: toolUseId, answers: flatAnswers)
         if let session = sessionManager.session(for: sessionId) {
             session.pendingQuestion = nil
             session.status = .thinking
             sessionManager.notifyChange()
         }
+    }
+
+    private func clearPendingPermission(sessionId: String, toolUseId: String) {
+        guard let session = sessionManager.session(for: sessionId) else { return }
+        session.pendingPermissions.removeAll { $0.toolUseId == toolUseId }
+        session.status = .thinking
+        sessionManager.notifyChange()
     }
 }

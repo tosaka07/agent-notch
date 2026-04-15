@@ -14,6 +14,9 @@ public enum HookInstaller {
         ("PostToolUse", "", nil),
         ("PostToolUseFailure", "", nil),
         ("Notification", "", nil),
+        // PermissionRequest: tool 実行前の権限確認 + AskUserQuestion の両方がこの hook 経由で届く。
+        // GUI での回答/承認を待つため timeout を 24h に伸ばす。
+        ("PermissionRequest", "*", 86400),
         ("Stop", nil, nil),
         ("StopFailure", nil, nil),
         ("SubagentStart", nil, nil),

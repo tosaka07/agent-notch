@@ -64,4 +64,116 @@ struct SessionManagerTests {
         let manager = SessionManager()
         #expect(manager.session(for: "nonexistent") == nil)
     }
+
+    // MARK: - Sort / Group tests
+
+    @Test("sortedSessions by urgency prioritizes permissionWaiting over idle")
+    func sortUrgency() {
+        let manager = SessionManager()
+        let idle = manager.getOrCreateSession(id: "idle", agentType: .claudeCode)
+        idle.status = .idle
+        let waiting = manager.getOrCreateSession(id: "waiting", agentType: .claudeCode)
+        waiting.status = .permissionWaiting
+        let running = manager.getOrCreateSession(id: "running", agentType: .claudeCode)
+        running.status = .toolRunning
+
+        let sorted = manager.sortedSessions(order: .urgency)
+        #expect(sorted.map(\.id) == ["waiting", "running", "idle"])
+    }
+
+    @Test("Pinned session always sorts first regardless of order")
+    func pinnedFirst() {
+        let manager = SessionManager()
+        let a = manager.getOrCreateSession(id: "a", agentType: .claudeCode)
+        a.status = .permissionWaiting
+        let b = manager.getOrCreateSession(id: "b", agentType: .claudeCode)
+        b.status = .idle
+
+        manager.setPinned("b", true)
+
+        let sorted = manager.sortedSessions(order: .urgency)
+        #expect(sorted.first?.id == "b")
+        #expect(sorted.last?.id == "a")
+    }
+
+    @Test("markDone sinks session to the bottom; new activity auto-unsinks")
+    func markDoneAutoClears() {
+        let manager = SessionManager()
+        let a = manager.getOrCreateSession(id: "a", agentType: .claudeCode)
+        a.status = .idle
+        let b = manager.getOrCreateSession(id: "b", agentType: .claudeCode)
+        b.status = .idle
+
+        // b をマーク済みにすると下に沈む
+        manager.markDone("b")
+        var sorted = manager.sortedSessions(order: .latestActivity)
+        #expect(sorted.last?.id == "b")
+        #expect(manager.isUserDone(b))
+
+        // 新しい activity が来ると自動解除される
+        b.lastActivityAt = Date().addingTimeInterval(1)
+        #expect(manager.isUserDone(b) == false)
+        sorted = manager.sortedSessions(order: .latestActivity)
+        #expect(sorted.first?.id == "b")
+    }
+
+    @Test("groupedSessions by status returns groups ordered by urgency")
+    func groupByStatus() {
+        let manager = SessionManager()
+        let a = manager.getOrCreateSession(id: "a", agentType: .claudeCode)
+        a.status = .idle
+        let b = manager.getOrCreateSession(id: "b", agentType: .claudeCode)
+        b.status = .permissionWaiting
+        let c = manager.getOrCreateSession(id: "c", agentType: .claudeCode)
+        c.status = .permissionWaiting
+
+        let groups = manager.groupedSessions(order: .latestActivity, grouping: .status)
+        #expect(groups.count == 2)
+        // permissionWaiting グループが先
+        #expect(groups.first?.title == SessionStatus.permissionWaiting.label)
+        #expect(groups.first?.sessions.count == 2)
+        #expect(groups.last?.title == SessionStatus.idle.label)
+    }
+
+    @Test("groupedSessions by agent splits by agentType")
+    func groupByAgent() {
+        let manager = SessionManager()
+        _ = manager.getOrCreateSession(id: "c1", agentType: .claudeCode)
+        _ = manager.getOrCreateSession(id: "c2", agentType: .claudeCode)
+        _ = manager.getOrCreateSession(id: "x1", agentType: .codex)
+
+        let groups = manager.groupedSessions(order: .latestActivity, grouping: .agent)
+        #expect(groups.count == 2)
+    }
+
+    @Test("removeSession also removes userState")
+    func removeSessionDropsUserState() {
+        let manager = SessionManager()
+        _ = manager.getOrCreateSession(id: "s", agentType: .claudeCode)
+        manager.setPinned("s", true)
+        manager.setMuted("s", true)
+        #expect(manager.userStates.count == 1)
+
+        manager.removeSession(id: "s")
+        #expect(manager.userStates.isEmpty)
+    }
+
+    @Test("setPinned false with no other state cleans up userState entry")
+    func emptyUserStateCleanup() {
+        let manager = SessionManager()
+        _ = manager.getOrCreateSession(id: "s", agentType: .claudeCode)
+        manager.setPinned("s", true)
+        #expect(manager.userStates.count == 1)
+        manager.setPinned("s", false)
+        #expect(manager.userStates.isEmpty)
+    }
+
+    @Test("isMuted reflects userState")
+    func isMutedReflects() {
+        let manager = SessionManager()
+        _ = manager.getOrCreateSession(id: "s", agentType: .claudeCode)
+        #expect(manager.isMuted("s") == false)
+        manager.setMuted("s", true)
+        #expect(manager.isMuted("s"))
+    }
 }
