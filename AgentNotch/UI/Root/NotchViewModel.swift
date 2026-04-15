@@ -1,0 +1,97 @@
+import AgentNotchCore
+import SwiftUI
+
+@MainActor
+@Observable
+final class NotchViewModel {
+    var mode: NotchMode = .compact {
+        didSet {
+            if mode != oldValue {
+                Log.panel.info("Mode: \(oldValue) → \(mode)")
+            }
+        }
+    }
+    var isHovering: Bool = false {
+        didSet {
+            if isHovering != oldValue {
+                Log.panel.debug("Hovering: \(isHovering)")
+            }
+        }
+    }
+
+    var physicalNotchWidth: CGFloat
+    var physicalNotchHeight: CGFloat
+    var hasActivity: Bool = false
+
+    init(notchSize: CGSize = CGSize(width: 224, height: 38), initialMode: NotchMode = .compact) {
+        self.physicalNotchWidth = notchSize.width
+        self.physicalNotchHeight = notchSize.height
+        self.mode = initialMode
+    }
+
+    private let notchCornerMargin: CGFloat = 6
+
+    var sideWidth: CGFloat {
+        max(0, physicalNotchHeight - 12) + 10
+    }
+
+    private var compactWidth: CGFloat {
+        physicalNotchWidth + notchCornerMargin + (2 * sideWidth)
+    }
+
+    var notchWidth: CGFloat {
+        switch mode {
+        case .compact:
+            return isHovering ? compactWidth + 16 : compactWidth
+        case .notification:
+            return compactWidth
+        case .expanded: return 520
+        case .sessionDetail: return 620
+        }
+    }
+
+    var notificationCount: Int = 0
+
+    private let notificationItemHeight: CGFloat = 42
+
+    var notchHeight: CGFloat {
+        switch mode {
+        case .compact:
+            return isHovering ? physicalNotchHeight + 6 : physicalNotchHeight
+        case .notification:
+            let count = max(notificationCount, 1)
+            return physicalNotchHeight + notificationItemHeight * CGFloat(count) + 6
+        case .expanded:
+            return 380
+        case .sessionDetail:
+            return 500
+        }
+    }
+
+    var topCornerRadius: CGFloat {
+        switch mode {
+        case .compact, .notification: 6
+        case .expanded, .sessionDetail: 12
+        }
+    }
+
+    var bottomCornerRadius: CGFloat {
+        switch mode {
+        case .compact: 14
+        case .notification: 16
+        case .expanded, .sessionDetail: 24
+        }
+    }
+
+    func toggle() {
+        switch mode {
+        case .compact, .notification: mode = .expanded
+        case .expanded: mode = .compact
+        case .sessionDetail: mode = .expanded
+        }
+    }
+
+    func close() { mode = .compact }
+    func showSession(_ id: String) { mode = .sessionDetail(sessionId: id) }
+    func backToList() { mode = .expanded }
+}

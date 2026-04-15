@@ -39,7 +39,7 @@ final class NotchWindowController {
         )
     }
 
-    func show(contentView: NotchContentView) {
+    func show(contentView: NotchRootView) {
         let size = windowSize
         let frame = NSRect(
             x: screen.frame.midX - size.width / 2,

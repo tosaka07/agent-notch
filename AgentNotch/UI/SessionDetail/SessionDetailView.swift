@@ -11,6 +11,7 @@ struct SessionDetailView: View {
     @State private var isLoading = true
     @State private var isAtBottom = true
     @Default(.textSize) private var textSize
+    @Environment(\.permissionActions) private var permissionActions
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
@@ -36,13 +37,10 @@ struct SessionDetailView: View {
                 PermissionBanner(
                     permission: perm,
                     onApprove: {
-                        (NSApp.delegate as? AppDelegate)?.approvePermission(
-                            sessionId: session.id, toolUseId: perm.toolUseId)
+                        permissionActions.approve(session.id, perm.toolUseId)
                     },
                     onDeny: {
-                        (NSApp.delegate as? AppDelegate)?.denyPermission(
-                            sessionId: session.id, toolUseId: perm.toolUseId,
-                            reason: "Denied via Agent Notch")
+                        permissionActions.deny(session.id, perm.toolUseId, "Denied via Agent Notch")
                     }
                 )
                 .padding(.horizontal, 14).padding(.top, 8)
@@ -50,8 +48,7 @@ struct SessionDetailView: View {
 
             if let q = session.pendingQuestion {
                 QuestionBanner(question: q.question, options: q.options) { answer in
-                    (NSApp.delegate as? AppDelegate)?.answerQuestion(
-                        sessionId: session.id, toolUseId: q.toolUseId, answer: answer)
+                    permissionActions.answerQuestion(session.id, q.toolUseId, answer)
                 }
                 .padding(.horizontal, 14).padding(.top, 8)
             }
@@ -76,13 +73,23 @@ struct SessionDetailView: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
-                    Text(session.agentType.displayName)
+                    Text(session.sessionTitle ?? projectName(session.cwd))
                         .font(.system(size: s(11), weight: .medium))
                         .foregroundStyle(.white.opacity(0.92))
-                    Text(projectName(session.cwd))
-                        .font(.system(size: s(9), design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
                         .lineLimit(1)
+                    Text(session.agentType.displayName)
+                        .font(.system(size: s(8), weight: .medium))
+                        .foregroundStyle(session.agentType.color.opacity(0.7))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(session.agentType.color.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                    if session.sessionTitle != nil {
+                        Text(projectName(session.cwd))
+                            .font(.system(size: s(9), design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.35))
+                            .lineLimit(1)
+                    }
                 }
                 HStack(spacing: 4) {
                     if let model = session.model {
