@@ -12,13 +12,14 @@ struct SessionCardView: View {
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Row 1: Status + Agent name + Duration
+        VStack(alignment: .leading, spacing: 3) {
+            // Row 1: Status + Title ... Duration + ×
             HStack(spacing: 6) {
                 StatusIndicator(status: session.status, size: 7)
-                Text(session.agentType.displayName)
+                Text(sessionDisplayName)
                     .font(.system(size: s(11), weight: .medium))
                     .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
                 Spacer()
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     Text(RelativeTimeFormatter.format(since: session.startedAt, relativeTo: context.date))
@@ -36,9 +37,8 @@ struct SessionCardView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.bottom, 4)
 
-            // Row 2: Model + Project name + Branch
+            // Row 2: Model · Project · Branch ... Agent badge
             HStack(spacing: 0) {
                 if let model = session.model {
                     Text(shortModel(model))
@@ -68,11 +68,17 @@ struct SessionCardView: View {
                         .truncationMode(.tail)
                 }
                 Spacer()
+                Text(session.agentType.displayName)
+                    .font(.system(size: s(8), weight: .medium))
+                    .foregroundStyle(session.agentType.color.opacity(0.7))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(session.agentType.color.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
             }
             .font(.system(size: s(9), design: .monospaced))
-            .padding(.bottom, 6)
 
-            // Row 3: Tool activity — fixed height
+            // Row 3: Tool activity ... Terminal jump
             HStack(spacing: 4) {
                 if let tool = session.currentTool, tool.status == .running {
                     PulsingDot(color: session.status.color, size: 4)
@@ -89,7 +95,6 @@ struct SessionCardView: View {
                         .foregroundStyle(.white.opacity(0.3))
                 }
                 Spacer()
-
                 if session.pid != nil || session.tty != nil {
                     Button {
                         TerminalJumper.jump(pid: session.pid, tty: session.tty)
@@ -152,6 +157,12 @@ struct SessionCardView: View {
             return "\(parts[1])-\(parts[2])"
         }
         return model
+    }
+
+    /// Display name: customTitle > slug > project directory
+    private var sessionDisplayName: String {
+        if let title = session.sessionTitle, !title.isEmpty { return title }
+        return projectName(session.cwd)
     }
 
     private func projectName(_ path: String?) -> String {

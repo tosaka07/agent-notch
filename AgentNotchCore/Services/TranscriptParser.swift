@@ -37,6 +37,35 @@ public enum TranscriptParser {
         return total
     }
 
+    /// Extracts the session title from the transcript.
+    /// Priority: customTitle (user-set via /rename) > slug (auto-generated).
+    public static func sessionTitle(at path: String) -> String? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let content = String(data: data, encoding: .utf8) else { return nil }
+
+        var slug: String?
+
+        for line in content.components(separatedBy: .newlines) {
+            guard !line.isEmpty,
+                  let lineData = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any]
+            else { continue }
+
+            // customTitle takes priority — return immediately
+            if json["type"] as? String == "custom-title",
+               let title = json["customTitle"] as? String, !title.isEmpty {
+                return title
+            }
+
+            // Capture slug from any entry (first occurrence is enough)
+            if slug == nil, let s = json["slug"] as? String, !s.isEmpty {
+                slug = s
+            }
+        }
+
+        return slug
+    }
+
     /// Returns the last assistant text message from the transcript (for completion notifications).
     public static func lastAssistantMessage(at path: String) -> String? {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),

@@ -27,8 +27,8 @@ struct StatusIndicator: View {
                 doneOpacity = 1.0
                 withAnimation { isAnimating = true }
                 if newStatus == .done {
-                    withAnimation(.easeOut(duration: 0.5).delay(2.0)) {
-                        doneOpacity = 0
+                    withAnimation(.easeOut(duration: 1.0).delay(2.0)) {
+                        doneOpacity = 0.5
                     }
                 }
             }
