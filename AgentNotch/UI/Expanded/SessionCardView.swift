@@ -134,12 +134,15 @@ struct SessionCardView: View {
         case .lastUserMessage: session.lastUserPrompt ?? session.firstUserPrompt ?? session.sessionTitle
         }
         if let prompt, !prompt.isEmpty {
-            HStack(alignment: .top, spacing: 4) {
+            let flat = prompt.replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+                .replacingOccurrences(of: "  ", with: " ")
+            HStack(spacing: 4) {
                 Text(">")
                     .foregroundStyle(DSColors.inkMute)
-                Text(prompt)
+                Text(flat)
                     .foregroundStyle(DSColors.inkDim)
-                    .lineLimit(3)
+                    .lineLimit(1)
                     .truncationMode(.tail)
             }
             .font(DSTypography.mono(s(9)))
