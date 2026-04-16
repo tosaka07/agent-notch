@@ -12,6 +12,7 @@ struct SettingsView: View {
     @Default(.soundCompleted) var soundCompleted
     @Default(.soundPermission) var soundPermission
     @Default(.soundError) var soundError
+    @Default(.cardPromptSource) var cardPromptSource
     var onClose: (() -> Void)? = nil
 
     var body: some View {
@@ -79,6 +80,12 @@ struct SettingsView: View {
             }
 
             Section("セッション") {
+                Picker("プロンプト表示", selection: $cardPromptSource) {
+                    ForEach(CardPromptSource.allCases, id: \.self) { source in
+                        Text(source.label).tag(source)
+                    }
+                }
+
                 Picker("自動削除", selection: $sessionTimeout) {
                     ForEach(SessionTimeoutPreference.allCases, id: \.self) { pref in
                         Text(pref.label).tag(pref)

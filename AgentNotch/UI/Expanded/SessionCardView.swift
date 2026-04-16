@@ -11,6 +11,20 @@ struct SessionCardActions {
     var toggleDone: () -> Void = {}
 }
 
+/// セッション一覧の 1 行。
+///
+/// # レイアウト（3 行 + task）
+/// ```
+/// [dot] repo · branch                    2m [app] [⋯]
+///       > fixing auth bug in login flow
+///       Edit src/auth.swift ── summary
+///       □ Add validation  ■ Fix endpoint  ▪ Write tests
+/// ```
+///
+/// - 行 1: identity (repo · branch) + time + jump icon + menu
+/// - 行 2: 目的 (firstUserPrompt、fallback: sessionTitle)
+/// - 行 3: 現在の activity (tool + summary、状態に応じて変化)
+/// - 行 4: task 一覧 (0 件なら非表示)
 struct SessionCardView: View {
     let session: UnifiedSession
     var userState: SessionUserState = .empty
@@ -18,170 +32,243 @@ struct SessionCardView: View {
     var actions: SessionCardActions = SessionCardActions()
 
     @Default(.textSize) private var textSize
-
+    @Default(.cardPromptSource) private var promptSource
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            // Row 1: Pin + Status + Title ... Mute + Duration + ⋯ Menu
-            HStack(spacing: 6) {
-                if userState.pinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: s(8), weight: .semibold))
-                        .foregroundStyle(.yellow.opacity(0.7))
-                        .rotationEffect(.degrees(45))
-                }
-                StatusIndicator(status: session.status, size: 7)
-                if userState.muted {
-                    Image(systemName: "speaker.slash.fill")
-                        .font(.system(size: s(8)))
-                        .foregroundStyle(.white.opacity(0.35))
-                }
-                Text(sessionDisplayName)
-                    .font(.system(size: s(11), weight: .medium))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(1)
-                Spacer()
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(RelativeTimeFormatter.format(since: session.startedAt, relativeTo: context.date))
-                        .font(.system(size: s(9), weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.45))
-                }
-                actionMenu
-            }
+        HStack(alignment: .top, spacing: 10) {
+            // Left: DotMatrix + meta labels
+            VStack(spacing: 4) {
+                DotMatrix(
+                    pattern: session.status.dotPattern,
+                    cellSize: 3.2,
+                    dotFillRatio: 0.5
+                )
+                .frame(width: 48, height: 48)
 
-            // Row 2: Model · Project · Branch ... Agent badge
-            HStack(spacing: 0) {
                 if let model = session.model {
                     Text(shortModel(model))
-                        .foregroundStyle(.white.opacity(0.4))
-                    Text(" · ")
-                        .foregroundStyle(.white.opacity(0.2))
-                }
-                if let repoName = session.originRepoName {
-                    Text(repoName)
-                        .foregroundStyle(.white.opacity(0.35))
-                } else {
-                    Text(projectName(session.cwd))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .font(DSTypography.mono(s(7)))
+                        .foregroundStyle(DSColors.inkMute)
                         .lineLimit(1)
-                        .truncationMode(.middle)
                 }
-                if let branch = session.gitBranch {
-                    let isWorktree = session.worktreeName != nil
-                    Text(" · ")
-                        .foregroundStyle(.white.opacity(0.2))
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: s(7)))
-                        .foregroundStyle(isWorktree ? .cyan.opacity(0.5) : .white.opacity(0.3))
-                    Text(branch)
-                        .foregroundStyle(isWorktree ? .cyan.opacity(0.4) : .white.opacity(0.35))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                Spacer()
-                Text(session.agentType.displayName)
-                    .font(.system(size: s(8), weight: .medium))
-                    .foregroundStyle(session.agentType.color.opacity(0.7))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(session.agentType.color.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-            }
-            .font(.system(size: s(9), design: .monospaced))
 
-            // Row 3: Tool activity ... Terminal jump
-            HStack(spacing: 4) {
-                if let tool = session.currentTool, tool.status == .running {
-                    PulsingDot(color: session.status.color, size: 4)
-                    Text(tool.name)
-                        .font(.system(size: s(9), weight: .medium, design: .monospaced))
-                        .foregroundStyle(session.status.color.opacity(0.9))
-                    Text(tool.summary)
-                        .font(.system(size: s(9), design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.4))
-                        .lineLimit(1)
-                } else {
-                    Text(session.status.label)
-                        .font(.system(size: s(9), design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.3))
-                }
-                Spacer()
-                if session.pid != nil || session.tty != nil {
-                    Button {
-                        TerminalJumper.jump(pid: session.pid, tty: session.tty)
-                    } label: {
-                        HStack(spacing: 3) {
-                            if let icon = session.terminalAppIcon as? NSImage {
-                                Image(nsImage: icon)
-                                    .resizable()
-                                    .frame(width: s(12), height: s(12))
-                            }
-                            if let name = session.terminalAppName {
-                                Text(name)
-                                    .font(.system(size: s(8), design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.3))
-                            }
-                            if let tmux = session.tmuxPaneTarget {
-                                Text("tmux:\(tmux)")
-                                    .font(.system(size: s(7), design: .monospaced))
-                                    .foregroundStyle(.cyan.opacity(0.35))
-                            }
-                            Image(systemName: "arrow.right.circle")
-                                .font(.system(size: s(8)))
-                                .foregroundStyle(.white.opacity(0.25))
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
+                Text(session.agentType.displayName.uppercased())
+                    .font(DSTypography.mono(s(6), weight: .medium))
+                    .tracking(0.3)
+                    .foregroundStyle(session.agentType.color.opacity(0.5))
             }
-            .frame(height: s(14))
+            .frame(width: 48)
+
+            // Middle: info rows
+            VStack(alignment: .leading, spacing: 3) {
+                identityRow
+                purposeRow
+                activityRow
+                taskRow
+            }
+
+            // Right: action column (menu + app icon)
+            actionColumn
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color.white.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(
-                    cardBorderColor,
-                    lineWidth: session.status == .done ? 1 : 0.5
-                )
-        )
+        .background(Color(red: 0x0C / 255.0, green: 0x13 / 255.0, blue: 0x12 / 255.0))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .opacity(isUserDone ? 0.5 : 1.0)
         .contentShape(Rectangle())
         .onTapGesture { actions.tap() }
     }
 
-    // MARK: - Action menu
+    // MARK: - Row 1: Identity
 
-    private var actionMenu: some View {
-        SessionActionMenu(
-            userState: userState,
-            isUserDone: isUserDone,
-            showTerminalJump: session.pid != nil || session.tty != nil,
-            onTogglePin: actions.togglePin,
-            onToggleMute: actions.toggleMute,
-            onToggleDone: actions.toggleDone,
-            onJumpToTerminal: { TerminalJumper.jump(pid: session.pid, tty: session.tty) },
-            onRemove: actions.remove,
-            labelSize: s(9),
-            labelFrame: CGSize(width: 18, height: 16)
-        )
-    }
+    private let metaFont: CGFloat = 9
 
-    private var cardBorderColor: Color {
-        switch session.status {
-        case .permissionWaiting:
-            session.status.color.opacity(0.5)
-        case .done:
-            Color.green.opacity(0.4)
-        default:
-            Color.white.opacity(0.06)
+    private var identityRow: some View {
+        HStack(alignment: .lastTextBaseline, spacing: 4) {
+            if userState.pinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: s(7)))
+                    .foregroundStyle(.yellow.opacity(0.7))
+                    .rotationEffect(.degrees(45))
+            }
+            if userState.muted {
+                Image(systemName: "speaker.slash.fill")
+                    .font(.system(size: s(7)))
+                    .foregroundStyle(DSColors.inkMute)
+            }
+
+            Text(repoDisplayName)
+                .font(DSTypography.mono(s(10), weight: .medium))
+                .foregroundStyle(DSColors.ink)
+                .lineLimit(1)
+
+            if let branch = session.gitBranch {
+                let isWorktree = session.worktreeName != nil
+                Text("·")
+                    .font(DSTypography.mono(s(metaFont)))
+                    .foregroundStyle(DSColors.inkMute)
+                Text(branch)
+                    .font(DSTypography.mono(s(metaFont)))
+                    .foregroundStyle(isWorktree ? .cyan.opacity(0.5) : DSColors.inkDim)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
+            Spacer()
+
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(RelativeTimeFormatter.format(since: session.lastActivityAt, relativeTo: context.date))
+                    .font(DSTypography.mono(s(metaFont)))
+                    .foregroundStyle(DSColors.inkMute)
+            }
         }
     }
 
+    // MARK: - Row 2: Purpose
+
+    @ViewBuilder
+    private var purposeRow: some View {
+        let prompt: String? = switch promptSource {
+        case .firstUserMessage: session.firstUserPrompt ?? session.sessionTitle
+        case .lastUserMessage: session.lastUserPrompt ?? session.firstUserPrompt ?? session.sessionTitle
+        }
+        if let prompt, !prompt.isEmpty {
+            HStack(alignment: .top, spacing: 4) {
+                Text(">")
+                    .foregroundStyle(DSColors.inkMute)
+                Text(prompt)
+                    .foregroundStyle(DSColors.inkDim)
+                    .lineLimit(3)
+                    .truncationMode(.tail)
+            }
+            .font(DSTypography.mono(s(9)))
+        }
+    }
+
+    // MARK: - Row 3: Activity
+
+    @ViewBuilder
+    private var activityRow: some View {
+        HStack(spacing: 4) {
+            if let tool = session.currentTool, tool.status == .running {
+                Text(tool.name)
+                    .font(DSTypography.mono(s(9), weight: .medium))
+                    .foregroundStyle(session.status.dotPattern.signalColor.opacity(0.9))
+                Text(tool.summary)
+                    .font(DSTypography.mono(s(9)))
+                    .foregroundStyle(DSColors.inkDim)
+                    .lineLimit(1)
+            } else if session.status == .permissionWaiting {
+                if let perm = session.pendingPermissions.first {
+                    Text("APPROVE:")
+                        .font(DSTypography.mono(s(8), weight: .medium))
+                        .tracking(0.5)
+                        .foregroundStyle(DSColors.signalAlert.opacity(0.9))
+                    Text("\(perm.toolName) \(perm.toolInput.values.first ?? "")")
+                        .font(DSTypography.mono(s(9)))
+                        .foregroundStyle(DSColors.inkDim)
+                        .lineLimit(1)
+                } else if session.pendingQuestion != nil {
+                    Text("QUESTION")
+                        .font(DSTypography.mono(s(8), weight: .medium))
+                        .tracking(0.5)
+                        .foregroundStyle(DSColors.signalAlert.opacity(0.9))
+                }
+            } else if session.status == .error {
+                Text("ERROR")
+                    .font(DSTypography.mono(s(8), weight: .medium))
+                    .tracking(0.5)
+                    .foregroundStyle(DSColors.signalError.opacity(0.9))
+            } else if session.status == .done, let msg = session.lastAssistantMessage, !msg.isEmpty {
+                Text(msg)
+                    .font(DSTypography.mono(s(9)))
+                    .foregroundStyle(DSColors.inkDim)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            } else if session.status != .starting {
+                Text(session.status.label.uppercased())
+                    .font(DSTypography.mono(s(8), weight: .medium))
+                    .tracking(0.5)
+                    .foregroundStyle(DSColors.inkMute)
+            }
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Row 4: Tasks
+
+    @ViewBuilder
+    private var taskRow: some View {
+        let tasks = session.tasks
+        if !tasks.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(tasks.prefix(6)) { task in
+                    HStack(spacing: 3) {
+                        Text(task.status.glyph)
+                            .foregroundStyle(task.status.color)
+                        Text(task.subject)
+                            .foregroundStyle(task.status == .completed ? DSColors.inkMute : DSColors.inkDim)
+                            .lineLimit(1)
+                    }
+                }
+                if tasks.count > 6 {
+                    Text("+\(tasks.count - 6)")
+                        .foregroundStyle(DSColors.inkMute)
+                }
+                Spacer()
+            }
+            .font(DSTypography.mono(s(8)))
+        }
+    }
+
+    // MARK: - Right action column
+
+    /// 右端に縦積みで ⊙ menu + app icon を配置。
+    private var actionColumn: some View {
+        VStack(spacing: 4) {
+            // ⊙ Menu (ellipsis.circle)
+            SessionActionMenu(
+                userState: userState,
+                isUserDone: isUserDone,
+                showTerminalJump: session.pid != nil || session.tty != nil,
+                onTogglePin: actions.togglePin,
+                onToggleMute: actions.toggleMute,
+                onToggleDone: actions.toggleDone,
+                onJumpToTerminal: { TerminalJumper.jump(pid: session.pid, tty: session.tty) },
+                onRemove: actions.remove,
+                labelSize: 14,
+                labelFrame: CGSize(width: 28, height: 28),
+                symbolName: "ellipsis.circle"
+            )
+
+            // App icon (jump target)
+            if session.pid != nil || session.tty != nil {
+                Button {
+                    TerminalJumper.jump(pid: session.pid, tty: session.tty)
+                } label: {
+                    if let icon = session.terminalAppIcon as? NSImage {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .frame(width: 20, height: 20)
+                    } else {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(DSColors.inkMute)
+                    }
+                }
+                .buttonStyle(.plain)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
     private func shortModel(_ model: String) -> String {
+        // "claude-sonnet-4-20250514" → "sonnet-4"
         let parts = model.split(separator: "-")
         if parts.count >= 3, parts.first == "claude" {
             return "\(parts[1])-\(parts[2])"
@@ -189,15 +276,34 @@ struct SessionCardView: View {
         return model
     }
 
-    /// Display name: customTitle > slug > project directory
-    private var sessionDisplayName: String {
-        if let title = session.sessionTitle, !title.isEmpty { return title }
-        return projectName(session.cwd)
+    private var repoDisplayName: String {
+        session.originRepoName ?? projectName(session.cwd)
     }
 
     private func projectName(_ path: String?) -> String {
         guard let path else { return "—" }
         let name = (path as NSString).lastPathComponent
         return name.isEmpty ? "—" : name
+    }
+}
+
+// MARK: - AgentTask.Status display
+
+extension AgentTask.Status {
+    /// 工業パネル風グリフ: □ pending / ▪ in_progress / ■ completed
+    var glyph: String {
+        switch self {
+        case .pending: "□"
+        case .inProgress: "▪"
+        case .completed: "■"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .pending: DSColors.inkMute
+        case .inProgress: DSColors.signalThinking
+        case .completed: DSColors.inkDim
+        }
     }
 }

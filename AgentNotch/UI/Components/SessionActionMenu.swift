@@ -14,10 +14,12 @@ struct SessionActionMenu: View {
     let onJumpToTerminal: () -> Void
     let onRemove: () -> Void
 
-    /// Ellipsis ラベルのフォントサイズ（呼び出し側の textSize スケールに合わせる）
+    /// ラベルアイコンのフォントサイズ
     let labelSize: CGFloat
-    /// Ellipsis ラベルのヒットエリアサイズ
+    /// ラベルアイコンのヒットエリアサイズ
     let labelFrame: CGSize
+    /// ラベルに使う SF Symbol 名（デフォルト "ellipsis"）
+    let symbolName: String
 
     init(
         userState: SessionUserState,
@@ -29,7 +31,8 @@ struct SessionActionMenu: View {
         onJumpToTerminal: @escaping () -> Void = {},
         onRemove: @escaping () -> Void,
         labelSize: CGFloat = 10,
-        labelFrame: CGSize = CGSize(width: 22, height: 22)
+        labelFrame: CGSize = CGSize(width: 22, height: 22),
+        symbolName: String = "ellipsis"
     ) {
         self.userState = userState
         self.isUserDone = isUserDone
@@ -41,6 +44,7 @@ struct SessionActionMenu: View {
         self.onRemove = onRemove
         self.labelSize = labelSize
         self.labelFrame = labelFrame
+        self.symbolName = symbolName
     }
 
     var body: some View {
@@ -74,9 +78,9 @@ struct SessionActionMenu: View {
                 Label("一覧から削除", systemImage: "xmark.circle")
             }
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: labelSize, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.4))
+            Image(systemName: symbolName)
+                .font(.system(size: labelSize, weight: .medium))
+                .foregroundStyle(DSColors.inkMute)
                 .frame(width: labelFrame.width, height: labelFrame.height)
                 .contentShape(Rectangle())
         }

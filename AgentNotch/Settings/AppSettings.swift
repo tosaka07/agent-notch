@@ -2,6 +2,18 @@ import AgentNotchCore
 import Defaults
 import SwiftUI
 
+enum CardPromptSource: String, Defaults.Serializable, CaseIterable, Sendable {
+    case firstUserMessage
+    case lastUserMessage
+
+    var label: String {
+        switch self {
+        case .firstUserMessage: "最初のプロンプト"
+        case .lastUserMessage: "最新のプロンプト"
+        }
+    }
+}
+
 // MARK: - Defaults conformance for Core types
 
 extension SessionSortOrder: Defaults.Serializable {}
@@ -163,4 +175,7 @@ extension Defaults.Keys {
     /// セッションに対する user state（pin/mute/markedDoneAt）。キーは session ID。
     /// SessionManager からの変更通知で同期される。session 削除時にエントリも削除。
     static let sessionUserStates = Key<[String: SessionUserState]>("sessionUserStates", default: [:])
+
+    /// セッションカードの目的行に表示するメッセージ。
+    static let cardPromptSource = Key<CardPromptSource>("cardPromptSource", default: .firstUserMessage)
 }

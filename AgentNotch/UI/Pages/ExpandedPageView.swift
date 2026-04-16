@@ -2,7 +2,11 @@ import AgentNotchCore
 import Defaults
 import SwiftUI
 
-/// `expanded` モードの UI。アクティブセッション一覧 + 操作バー（sort / clear all / settings）。
+/// `expanded` モードの UI。アクティブセッション一覧。
+///
+/// # レイアウト
+/// - ヘッダ行は設けない。ソート・設定アイコンは notch 右翼に配置し、
+///   カードを即座に表示してスクロール量を最小化する。
 struct ExpandedPageView: View {
     let viewModel: NotchViewModel
     @ObservedObject var sessionManager: SessionManager
@@ -17,21 +21,19 @@ struct ExpandedPageView: View {
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
     var body: some View {
-        // groupedSessions() は O(n log n)。body 評価ごとに複数回走らせないよう、
-        // ここで一度だけ計算してローカルに保持する。
         let groups = sessionManager.groupedSessions(order: sortOrder, grouping: grouping)
         let totalCount = groups.reduce(0) { $0 + $1.sessions.count }
 
         return VStack(spacing: 0) {
-            Spacer().frame(height: viewModel.physicalNotchHeight + 4)
-
-            header(totalCount: totalCount)
+            // Notch 領域: 右翼にコントロールを配置
+            notchTopBar(totalCount: totalCount)
 
             if totalCount == 0 {
                 Spacer()
-                Text("No active sessions")
-                    .font(.system(size: s(11)))
-                    .foregroundStyle(.white.opacity(0.3))
+                Text("NO ACTIVE SESSIONS")
+                    .font(DSTypography.mono(s(10), weight: .medium))
+                    .tracking(1.5)
+                    .foregroundStyle(DSColors.inkMute)
                 Spacer()
             } else {
                 ScrollView {
@@ -47,72 +49,67 @@ struct ExpandedPageView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Notch top bar (replaces header)
 
-    private func header(totalCount: Int) -> some View {
-        HStack(spacing: 6) {
-            Text("Sessions")
-                .font(.system(size: s(12), weight: .semibold))
-                .foregroundStyle(.white.opacity(0.75))
-
-            if totalCount > 0 {
-                Text("\(totalCount)")
-                    .font(.system(size: s(9), weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.45))
-                    .padding(.horizontal, 5).padding(.vertical, 2)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-            }
-
+    /// 物理 notch の高さ分のスペースを取りつつ、右翼にソート・設定アイコンを配置。
+    private func notchTopBar(totalCount: Int) -> some View {
+        HStack(spacing: 0) {
             Spacer()
 
-            sortButton
+            // 右翼: sort + clear + settings
+            HStack(spacing: 6) {
+                sortButton
 
-            if totalCount > 0 {
-                Button {
-                    sessionManager.removeAllSessions()
-                    sessionManager.notifyChange()
-                } label: {
-                    Image(systemName: "xmark.circle")
-                        .font(.system(size: s(11)))
-                        .foregroundStyle(.white.opacity(0.3))
+                if totalCount > 0 {
+                    iconButton(systemName: "xmark") {
+                        sessionManager.removeAllSessions()
+                        sessionManager.notifyChange()
+                    }
                 }
-                .buttonStyle(.plain)
+                iconButton(systemName: "gearshape") {
+                    SettingsWindowController.shared.show()
+                }
             }
-            Button {
-                SettingsWindowController.shared.show()
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: s(11)))
-                    .foregroundStyle(.white.opacity(0.3))
-            }
-            .buttonStyle(.plain)
+            .padding(.trailing, 16)
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 10)
+        .frame(height: viewModel.physicalNotchHeight + 4)
     }
 
+    private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(DSColors.inkDim)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Sort popover
+
     private var sortButton: some View {
-        Button {
-            showSortMenu.toggle()
-        } label: {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.system(size: s(11)))
-                .foregroundStyle(.white.opacity(0.3))
+        Button { showSortMenu.toggle() } label: {
+            Image(systemName: "line.3.horizontal.decrease")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(DSColors.inkDim)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showSortMenu, arrowEdge: .top) {
             sortPopoverContent
-                .padding(10)
-                .frame(width: 180)
+                .padding(12)
+                .frame(width: 200)
         }
     }
 
     private var sortPopoverContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("並び替え")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+            Text("SORT BY")
+                .font(DSTypography.mono(10, weight: .medium))
+                .tracking(1.0)
+                .foregroundStyle(DSColors.inkDim)
             ForEach(SessionSortOrder.allCases, id: \.self) { order in
                 selectableRow(isSelected: sortOrder == order, label: order.label) {
                     sortOrder = order
@@ -121,9 +118,10 @@ struct ExpandedPageView: View {
 
             Divider().padding(.vertical, 2)
 
-            Text("グループ化")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+            Text("GROUP BY")
+                .font(DSTypography.mono(10, weight: .medium))
+                .tracking(1.0)
+                .foregroundStyle(DSColors.inkDim)
             ForEach(SessionGrouping.allCases, id: \.self) { group in
                 selectableRow(isSelected: grouping == group, label: group.label) {
                     grouping = group
@@ -132,14 +130,20 @@ struct ExpandedPageView: View {
         }
     }
 
-    private func selectableRow(isSelected: Bool, label: String, action: @escaping () -> Void) -> some View {
+    private func selectableRow(
+        isSelected: Bool,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: isSelected ? "checkmark" : "")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 12)
-                Text(label)
-                    .font(.system(size: 12))
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .frame(width: 10)
+                    .foregroundStyle(isSelected ? Color.primary : Color.clear)
+                Text(label.uppercased())
+                    .font(DSTypography.mono(11))
+                    .tracking(0.5)
                 Spacer()
             }
             .contentShape(Rectangle())
@@ -152,7 +156,6 @@ struct ExpandedPageView: View {
     @ViewBuilder
     private func groupSection(_ group: SessionGroup) -> some View {
         if grouping == .none {
-            // フラット表示
             ForEach(group.sessions) { session in
                 sessionCard(session)
             }
@@ -179,20 +182,18 @@ struct ExpandedPageView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                    .font(.system(size: s(9), weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .font(.system(size: s(8), weight: .semibold))
+                    .foregroundStyle(DSColors.inkDim)
                     .frame(width: 10)
-                Text(group.title)
-                    .font(.system(size: s(10), weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.6))
-                Text("\(group.sessions.count)")
-                    .font(.system(size: s(9), weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.4))
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                Text(group.title.uppercased())
+                    .font(DSTypography.mono(s(10), weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(DSColors.inkDim)
+                Text(String(format: "%02d", min(group.sessions.count, 99)))
+                    .font(DSTypography.mono(s(9), weight: .medium))
+                    .foregroundStyle(DSColors.inkMute)
                 Spacer()
             }
             .padding(.vertical, 3)
@@ -216,12 +217,18 @@ struct ExpandedPageView: View {
                         sessionManager.notifyChange()
                     }
                 },
-                togglePin: { sessionManager.setPinned(session.id, !userState.pinned) },
-                toggleMute: { sessionManager.setMuted(session.id, !userState.muted) },
+                togglePin: {
+                    sessionManager.setPinned(session.id, !userState.pinned)
+                },
+                toggleMute: {
+                    sessionManager.setMuted(session.id, !userState.muted)
+                },
                 toggleDone: {
-                    isUserDone
-                        ? sessionManager.unmarkDone(session.id)
-                        : sessionManager.markDone(session.id)
+                    if isUserDone {
+                        sessionManager.unmarkDone(session.id)
+                    } else {
+                        sessionManager.markDone(session.id)
+                    }
                 }
             )
         )
