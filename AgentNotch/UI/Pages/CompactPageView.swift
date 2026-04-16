@@ -2,7 +2,16 @@ import AgentNotchCore
 import SwiftUI
 
 /// `compact` / `notification` モードの UI。
-/// notch の両翼にステータスインジケーター + ツール名、下段に通知スタック（.notification 時のみ）。
+///
+/// # 情報の居場所（Design System Phase 1）
+/// - Left wing: `DotMatrix` — 最優先セッションの状態を 5×7 bitmap で表現
+/// - Center: 現在のツール名 ticker（SF Mono）
+/// - Right wing: `PixelCounter` — running / total
+///
+/// # 設計原則
+/// - 色が消えても形で状態が読める（DotPattern の違い）
+/// - 通知スタック表示中は DotMatrix を白単色 (`useSignalColor = false`) に落とし、
+///   通知側の色（amber / green 等）を主役にする
 struct CompactPageView: View {
     let viewModel: NotchViewModel
     let notificationManager: NotchNotificationManager
@@ -11,51 +20,55 @@ struct CompactPageView: View {
 
     var body: some View {
         let sessions = sessionManager.activeSessions
-        let urgentStatus = mostUrgentStatus(sessions)
+        let primary = Self.primarySession(sessions)
         let wing = viewModel.sideWidth
+        let notchHeight = viewModel.physicalNotchHeight
+        // wing は notch のラウンドコーナー外側まで伸びているため、そのまま使うと Canvas が
+        // notch のクリップ領域より外まで広がる。両端に edgeMargin を確保して実効的な
+        // 描画領域を notch 可視範囲に収める。
+        let edgeMargin: CGFloat = 8
+        let wingInner = max(0, wing - edgeMargin)
 
         VStack(spacing: 0) {
-            // Wing row
             HStack(spacing: 0) {
-                // Left wing
+                Color.clear.frame(width: edgeMargin)
+
+                // Left wing: DotMatrix
                 ZStack {
-                    if !sessions.isEmpty {
-                        StatusIndicator(status: urgentStatus, size: 12)
+                    if let primary {
+                        DotMatrix(pattern: primary.status.dotPattern)
                     }
                 }
-                .frame(width: wing, height: viewModel.physicalNotchHeight)
+                .frame(width: wingInner, height: notchHeight)
 
-                // Center: tool ticker
+                // Center: tool name ticker
                 ZStack {
                     if let toolName = activeToolName(sessions) {
                         TickerText(
                             text: toolName,
-                            font: .system(size: 9, weight: .medium, design: .monospaced),
-                            color: .white.opacity(0.6)
+                            font: DSTypography.mono(10, weight: .medium),
+                            color: DSColors.inkDim
                         )
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: viewModel.physicalNotchHeight)
+                .frame(maxWidth: .infinity, maxHeight: notchHeight)
                 .clipped()
 
-                // Right wing: running/total session count
+                // Right wing: PixelCounter (value は常に ink で可読、total は inkDim で強度差)
                 ZStack {
-                    let total = sessions.count
-                    let running = sessions.filter(\.status.isRunning).count
-                    if total > 0 {
-                        VStack(spacing: 0) {
-                            Text("\(running)")
-                                .foregroundStyle(.white.opacity(running > 0 ? 0.75 : 0.35))
-                            Rectangle()
-                                .fill(.white.opacity(0.2))
-                                .frame(width: 12, height: 0.5)
-                            Text("\(total)")
-                                .foregroundStyle(.white.opacity(0.35))
-                        }
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    if !sessions.isEmpty {
+                        let running = sessions.filter(\.status.isRunning).count
+                        PixelCounter(
+                            value: running,
+                            total: sessions.count,
+                            valueColor: DSColors.ink,
+                            totalColor: DSColors.inkDim
+                        )
                     }
                 }
-                .frame(width: wing, height: viewModel.physicalNotchHeight)
+                .frame(width: wingInner, height: notchHeight)
+
+                Color.clear.frame(width: edgeMargin)
             }
 
             // Notification rows (only in .notification mode)
@@ -82,23 +95,22 @@ struct CompactPageView: View {
         .frame(width: viewModel.notchWidth)
     }
 
+    // MARK: - Selection helpers
+
+    /// 最優先セッション（urgency 昇順 + lastActivityAt 降順）を返す。
+    static func primarySession(_ sessions: [UnifiedSession]) -> UnifiedSession? {
+        sessions.min { lhs, rhs in
+            if lhs.status.urgencyRank != rhs.status.urgencyRank {
+                return lhs.status.urgencyRank < rhs.status.urgencyRank
+            }
+            return lhs.lastActivityAt > rhs.lastActivityAt
+        }
+    }
+
     private func activeToolName(_ sessions: [UnifiedSession]) -> String? {
         sessions.lazy
             .compactMap { $0.currentTool }
             .first { $0.status == .running }
             .map(\.name)
-    }
-
-    private func mostUrgentStatus(_ sessions: [UnifiedSession]) -> SessionStatus {
-        let priority: [SessionStatus] = [
-            .permissionWaiting, .error, .toolRunning, .subagentRunning,
-            .thinking, .compacting, .done, .idle, .starting, .completed,
-        ]
-        for status in priority {
-            if sessions.contains(where: { $0.status == status }) {
-                return status
-            }
-        }
-        return .idle
     }
 }
