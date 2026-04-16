@@ -66,6 +66,83 @@ public enum TranscriptParser {
         return slug
     }
 
+    /// 最初のユーザーメッセージ（セッションの目的）を返す。
+    /// transcript の先頭から順読みし、最初の「実際のユーザー入力」を取得。
+    /// スラッシュコマンド（`/clear` 等）やシステム注入メッセージ（`<local-command` 等）はスキップ。
+    public static func firstUserMessage(at path: String) -> String? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let content = String(data: data, encoding: .utf8) else { return nil }
+
+        for line in content.components(separatedBy: .newlines) {
+            guard !line.isEmpty,
+                  let lineData = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  json["type"] as? String == "user",
+                  let message = json["message"] as? [String: Any]
+            else { continue }
+
+            // content は文字列 or 配列
+            let text: String? = {
+                if let s = message["content"] as? String, !s.isEmpty {
+                    return s
+                }
+                if let arr = message["content"] as? [[String: Any]] {
+                    for block in arr where block["type"] as? String == "text" {
+                        if let s = block["text"] as? String, !s.isEmpty {
+                            return s
+                        }
+                    }
+                }
+                return nil
+            }()
+
+            guard let text else { continue }
+
+            // スラッシュコマンドやシステムメッセージをスキップ
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("/") { continue }
+            if trimmed.hasPrefix("<") && trimmed.contains("command") { continue }
+
+            return trimmed
+        }
+        return nil
+    }
+
+    /// 最後のユーザーメッセージ（最新のプロンプト）を返す。
+    /// transcript の末尾から逆順読みし、最後の実ユーザー入力を取得。
+    public static func lastUserMessage(at path: String) -> String? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let content = String(data: data, encoding: .utf8) else { return nil }
+
+        for line in content.components(separatedBy: .newlines).reversed() {
+            guard !line.isEmpty,
+                  let lineData = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  json["type"] as? String == "user",
+                  let message = json["message"] as? [String: Any]
+            else { continue }
+
+            let text: String? = {
+                if let s = message["content"] as? String, !s.isEmpty { return s }
+                if let arr = message["content"] as? [[String: Any]] {
+                    for block in arr where block["type"] as? String == "text" {
+                        if let s = block["text"] as? String, !s.isEmpty { return s }
+                    }
+                }
+                return nil
+            }()
+
+            guard let text else { continue }
+
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("/") { continue }
+            if trimmed.hasPrefix("<") && trimmed.contains("command") { continue }
+
+            return trimmed
+        }
+        return nil
+    }
+
     /// Returns the last assistant text message from the transcript (for completion notifications).
     public static func lastAssistantMessage(at path: String) -> String? {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),

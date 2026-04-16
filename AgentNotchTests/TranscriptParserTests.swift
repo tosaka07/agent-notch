@@ -58,4 +58,40 @@ struct TranscriptParserTests {
         let usage = TranscriptParser.parseCumulativeUsage(at: tmpPath)
         #expect(usage.totalTokens == 0)
     }
+
+    @Test("firstUserMessage extracts first user content string")
+    func firstUserMessageString() throws {
+        let lines = [
+            #"{"type":"user","message":{"role":"user","content":"Fix the auth bug"},"sessionId":"s1"}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"OK"}]}}"#,
+        ]
+        let tmpPath = NSTemporaryDirectory() + "test-transcript-\(UUID().uuidString).jsonl"
+        try lines.joined(separator: "\n").write(toFile: tmpPath, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: tmpPath) }
+
+        let msg = TranscriptParser.firstUserMessage(at: tmpPath)
+        #expect(msg == "Fix the auth bug")
+    }
+
+    @Test("firstUserMessage extracts from content array")
+    func firstUserMessageArray() throws {
+        let lines = [
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Add tests"}]},"sessionId":"s1"}"#,
+        ]
+        let tmpPath = NSTemporaryDirectory() + "test-transcript-\(UUID().uuidString).jsonl"
+        try lines.joined(separator: "\n").write(toFile: tmpPath, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: tmpPath) }
+
+        let msg = TranscriptParser.firstUserMessage(at: tmpPath)
+        #expect(msg == "Add tests")
+    }
+
+    @Test("firstUserMessage returns nil for empty transcript")
+    func firstUserMessageEmpty() throws {
+        let tmpPath = NSTemporaryDirectory() + "test-transcript-\(UUID().uuidString).jsonl"
+        try "".write(toFile: tmpPath, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: tmpPath) }
+
+        #expect(TranscriptParser.firstUserMessage(at: tmpPath) == nil)
+    }
 }

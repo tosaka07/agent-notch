@@ -102,4 +102,48 @@ struct ClaudeEventParserTests {
             return
         }
     }
+
+    @Test("PreToolUse with TaskCreate maps to taskCreated")
+    func taskCreate() {
+        let json: [String: Any] = [
+            "hook_event_name": "PreToolUse",
+            "session_id": "sess-010",
+            "tool_name": "TaskCreate",
+            "tool_use_id": "tu-tc1",
+            "tool_input": [
+                "subject": "Fix auth validation",
+                "description": "Add input validation to the auth module",
+            ] as [String: Any],
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .taskCreated(sessionId, subject, description) = event else {
+            Issue.record("Expected taskCreated, got \(event)")
+            return
+        }
+        #expect(sessionId == "sess-010")
+        #expect(subject == "Fix auth validation")
+        #expect(description == "Add input validation to the auth module")
+    }
+
+    @Test("PreToolUse with TaskUpdate maps to taskUpdated")
+    func taskUpdate() {
+        let json: [String: Any] = [
+            "hook_event_name": "PreToolUse",
+            "session_id": "sess-010",
+            "tool_name": "TaskUpdate",
+            "tool_use_id": "tu-tu1",
+            "tool_input": [
+                "taskId": "2",
+                "status": "completed",
+            ] as [String: Any],
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .taskUpdated(sessionId, taskId, status) = event else {
+            Issue.record("Expected taskUpdated, got \(event)")
+            return
+        }
+        #expect(sessionId == "sess-010")
+        #expect(taskId == "2")
+        #expect(status == "completed")
+    }
 }

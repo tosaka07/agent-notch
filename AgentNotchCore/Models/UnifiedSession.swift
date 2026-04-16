@@ -42,8 +42,18 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var sessionTitle: String?
     /// Whether session title has been resolved from transcript
     public var sessionTitleResolved: Bool = false
+    /// 最初のユーザーメッセージ（セッションの目的）
+    public var firstUserPrompt: String?
+    /// firstUserPrompt の解決が試行済みか
+    public var firstUserPromptResolved: Bool = false
+    /// 最新のユーザーメッセージ（lastUserMessage 用）
+    public var lastUserPrompt: String?
+    /// 完了時の最後のアシスタントメッセージ（SessionFinalizer がセット）
+    public var lastAssistantMessage: String?
     public var pendingQuestion: PendingQuestion?
     public var lastActivityAt: Date
+    /// エージェント内部のタスク一覧（TaskCreate/TaskUpdate で管理される）。
+    public var tasks: [AgentTask] = []
 
     /// `GitInfoResolver.resolve(cwd:)` で非同期に解決された git メタ情報のキャッシュ。
     /// 未解決の間は nil。`EventProcessor.backfillSession` が初回に一度だけセットする。

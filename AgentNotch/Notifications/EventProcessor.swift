@@ -65,6 +65,12 @@ enum EventProcessor {
         case let .compacting(sessionId):
             manager.session(for: sessionId)?.status = .compacting
 
+        case let .taskCreated(sessionId, subject, _):
+            handleTaskCreated(sessionId: sessionId, subject: subject, agentType: agentType, manager: manager)
+
+        case let .taskUpdated(sessionId, taskId, status):
+            handleTaskUpdated(sessionId: sessionId, taskId: taskId, status: status, manager: manager)
+
         case .subagentStopped, .unknown:
             break
         }
@@ -93,6 +99,19 @@ enum EventProcessor {
             ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
         session.status = .thinking
         NotificationCenter.default.post(name: .agentNotchSessionResumed, object: sessionId)
+
+        // lastUserPrompt を非同期で更新
+        if let path = session.transcriptPath {
+            Task.detached {
+                let prompt = TranscriptParser.lastUserMessage(at: path)
+                await MainActor.run {
+                    if let s = manager.session(for: sessionId), let prompt {
+                        s.lastUserPrompt = prompt
+                        manager.notifyChange()
+                    }
+                }
+            }
+        }
     }
 
     @MainActor
@@ -190,6 +209,32 @@ enum EventProcessor {
     }
 
     @MainActor
+    private static func handleTaskCreated(
+        sessionId: String, subject: String, agentType: AgentType, manager: SessionManager
+    ) {
+        let session = manager.session(for: sessionId)
+            ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
+        // Claude Code は連番 ID（"1", "2", ...）を振る。作成順で推定。
+        let nextId = String(session.tasks.count + 1)
+        session.tasks.append(AgentTask(id: nextId, subject: subject))
+        Log.events.info("taskCreated id=\(sessionId) task=#\(nextId) \(subject)")
+    }
+
+    @MainActor
+    private static func handleTaskUpdated(
+        sessionId: String, taskId: String, status: String, manager: SessionManager
+    ) {
+        guard let session = manager.session(for: sessionId),
+              let index = session.tasks.firstIndex(where: { $0.id == taskId })
+        else { return }
+
+        if let newStatus = AgentTask.Status(rawValue: status) {
+            session.tasks[index].status = newStatus
+            Log.events.info("taskUpdated id=\(sessionId) task=#\(taskId) → \(status)")
+        }
+    }
+
+    @MainActor
     private static func handleStopFailure(
         sessionId: String, errorType: String, agentType: AgentType, manager: SessionManager
     ) {
@@ -222,6 +267,7 @@ enum EventProcessor {
 
         resolveTerminalInfoIfNeeded(session: session, sessionId: sessionId, manager: manager)
         resolveSessionTitleIfNeeded(session: session, sessionId: sessionId, manager: manager)
+        resolveFirstUserPromptIfNeeded(session: session, sessionId: sessionId, manager: manager)
         resolveGitInfoIfNeeded(session: session, sessionId: sessionId, manager: manager)
     }
 
@@ -257,6 +303,23 @@ enum EventProcessor {
             await MainActor.run {
                 if let s = manager.session(for: sessionId) {
                     s.sessionTitle = title
+                    manager.notifyChange()
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private static func resolveFirstUserPromptIfNeeded(
+        session: UnifiedSession, sessionId: String, manager: SessionManager
+    ) {
+        guard !session.firstUserPromptResolved, let path = session.transcriptPath else { return }
+        session.firstUserPromptResolved = true
+        Task.detached {
+            let prompt = TranscriptParser.firstUserMessage(at: path)
+            await MainActor.run {
+                if let s = manager.session(for: sessionId) {
+                    s.firstUserPrompt = prompt
                     manager.notifyChange()
                 }
             }

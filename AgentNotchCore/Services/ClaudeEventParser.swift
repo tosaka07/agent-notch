@@ -100,6 +100,8 @@ public enum ClaudeEvent: Sendable {
     case compacting(sessionId: String)
     case compactingDone(sessionId: String)
     case stopFailure(sessionId: String, errorType: String)
+    case taskCreated(sessionId: String, subject: String, description: String)
+    case taskUpdated(sessionId: String, taskId: String, status: String)
     case unknown
 }
 
@@ -138,6 +140,18 @@ public enum ClaudeEventParser {
                 return .askQuestion(AskQuestionInfo(
                     sessionId: sessionId, toolUseId: toolUseId, questions: questions
                 ))
+            }
+
+            // TaskCreate / TaskUpdate — task 管理ツール
+            if toolName == "TaskCreate" {
+                let subject = rawInput["subject"] as? String ?? ""
+                let description = rawInput["description"] as? String ?? ""
+                return .taskCreated(sessionId: sessionId, subject: subject, description: description)
+            }
+            if toolName == "TaskUpdate" {
+                let taskId = rawInput["taskId"] as? String ?? ""
+                let status = rawInput["status"] as? String ?? ""
+                return .taskUpdated(sessionId: sessionId, taskId: taskId, status: status)
             }
 
             let toolInput = rawInput.reduce(into: [String: String]()) { result, pair in

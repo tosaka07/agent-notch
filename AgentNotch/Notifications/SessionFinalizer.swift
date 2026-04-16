@@ -40,6 +40,9 @@ enum SessionFinalizer {
                     s.totalOutputTokens = metrics.outputTokens
                     s.totalCachedTokens = metrics.cachedTokens
                     s.estimatedCost = metrics.estimatedCost
+                    if !metrics.lastMessage.isEmpty {
+                        s.lastAssistantMessage = metrics.lastMessage
+                    }
                 }
                 if !muted {
                     NotificationCenter.default.post(
