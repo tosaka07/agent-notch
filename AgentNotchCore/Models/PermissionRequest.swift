@@ -15,4 +15,8 @@ public struct PermissionRequest: Identifiable, Sendable {
         self.toolName = toolName; self.toolInput = toolInput; self.toolUseId = toolUseId
         self.timestamp = timestamp; self.canRespond = canRespond
     }
+
+    /// Claude Code の Plan モード終了確認（`ExitPlanMode` ツールの承認待ち）かどうか。
+    /// UI 側で "PLAN REVIEW" ラベル・専用 DotPattern に振り分けるために使う。
+    public var isPlanReview: Bool { toolName == "ExitPlanMode" }
 }

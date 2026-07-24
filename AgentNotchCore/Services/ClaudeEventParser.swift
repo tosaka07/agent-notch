@@ -329,6 +329,13 @@ public enum ClaudeEventParser {
         }
     }
 
+    /// `permission_mode` はイベント種別に依存しない共通フィールド（`docs/data-and-display-spec.md` に
+    /// 「全イベント `permission_mode`」とある通り）。どのイベントに乗ってくるか確定しないため、
+    /// `ClaudeEvent` の case には含めず、生 JSON から都度・防御的に取り出す。
+    public static func permissionMode(from json: [String: Any]) -> String? {
+        json["permission_mode"] as? String
+    }
+
     /// `tool_input.questions` を型付きの `[AskQuestionInfo.Question]` にパースする。
     /// 1 問も取れなければ `nil`。PreToolUse / PermissionRequest の両経路から呼ぶ。
     private static func parseAskQuestions(rawInput: [String: Any]) -> [AskQuestionInfo.Question]? {
