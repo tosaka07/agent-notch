@@ -59,6 +59,7 @@ struct PermissionBanner: View {
                 }
                 .buttonStyle(.plain)
             }
+            .armedAfter()
         }
         .padding(14)
         .background(Color.orange.opacity(0.06))
