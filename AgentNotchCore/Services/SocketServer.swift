@@ -16,14 +16,31 @@ public struct PendingSocketResponse: Sendable {
     public let toolUseId: String
     public let connection: NWConnection
     public let receivedAt: Date
+    /// `askUserQuestion` の場合のみ、元の `tool_input`（`questions` を含む）を保持する。
+    /// Claude Code は `updatedInput` をツールの入力スキーマ全体として検証するため、
+    /// `answers` だけを返すと必須の `questions` が欠落してバリデーションエラーになる。
+    /// 応答時に元の `tool_input` に `answers` をマージして送り返す必要がある。
+    public let toolInput: JSONBox?
 
-    public init(kind: Kind, sessionId: String, toolUseId: String, connection: NWConnection, receivedAt: Date) {
+    public init(
+        kind: Kind, sessionId: String, toolUseId: String, connection: NWConnection, receivedAt: Date,
+        toolInput: JSONBox? = nil
+    ) {
         self.kind = kind
         self.sessionId = sessionId
         self.toolUseId = toolUseId
         self.connection = connection
         self.receivedAt = receivedAt
+        self.toolInput = toolInput
     }
+}
+
+/// `[String: Any]` を Sendable な境界を跨いで受け渡すための箱。
+/// hook JSON はプリミティブ値のみで構成され、SocketServer 内部でしか使わないため
+/// `@unchecked Sendable` として扱う（LockedArray / LockedDict と同様の許容）。
+public final class JSONBox: @unchecked Sendable {
+    public let value: [String: Any]
+    public init(_ value: [String: Any]) { self.value = value }
 }
 
 public final class SocketServer: Sendable {
@@ -90,39 +107,51 @@ public final class SocketServer: Sendable {
 
     /// 通常の PermissionRequest（tool allow/deny）の応答を送る。
     public func respondToPermission(toolUseId: String, decision: String, reason: String?) {
+        // `_pending` から一度だけ remove し、その結果を土台に応答を組み立てて同じエントリの
+        // connection に送る。peek→remove の二段構成は TOCTOU（間に cancelPending 等が割り込むと
+        // 応答先 connection と内容が食い違う、または無応答になる）になるため一発ロック化している。
+        guard let pending = _pending.remove(toolUseId) else {
+            Log.socket.error("respondToPermission: no pending for toolUseId=\(toolUseId) decision=\(decision)")
+            return
+        }
         let response: [String: Any] = [
             "hookSpecificOutput": [
                 "hookEventName": "PermissionRequest",
                 "decision": ["behavior": decision, "message": reason ?? ""]
             ]
         ]
-        sendDeferredResponse(toolUseId: toolUseId, response: response, logContext: "permission decision=\(decision)")
+        sendDeferredResponse(pending, response: response, logContext: "permission decision=\(decision)")
     }
 
     /// AskUserQuestion の回答を送る。
     /// Claude Code 内部の期待形式: `hookSpecificOutput.decision.updatedInput.answers` に
     /// `{question_text: answer_label}` の dict を入れる。
+    /// `updatedInput` は AskUserQuestion ツールの入力スキーマ全体として検証されるため、
+    /// 元の `tool_input`（`questions` を含む）を土台にして `answers` を足し込む。
+    /// これを怠ると「required parameter questions is missing」で失敗する（#6）。
     public func respondToAskQuestion(toolUseId: String, answers: [String: String]) {
+        guard let pending = _pending.remove(toolUseId) else {
+            Log.socket.error("respondToAskQuestion: no pending for toolUseId=\(toolUseId)")
+            return
+        }
+        var updatedInput = pending.toolInput?.value ?? [:]
+        updatedInput["answers"] = answers
         let response: [String: Any] = [
             "hookSpecificOutput": [
                 "hookEventName": "PermissionRequest",
                 "decision": [
                     "behavior": "allow",
-                    "updatedInput": [
-                        "answers": answers
-                    ]
+                    "updatedInput": updatedInput
                 ]
             ]
         ]
-        sendDeferredResponse(toolUseId: toolUseId, response: response, logContext: "askUserQuestion answers=\(answers.count)")
+        sendDeferredResponse(pending, response: response, logContext: "askUserQuestion answers=\(answers.count)")
     }
 
-    private func sendDeferredResponse(toolUseId: String, response: [String: Any], logContext: String) {
-        guard let pending = _pending.remove(toolUseId) else {
-            Log.socket.error("sendDeferredResponse: no pending for toolUseId=\(toolUseId) (\(logContext))")
-            return
-        }
-        Log.socket.info("sendDeferredResponse kind=\(pending.kind.rawValue) toolUseId=\(toolUseId) \(logContext)")
+    /// すでに `_pending` から取り出し済みの `PendingSocketResponse` を使って応答を送る。
+    /// 削除は呼び出し側の責務（remove 1 回きりの一発ロック化のため）。
+    private func sendDeferredResponse(_ pending: PendingSocketResponse, response: [String: Any], logContext: String) {
+        Log.socket.info("sendDeferredResponse kind=\(pending.kind.rawValue) toolUseId=\(pending.toolUseId) \(logContext)")
         guard let data = try? SocketProtocol.encode(response) else {
             Log.socket.error("sendDeferredResponse: encode failed")
             pending.connection.cancel()

@@ -48,12 +48,14 @@ final class SocketCoordinator {
                 // `PermissionRequest` hook 経由のときだけ deferred にする（tool_response を注入できる唯一の経路）。
                 // `PreToolUse` 経由の AskUserQuestion は即時応答しないと agent がブロックされる上、
                 // 応答しても tool_response にならないので pass-through。
-                let deferred: (kind: PendingSocketResponse.Kind, sessionId: String, toolUseId: String)?
+                let deferred: (kind: PendingSocketResponse.Kind, sessionId: String, toolUseId: String, toolInput: JSONBox?)?
                 switch parsed.event {
                 case let .askQuestion(info) where hookEvent == "PermissionRequest":
-                    deferred = (.askUserQuestion, info.sessionId, info.toolUseId)
+                    // 応答時に questions を含む元の tool_input を復元するために保持する（#6）。
+                    let rawToolInput = message["tool_input"] as? [String: Any]
+                    deferred = (.askUserQuestion, info.sessionId, info.toolUseId, rawToolInput.map(JSONBox.init))
                 case let .permissionRequested(info):
-                    deferred = (.permissionRequest, info.sessionId, info.toolUseId)
+                    deferred = (.permissionRequest, info.sessionId, info.toolUseId, nil)
                 default:
                     deferred = nil
                 }
@@ -64,7 +66,8 @@ final class SocketCoordinator {
                     sessionId: d.sessionId,
                     toolUseId: d.toolUseId,
                     connection: connection,
-                    receivedAt: Date()
+                    receivedAt: Date(),
+                    toolInput: d.toolInput
                 ))
                 Log.socket.info("Deferred \(d.kind.rawValue) toolUseId=\(d.toolUseId)")
                 return nil

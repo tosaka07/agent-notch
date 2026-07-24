@@ -38,6 +38,23 @@ struct NotchShell: ViewModifier {
                 )
                 .allowsHitTesting(false)
             )
+            .overlay(alignment: .topTrailing) {
+                // 選択画面（expanded / sessionDetail）表示中に裏で別セッションが完了すると
+                // outline は光るがどのセッションか分からないため、repo 名を短時間表示する（#3）。
+                if isExpanded, let label = glow.label {
+                    Text(label)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .lineLimit(1)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(glow.color.opacity(0.28))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(glow.color.opacity(0.55), lineWidth: 1))
+                        .padding(8)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
+            }
             .shadow(color: isExpanded ? .black.opacity(0.6) : .clear, radius: 8)
             .contentShape(currentShape)
             .onHover { hovering in
