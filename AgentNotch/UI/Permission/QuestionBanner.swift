@@ -152,6 +152,7 @@ struct QuestionBanner: View {
             .buttonStyle(.plain)
             .disabled(!canSend)
         }
+        .armedAfter()
     }
 
     // MARK: - State management

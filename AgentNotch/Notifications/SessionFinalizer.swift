@@ -10,9 +10,28 @@ import Foundation
 @MainActor
 enum SessionFinalizer {
     /// セッションを完了扱いにし、非同期で transcript を読み込んで UI に反映する。
-    static func finalize(sessionId: String, manager: SessionManager) {
-        Log.events.info("sessionIdle (done) id=\(sessionId)")
+    /// - Parameter completionSound: 完了時に鳴らすサウンド。通常の Stop は `.sessionCompleted`、
+    ///   agent teams の teammate 完了（TeammateIdle）は `.subagentCompleted` を渡し、
+    ///   タスク完了音と聞き分けられるようにする。ただし teammate セッション
+    ///   （`teammateName != nil`）は Stop 経由で来ても常に `.subagentCompleted` を鳴らす
+    ///   （Stop / TeammateIdle のどちらが先に来ても音が一貫するように）。
+    static func finalize(sessionId: String, manager: SessionManager, completionSound: SoundEvent = .sessionCompleted) {
         guard let session = manager.session(for: sessionId) else { return }
+
+        // 再入ガード: teammate は「Stop（sessionCompleted）→ 結果メッセージ送信 →
+        // TeammateIdle（subagentCompleted）」の順でイベントが飛ぶことがあり、
+        // TeammateIdle は idle のたびに繰り返し飛ぶこともある。すでに done なら
+        // 完了通知・サウンドを二重発火させず、doneAt も更新しない
+        // （完了アニメーションの基準がリセットされるのを防ぐ）。
+        // 次ターンの UserPromptSubmit で status が .thinking に戻るため、
+        // 正当な次回の finalize はここを通る。
+        guard session.status != .done else {
+            Log.events.debug("finalize skipped (already done) id=\(sessionId)")
+            return
+        }
+
+        Log.events.info("sessionIdle (done) id=\(sessionId)")
+        let sound: SoundEvent = session.teammateName != nil ? .subagentCompleted : completionSound
 
         session.status = .done
         session.doneAt = Date()
@@ -60,7 +79,7 @@ enum SessionFinalizer {
                             "tty": tty as Any,
                         ]
                     )
-                    SoundPlayer.play(.sessionCompleted)
+                    SoundPlayer.play(sound)
                 }
                 manager.notifyChange()
             }
