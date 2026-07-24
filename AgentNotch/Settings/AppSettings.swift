@@ -132,12 +132,14 @@ struct SoundChoice: Codable, Defaults.Serializable, Equatable, Sendable {
 /// Which events can trigger sounds.
 enum SoundEvent: String, CaseIterable, Sendable {
     case sessionCompleted
+    case subagentCompleted
     case permissionWaiting
     case error
 
     var label: String {
         switch self {
-        case .sessionCompleted: "完了"
+        case .sessionCompleted: "タスク完了"
+        case .subagentCompleted: "サブエージェント完了"
         case .permissionWaiting: "権限待ち"
         case .error: "エラー"
         }
@@ -146,6 +148,7 @@ enum SoundEvent: String, CaseIterable, Sendable {
     var icon: String {
         switch self {
         case .sessionCompleted: "checkmark.circle"
+        case .subagentCompleted: "person.2.circle"
         case .permissionWaiting: "exclamationmark.triangle"
         case .error: "xmark.circle"
         }
@@ -162,6 +165,8 @@ extension Defaults.Keys {
 
     // Sound settings per event
     static let soundCompleted = Key<SoundChoice>("soundCompleted", default: .system("Glass"))
+    // タスク完了音（Glass）と聞き分けやすいよう、subagent 完了はデフォルトで別の音にする。
+    static let soundSubagentCompleted = Key<SoundChoice>("soundSubagentCompleted", default: .system("Pop"))
     static let soundPermission = Key<SoundChoice>("soundPermission", default: .system("Funk"))
     static let soundError = Key<SoundChoice>("soundError", default: .system("Basso"))
     static let soundEnabled = Key<Bool>("soundEnabled", default: true)

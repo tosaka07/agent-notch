@@ -236,12 +236,18 @@ enum EventProcessor {
         if session.status == .subagentRunning, session.runningSubagentCount == 0 {
             session.status = .thinking
         }
+        // subagent 完了は、タスク完了（sessionCompleted）と聞き分けられる専用サウンドを鳴らす。
+        if matched, !manager.isMuted(info.sessionId) {
+            SoundPlayer.play(.subagentCompleted)
+        }
         Log.events.info("subagentStopped id=\(info.sessionId) agentId=\(info.agentId ?? "-") matched=\(matched)")
     }
 
     @MainActor
     private static func handleTeammateIdle(_ info: TeammateIdleInfo, manager: SessionManager) {
-        SessionFinalizer.finalize(sessionId: info.sessionId, manager: manager)
+        // teammate（agent teams のメンバー）の完了は、通常のタスク完了（Stop）と聞き分けられるよう
+        // 専用の subagentCompleted サウンドを鳴らす。
+        SessionFinalizer.finalize(sessionId: info.sessionId, manager: manager, completionSound: .subagentCompleted)
 
         if let own = manager.session(for: info.sessionId) {
             own.teamName = own.teamName ?? info.teamName

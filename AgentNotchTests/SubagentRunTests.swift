@@ -148,4 +148,25 @@ struct SubagentRunTests {
         #expect(session.subagents.allSatisfy { $0.status == .completed })
         #expect(session.subagents.allSatisfy { $0.endedAt != nil })
     }
+
+    @Test("foldRunningSubagentsToCompleted records the running count at fold time")
+    func foldRunningToCompletedRecordsCount() {
+        let session = UnifiedSession(id: "s1", agentType: .claudeCode)
+        session.startSubagent(agentType: "Explore", agentId: "a")
+        session.startSubagent(agentType: "code-reviewer", agentId: "b")
+        session.stopSubagent(agentId: "a", agentType: "Explore", transcriptPath: nil)
+
+        session.foldRunningSubagentsToCompleted()
+
+        #expect(session.subagentCountAtCompletion == 1)
+    }
+
+    @Test("subagentCountAtCompletion stays 0 when nothing was running at fold time")
+    func foldRunningToCompletedNoneRunning() {
+        let session = UnifiedSession(id: "s1", agentType: .claudeCode)
+
+        session.foldRunningSubagentsToCompleted()
+
+        #expect(session.subagentCountAtCompletion == 0)
+    }
 }

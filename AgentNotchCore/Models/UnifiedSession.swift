@@ -59,6 +59,9 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
 
     /// 実行中・完了済みの subagent 一覧（古い順）。completed は最大 50 件まで。
     public var subagents: [SubagentRun] = []
+    /// セッション完了（`foldRunningSubagentsToCompleted`）時点で実行中だった subagent 数。
+    /// 完了通知の表示中、左翼の swarm 表示を維持するために使う（compact UI 側）。
+    public var subagentCountAtCompletion: Int = 0
     /// agent teams のチーム名（TeammateIdle / TaskCreated/TaskCompleted の team_name から反映）。
     public var teamName: String?
     /// agent teams でのこのセッションのメンバー名（TeammateIdle の teammate_name から反映）。
@@ -126,7 +129,9 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     }
 
     /// 実行中の subagent を全て completed に畳む（セッション終了時に使用）。
+    /// 畳む直前の実行数を `subagentCountAtCompletion` に記録する。
     public func foldRunningSubagentsToCompleted(at date: Date = Date()) {
+        subagentCountAtCompletion = runningSubagentCount
         for index in subagents.indices where subagents[index].status == .running {
             subagents[index].status = .completed
             subagents[index].endedAt = date

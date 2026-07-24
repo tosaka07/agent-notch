@@ -37,7 +37,7 @@ struct CompactPageView: View {
                 ZStack {
                     if let primary {
                         DotMatrix(
-                            pattern: primary.dotPattern,
+                            pattern: leftWingPattern(primary),
                             animationStartTime: primary.doneAt
                         )
                     }
@@ -119,6 +119,22 @@ struct CompactPageView: View {
             }
             return lhs.lastActivityAt > rhs.lastActivityAt
         }
+    }
+
+    /// 左翼 DotMatrix に表示するパターン。
+    ///
+    /// subagent 実行中のセッションが完了すると `dotPattern` は即座に `.complete`（チェックマーク）を
+    /// 返すが、完了直後は完了通知バナーがまさに表示されるタイミングであり、
+    /// 直前まで表示していた swarm（subagent 並行実行）表示が完了チェックマークに
+    /// 突然置き換わって見える（#12）。完了通知が表示されている間は swarm 表示を維持し、
+    /// 通知が消えたタイミングで通常の完了表示に戻す。
+    private func leftWingPattern(_ primary: UnifiedSession) -> DotPattern {
+        if primary.status == .done,
+           primary.subagentCountAtCompletion > 0,
+           notificationManager.items.contains(where: { $0.id == primary.id }) {
+            return .swarm(active: primary.subagentCountAtCompletion)
+        }
+        return primary.dotPattern
     }
 
     private func activeToolName(_ sessions: [UnifiedSession]) -> String? {

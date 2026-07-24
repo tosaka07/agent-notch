@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Default(.specificDisplayUUID) var specificDisplayUUID
     @Default(.soundEnabled) var soundEnabled
     @Default(.soundCompleted) var soundCompleted
+    @Default(.soundSubagentCompleted) var soundSubagentCompleted
     @Default(.soundPermission) var soundPermission
     @Default(.soundError) var soundError
     @Default(.cardPromptSource) var cardPromptSource
@@ -74,6 +75,7 @@ struct SettingsView: View {
 
                 if soundEnabled {
                     SoundPickerView(event: .sessionCompleted, choice: $soundCompleted)
+                    SoundPickerView(event: .subagentCompleted, choice: $soundSubagentCompleted)
                     SoundPickerView(event: .permissionWaiting, choice: $soundPermission)
                     SoundPickerView(event: .error, choice: $soundError)
                 }

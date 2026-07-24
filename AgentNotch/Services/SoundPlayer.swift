@@ -12,6 +12,7 @@ enum SoundPlayer {
 
         let choice: SoundChoice = switch event {
         case .sessionCompleted: Defaults[.soundCompleted]
+        case .subagentCompleted: Defaults[.soundSubagentCompleted]
         case .permissionWaiting: Defaults[.soundPermission]
         case .error: Defaults[.soundError]
         }

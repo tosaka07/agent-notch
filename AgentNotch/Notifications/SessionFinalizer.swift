@@ -10,7 +10,10 @@ import Foundation
 @MainActor
 enum SessionFinalizer {
     /// セッションを完了扱いにし、非同期で transcript を読み込んで UI に反映する。
-    static func finalize(sessionId: String, manager: SessionManager) {
+    /// - Parameter completionSound: 完了時に鳴らすサウンド。通常の Stop は `.sessionCompleted`、
+    ///   agent teams の teammate 完了（TeammateIdle）は `.subagentCompleted` を渡し、
+    ///   タスク完了音と聞き分けられるようにする。
+    static func finalize(sessionId: String, manager: SessionManager, completionSound: SoundEvent = .sessionCompleted) {
         Log.events.info("sessionIdle (done) id=\(sessionId)")
         guard let session = manager.session(for: sessionId) else { return }
 
@@ -60,7 +63,7 @@ enum SessionFinalizer {
                             "tty": tty as Any,
                         ]
                     )
-                    SoundPlayer.play(.sessionCompleted)
+                    SoundPlayer.play(completionSound)
                 }
                 manager.notifyChange()
             }
