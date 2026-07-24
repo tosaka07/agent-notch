@@ -77,6 +77,15 @@ struct SessionDetailView: View {
                     permissionActions.answerQuestion(session.id, q.toolUseId, answers)
                 }
                 .padding(.horizontal, 14).padding(.top, 8)
+                // Other の自由入力 TextField はパネルが key window でないと
+                // キーボード入力を受け付けられない（NotchPanel は既定で canBecomeKey=false）。
+                // 表示中だけ key focus を許可し、消えたら戻す（#2）。
+                .onAppear {
+                    NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: true)
+                }
+                .onDisappear {
+                    NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: false)
+                }
             }
 
             chatTabContent
