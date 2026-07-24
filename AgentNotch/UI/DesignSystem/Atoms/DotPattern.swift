@@ -28,6 +28,35 @@ enum DotPattern: Hashable {
         case .planReview: return DSColors.signalPlan
         }
     }
+
+    /// `TimelineView` の最小 tick 間隔（秒）。
+    ///
+    /// 各パターンの実際の状態変化周期に基づく。`nil` は現状通り毎フレーム
+    /// （`TimelineView(.animation)`）で評価する必要があるパターン
+    /// （complete のフェード、swarm の sin 脈動など「見た目のなめらかさ」が要件のもの）。
+    ///
+    /// それ以外は on/off の離散的な切り替えか、13 分割程度の粗いステップでしか
+    /// 見た目が変わらないため、60fps+ で再評価しても無駄になる。以下は各パターンの
+    /// 実測周期から導出した間隔（değişim frequency 以下に絞ることで cellGrid 再計算・
+    /// View 再構築の回数を 1/4〜1/7 程度に削減できる）:
+    /// - `.standby`: 呼吸 opacity は sin 周期 1.4s。cellGrid 自体は不変（bitmap 固定）で
+    ///   opacity の見た目だけが変化するため 10fps 相当（0.1s）でも滑らかに見える
+    /// - `.thinking`: scanningColumn は 1.2s / 13 コマ ≈ 0.092s 間隔でしか列が動かない
+    /// - `.working`: barFill は 2.0s / 14 コマ ≈ 0.143s 間隔でしか埋まらない
+    /// - `.alert`: blink 周期 0.56s（on 0.28s / off 0.28s）
+    /// - `.fault`: flicker は 0.08s 刻みの hash 判定
+    /// - `.planReview`: blink 周期 1.0s（on 0.6s / off 0.4s）
+    var minimumTickInterval: TimeInterval? {
+        switch self {
+        case .standby: return 0.1
+        case .thinking: return 0.1
+        case .working: return 0.15
+        case .alert: return 0.2
+        case .fault: return 0.08
+        case .planReview: return 0.2
+        case .complete, .swarm: return nil
+        }
+    }
 }
 
 /// 13×13 ドットマトリクスの bitmap 計算。
