@@ -9,11 +9,24 @@ import Foundation
 /// - `backfillSession(...)` は socket メッセージに付随する cwd/pid/tty 情報で Session を埋める。
 enum EventProcessor {
     /// 受信メッセージを type-safe な `ClaudeEvent` に変換し、agent type も判定する。
-    static func parseMessage(_ message: [String: Any]) -> (event: ClaudeEvent, agentType: AgentType, sessionId: String) {
+    static func parseMessage(
+        _ message: [String: Any]
+    ) -> (event: ClaudeEvent, agentType: AgentType, sessionId: String, permissionMode: String?) {
         let event = ClaudeEventParser.parse(message)
         let sessionId = message["session_id"] as? String ?? ""
         let agentType: AgentType = (message["_agent_type"] as? String) == "codex" ? .codex : .claudeCode
-        return (event, agentType, sessionId)
+        let permissionMode = ClaudeEventParser.permissionMode(from: message)
+        return (event, agentType, sessionId, permissionMode)
+    }
+
+    /// `permission_mode` を Session に反映する。session がまだ存在しない場合は何もしない
+    /// （SessionStart 等、他の handler が先に session を作る前提のため）。
+    @MainActor
+    static func applyPermissionMode(sessionId: String, rawMode: String?, manager: SessionManager) {
+        guard let rawMode, let mode = PermissionMode(rawValue: rawMode) else { return }
+        guard let session = manager.session(for: sessionId), session.permissionMode != mode else { return }
+        session.permissionMode = mode
+        manager.notifyChange()
     }
 
     /// イベントを Session 状態に反映する。必ず MainActor で呼ぶこと。
@@ -173,6 +186,11 @@ enum EventProcessor {
         let session = manager.session(for: info.sessionId)
             ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
         session.status = .permissionWaiting
+        // Issue #7: PreToolUse で立てた currentTool(.running) をここで消さないと、
+        // UI 側の「ツール実行中」表示（currentTool.status == .running を優先するブランチ）が
+        // permissionWaiting の表示より先に評価されてしまい、承認待ち（Plan モードの確認含む）が
+        // 実行中/Thinking のように見え続けるバグになっていた。承認待ちの間はまだ実行されていないので nil に戻す。
+        session.currentTool = nil
         let muted = manager.isMuted(info.sessionId)
         if !muted { SoundPlayer.play(.permissionWaiting) }
         session.pendingPermissions.append(PermissionRequest(
