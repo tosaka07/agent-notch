@@ -66,81 +66,55 @@ public enum TranscriptParser {
         return slug
     }
 
-    /// 最初のユーザーメッセージ（セッションの目的）を返す。
-    /// transcript の先頭から順読みし、最初の「実際のユーザー入力」を取得。
-    /// スラッシュコマンド（`/clear` 等）やシステム注入メッセージ（`<local-command` 等）はスキップ。
-    public static func firstUserMessage(at path: String) -> String? {
+    /// 最初と最後のユーザーメッセージを 1 回のファイル読み込みで取得。
+    /// スラッシュコマンドやシステム注入メッセージはスキップ。
+    public static func userMessages(at path: String) -> (first: String?, last: String?) {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let content = String(data: data, encoding: .utf8) else { return nil }
+              let content = String(data: data, encoding: .utf8) else { return (nil, nil) }
+
+        var first: String?
+        var last: String?
 
         for line in content.components(separatedBy: .newlines) {
-            guard !line.isEmpty,
-                  let lineData = line.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
-                  json["type"] as? String == "user",
-                  let message = json["message"] as? [String: Any]
-            else { continue }
-
-            // content は文字列 or 配列
-            let text: String? = {
-                if let s = message["content"] as? String, !s.isEmpty {
-                    return s
-                }
-                if let arr = message["content"] as? [[String: Any]] {
-                    for block in arr where block["type"] as? String == "text" {
-                        if let s = block["text"] as? String, !s.isEmpty {
-                            return s
-                        }
-                    }
-                }
-                return nil
-            }()
-
-            guard let text else { continue }
-
-            // スラッシュコマンドやシステムメッセージをスキップ
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("/") { continue }
-            if trimmed.hasPrefix("<") && trimmed.contains("command") { continue }
-
-            return trimmed
+            guard let text = extractUserMessage(from: line) else { continue }
+            if first == nil { first = text }
+            last = text
         }
-        return nil
+        return (first, last)
     }
 
-    /// 最後のユーザーメッセージ（最新のプロンプト）を返す。
-    /// transcript の末尾から逆順読みし、最後の実ユーザー入力を取得。
+    public static func firstUserMessage(at path: String) -> String? {
+        userMessages(at: path).first
+    }
+
     public static func lastUserMessage(at path: String) -> String? {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let content = String(data: data, encoding: .utf8) else { return nil }
+        userMessages(at: path).last
+    }
 
-        for line in content.components(separatedBy: .newlines).reversed() {
-            guard !line.isEmpty,
-                  let lineData = line.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
-                  json["type"] as? String == "user",
-                  let message = json["message"] as? [String: Any]
-            else { continue }
+    /// JSONL の 1 行からユーザーメッセージを抽出。スラッシュコマンド等を除外。
+    private static func extractUserMessage(from line: some StringProtocol) -> String? {
+        guard !line.isEmpty,
+              let lineData = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+              json["type"] as? String == "user",
+              let message = json["message"] as? [String: Any]
+        else { return nil }
 
-            let text: String? = {
-                if let s = message["content"] as? String, !s.isEmpty { return s }
-                if let arr = message["content"] as? [[String: Any]] {
-                    for block in arr where block["type"] as? String == "text" {
-                        if let s = block["text"] as? String, !s.isEmpty { return s }
-                    }
+        let text: String? = {
+            if let s = message["content"] as? String, !s.isEmpty { return s }
+            if let arr = message["content"] as? [[String: Any]] {
+                for block in arr where block["type"] as? String == "text" {
+                    if let s = block["text"] as? String, !s.isEmpty { return s }
                 }
-                return nil
-            }()
+            }
+            return nil
+        }()
 
-            guard let text else { continue }
-
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("/") { continue }
-            if trimmed.hasPrefix("<") && trimmed.contains("command") { continue }
-
-            return trimmed
-        }
-        return nil
+        guard let text else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("/") { return nil }
+        if trimmed.hasPrefix("<") && trimmed.contains("command") { return nil }
+        return trimmed
     }
 
     /// Returns the last assistant text message from the transcript (for completion notifications).
