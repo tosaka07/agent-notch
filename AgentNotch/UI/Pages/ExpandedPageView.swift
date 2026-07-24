@@ -37,7 +37,7 @@ struct ExpandedPageView: View {
                 Spacer()
             } else {
                 ScrollView {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 4) {
                         ForEach(groups) { group in
                             groupSection(group)
                         }
@@ -161,7 +161,7 @@ struct ExpandedPageView: View {
             }
         } else {
             let isCollapsed = collapsedGroupIDs.contains(group.key)
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 groupHeader(group, isCollapsed: isCollapsed)
                 if !isCollapsed {
                     ForEach(group.sessions) { session in
