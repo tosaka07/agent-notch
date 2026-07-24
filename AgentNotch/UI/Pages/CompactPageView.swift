@@ -46,7 +46,8 @@ struct CompactPageView: View {
 
                 // Center: tool name / subagent ticker
                 ZStack {
-                    if let primary, primary.status == .subagentRunning, primary.runningSubagentCount > 0 {
+                    // status は tool イベントで頻繁に切り替わるため、subagent の実行有無で判定する
+                    if let primary, primary.runningSubagentCount > 0 {
                         TimelineView(.periodic(from: .now, by: 2.5)) { context in
                             if let text = subagentTickerText(primary, at: context.date) {
                                 TickerText(

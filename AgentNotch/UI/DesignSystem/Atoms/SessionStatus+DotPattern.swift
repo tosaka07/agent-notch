@@ -24,12 +24,22 @@ extension SessionStatus {
     }
 }
 
-/// UnifiedSession → DotPattern のマッピング。subagentRunning のときは実行中 subagent 数を反映する。
+/// UnifiedSession → DotPattern のマッピング。
+///
+/// subagent 実行中は親セッション（や subagent 自身）の PreToolUse/PostToolUse で
+/// status が toolRunning/thinking に頻繁に切り替わるため、status ではなく
+/// `runningSubagentCount` を見て swarm を維持する。
+/// 割り込み系（permission 待ち・エラー・完了）は swarm より優先して表示する。
 extension UnifiedSession {
     var dotPattern: DotPattern {
-        if status == .subagentRunning {
-            return .swarm(active: max(1, runningSubagentCount))
+        switch status {
+        case .permissionWaiting, .error, .done, .completed:
+            return status.dotPattern
+        default:
+            if runningSubagentCount > 0 {
+                return .swarm(active: runningSubagentCount)
+            }
+            return status.dotPattern
         }
-        return status.dotPattern
     }
 }
