@@ -46,6 +46,37 @@ struct ClaudeEventParserTests {
         #expect(info.summary == "main.swift")
     }
 
+    @Test("UserPromptSubmit maps to userPrompt with prompt field from payload")
+    func userPromptSubmitWithPrompt() {
+        let json: [String: Any] = [
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "sess-003",
+            "prompt": "Fix the auth bug",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .userPrompt(sessionId, prompt) = event else {
+            Issue.record("Expected userPrompt")
+            return
+        }
+        #expect(sessionId == "sess-003")
+        #expect(prompt == "Fix the auth bug")
+    }
+
+    @Test("UserPromptSubmit maps to userPrompt with nil prompt when field missing")
+    func userPromptSubmitWithoutPrompt() {
+        let json: [String: Any] = [
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "sess-004",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .userPrompt(sessionId, prompt) = event else {
+            Issue.record("Expected userPrompt")
+            return
+        }
+        #expect(sessionId == "sess-004")
+        #expect(prompt == nil)
+    }
+
     @Test("PermissionRequest maps correctly")
     func permissionRequest() {
         let json: [String: Any] = [
