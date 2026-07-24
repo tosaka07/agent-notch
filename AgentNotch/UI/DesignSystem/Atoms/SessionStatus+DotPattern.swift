@@ -8,8 +8,12 @@ extension SessionStatus {
             return .standby
         case .thinking, .compacting:
             return .thinking
-        case .toolRunning, .subagentRunning:
+        case .toolRunning:
             return .working
+        case .subagentRunning:
+            // 実行中 subagent 数は UnifiedSession.dotPattern 側で反映する。
+            // status 単体からは分からないため、最低 1 の swarm にフォールバックする。
+            return .swarm(active: 1)
         case .permissionWaiting:
             return .alert
         case .error:
@@ -17,5 +21,15 @@ extension SessionStatus {
         case .done:
             return .complete
         }
+    }
+}
+
+/// UnifiedSession → DotPattern のマッピング。subagentRunning のときは実行中 subagent 数を反映する。
+extension UnifiedSession {
+    var dotPattern: DotPattern {
+        if status == .subagentRunning {
+            return .swarm(active: max(1, runningSubagentCount))
+        }
+        return status.dotPattern
     }
 }

@@ -36,14 +36,27 @@ struct CompactPageView: View {
                 // Left wing: DotMatrix
                 ZStack {
                     if let primary {
-                        DotMatrix(pattern: primary.status.dotPattern)
+                        DotMatrix(
+                            pattern: primary.dotPattern,
+                            animationStartTime: primary.doneAt
+                        )
                     }
                 }
                 .frame(width: wingInner, height: notchHeight)
 
-                // Center: tool name ticker
+                // Center: tool name / subagent ticker
                 ZStack {
-                    if let toolName = activeToolName(sessions) {
+                    if let primary, primary.status == .subagentRunning, primary.runningSubagentCount > 0 {
+                        TimelineView(.periodic(from: .now, by: 2.5)) { context in
+                            if let text = subagentTickerText(primary, at: context.date) {
+                                TickerText(
+                                    text: text,
+                                    font: DSTypography.mono(10, weight: .medium),
+                                    color: DSColors.inkDim
+                                )
+                            }
+                        }
+                    } else if let toolName = activeToolName(sessions) {
                         TickerText(
                             text: toolName,
                             font: DSTypography.mono(10, weight: .medium),
@@ -62,7 +75,7 @@ struct CompactPageView: View {
                             value: running,
                             total: sessions.count,
                             valueColor: DSColors.ink,
-                            totalColor: DSColors.inkDim
+                            totalColor: DSColors.ink.opacity(0.55)
                         )
                     }
                 }
@@ -112,5 +125,18 @@ struct CompactPageView: View {
             .compactMap { $0.currentTool }
             .first { $0.status == .running }
             .map(\.name)
+    }
+
+    /// 実行中 subagent の agentType を集計し `×N TYPE` 形式のテキストを返す。
+    /// 複数種ある場合は呼び出し側の `TimelineView(.periodic(by: 2.5))` の日時を使って巡回する。
+    private func subagentTickerText(_ session: UnifiedSession, at date: Date) -> String? {
+        let running = session.subagents.filter { $0.status == .running }
+        guard !running.isEmpty else { return nil }
+        let counts = Dictionary(grouping: running, by: \.agentType).mapValues(\.count)
+        let types = counts.keys.sorted()
+        guard !types.isEmpty else { return nil }
+        let index = Int(date.timeIntervalSinceReferenceDate / 2.5) % types.count
+        let type = types[index]
+        return "×\(counts[type] ?? 0) \(type.uppercased())"
     }
 }

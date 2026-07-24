@@ -43,7 +43,7 @@ struct PixelGrid: View {
     var opacity: Double = 1.0
 
     /// 1 辺の cell 数（= dot 数）。
-    static let dimension = 15
+    static let dimension = 13
 
     var body: some View {
         Canvas { ctx, canvasSize in

@@ -6,14 +6,38 @@ struct SessionDetailView: View {
     let session: UnifiedSession
     @ObservedObject var sessionManager: SessionManager
     var onBack: () -> Void
+    /// TEAM セクションの行タップで別セッションの detail へ遷移するためのコールバック。
+    var onShowSession: (String) -> Void = { _ in }
 
     @State private var chatEntries: [ChatEntry] = []
     @State private var isLoading = true
     @State private var isAtBottom = true
+    @State private var isSubagentsExpanded: Bool
+    @State private var isTeamExpanded: Bool
     @Default(.textSize) private var textSize
     @Environment(\.permissionActions) private var permissionActions
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+
+    init(
+        session: UnifiedSession,
+        sessionManager: SessionManager,
+        onBack: @escaping () -> Void,
+        onShowSession: @escaping (String) -> Void = { _ in }
+    ) {
+        self.session = session
+        self.sessionManager = sessionManager
+        self.onBack = onBack
+        self.onShowSession = onShowSession
+        // デフォルトは実行中がある場合のみ展開する。
+        _isSubagentsExpanded = State(initialValue: session.runningSubagentCount > 0)
+        if let team = session.teamName {
+            let hasRunningTeammate = sessionManager.teamSessions(name: team).contains { $0.status.isRunning }
+            _isTeamExpanded = State(initialValue: hasRunningTeammate)
+        } else {
+            _isTeamExpanded = State(initialValue: false)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,6 +55,8 @@ struct SessionDetailView: View {
             Rectangle()
                 .fill(.white.opacity(0.08))
                 .frame(height: 0.5)
+
+            collapsibleSections
 
             // Banners
             if let perm = session.pendingPermissions.first {
@@ -219,6 +245,79 @@ struct SessionDetailView: View {
         if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
         if count >= 1_000 { return String(format: "%.1fK", Double(count) / 1_000) }
         return "\(count)"
+    }
+
+    // MARK: - Subagents / Team (collapsible sections)
+
+    @ViewBuilder
+    private var collapsibleSections: some View {
+        if !session.subagents.isEmpty || session.teamName != nil {
+            VStack(alignment: .leading, spacing: 4) {
+                if !session.subagents.isEmpty {
+                    collapsibleSection(
+                        title: "SUBAGENTS",
+                        count: session.subagents.count,
+                        isExpanded: $isSubagentsExpanded
+                    ) {
+                        SubagentListView(subagents: session.subagents, fontSize: s(9))
+                    }
+                }
+                if let team = session.teamName {
+                    let members = sessionManager.teamSessions(name: team)
+                    collapsibleSection(
+                        title: "TEAM",
+                        count: members.count,
+                        isExpanded: $isTeamExpanded
+                    ) {
+                        TeamSection(
+                            currentSessionId: session.id,
+                            members: members,
+                            fontSize: s(9),
+                            onShowSession: onShowSession
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 6)
+        }
+    }
+
+    @ViewBuilder
+    private func collapsibleSection<Content: View>(
+        title: String,
+        count: Int,
+        isExpanded: Binding<Bool>,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    isExpanded.wrappedValue.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
+                        .font(.system(size: s(8), weight: .semibold))
+                        .foregroundStyle(DSColors.inkDim)
+                        .frame(width: 10)
+                    Text(title)
+                        .font(DSTypography.mono(s(9), weight: .medium))
+                        .tracking(0.8)
+                        .foregroundStyle(DSColors.inkDim)
+                    Text(String(format: "%02d", min(count, 99)))
+                        .font(DSTypography.mono(s(8), weight: .medium))
+                        .foregroundStyle(DSColors.inkMute)
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded.wrappedValue {
+                content()
+            }
+        }
     }
 
     // MARK: - Chat Tab

@@ -165,10 +165,27 @@ struct ExpandedPageView: View {
                 groupHeader(group, isCollapsed: isCollapsed)
                 if !isCollapsed {
                     ForEach(group.sessions) { session in
-                        sessionCard(session)
+                        sessionCardRow(session)
                     }
                 }
             }
+        }
+    }
+
+    /// `.team` グルーピングのときのみ、teammate カード（リーダー以外）に左 2px rail + 10px インデントを付ける。
+    /// 他のグルーピングではネストしない。
+    @ViewBuilder
+    private func sessionCardRow(_ session: UnifiedSession) -> some View {
+        if grouping == .team, session.teammateName != nil {
+            HStack(spacing: 0) {
+                Rectangle()
+                    .fill(DSColors.lineStrong)
+                    .frame(width: 2)
+                sessionCard(session)
+                    .padding(.leading, 10)
+            }
+        } else {
+            sessionCard(session)
         }
     }
 

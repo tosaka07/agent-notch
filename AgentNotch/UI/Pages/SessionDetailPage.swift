@@ -10,9 +10,12 @@ struct SessionDetailPage: View {
 
     var body: some View {
         if let session = sessionManager.session(for: sessionId) {
-            SessionDetailView(session: session, sessionManager: sessionManager) {
-                viewModel.backToList()
-            }
+            SessionDetailView(
+                session: session,
+                sessionManager: sessionManager,
+                onBack: { viewModel.backToList() },
+                onShowSession: { id in viewModel.showSession(id) }
+            )
         } else {
             ExpandedPageView(viewModel: viewModel, sessionManager: sessionManager)
         }

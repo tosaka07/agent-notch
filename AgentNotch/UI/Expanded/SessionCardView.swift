@@ -40,9 +40,10 @@ struct SessionCardView: View {
             // Left: DotMatrix + meta labels
             VStack(spacing: 4) {
                 DotMatrix(
-                    pattern: session.status.dotPattern,
+                    pattern: session.dotPattern,
                     cellSize: 3.2,
-                    dotFillRatio: 0.5
+                    dotFillRatio: 0.5,
+                    animationStartTime: session.doneAt
                 )
                 .frame(width: 48, height: 48)
 
@@ -65,6 +66,7 @@ struct SessionCardView: View {
                 identityRow
                 purposeRow
                 activityRow
+                subagentRow
                 taskRow
             }
 
@@ -95,6 +97,15 @@ struct SessionCardView: View {
             if userState.muted {
                 Image(systemName: "speaker.slash.fill")
                     .font(.system(size: s(7)))
+                    .foregroundStyle(DSColors.inkMute)
+            }
+
+            if session.teamName != nil {
+                Text((session.teammateName ?? "LEAD").uppercased())
+                    .font(DSTypography.mono(s(metaFont), weight: .semibold))
+                    .foregroundStyle(DSColors.signalThinking.opacity(0.8))
+                Text("·")
+                    .font(DSTypography.mono(s(metaFont)))
                     .foregroundStyle(DSColors.inkMute)
             }
 
@@ -200,6 +211,15 @@ struct SessionCardView: View {
         }
     }
 
+    // MARK: - Row 3.5: Subagents
+
+    @ViewBuilder
+    private var subagentRow: some View {
+        if !session.subagents.isEmpty {
+            SubagentChipsRow(subagents: session.subagents, fontSize: s(8))
+        }
+    }
+
     // MARK: - Row 4: Tasks
 
     @ViewBuilder
@@ -214,6 +234,10 @@ struct SessionCardView: View {
                         Text(task.subject)
                             .foregroundStyle(task.status == .completed ? DSColors.inkMute : DSColors.inkDim)
                             .lineLimit(1)
+                        if task.status == .inProgress, let assignee = task.assignee {
+                            Text("@\(assignee)")
+                                .foregroundStyle(DSColors.inkMute)
+                        }
                     }
                 }
                 if tasks.count > 6 {
