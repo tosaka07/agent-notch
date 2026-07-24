@@ -25,6 +25,13 @@ final class SocketCoordinator {
                 // Parse off MainActor — pure data processing
                 let parsed = EventProcessor.parseMessage(message)
                 let hookEvent = message["hook_event_name"] as? String ?? ""
+                // 受信した全 hook を可視化（unknown も含め、何が飛んでくるか追えるように）
+                let sid = message["session_id"] as? String ?? "?"
+                if case .unknown = parsed.event {
+                    Log.socket.info("← [UNKNOWN hook] event=\(hookEvent) session=\(sid)")
+                } else {
+                    Log.socket.debug("← hook event=\(hookEvent) session=\(sid)")
+                }
                 let cwd = message["cwd"] as? String
                 let transcriptPath = message["transcript_path"] as? String
                 let pid = (message["_pid"] as? NSNumber)?.int32Value
