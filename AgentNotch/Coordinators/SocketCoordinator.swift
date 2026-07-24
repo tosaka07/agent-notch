@@ -39,6 +39,11 @@ final class SocketCoordinator {
                 let permissionMode = parsed.permissionMode
 
                 Task { @MainActor in
+                    // 同一プロセス（pid）が resume/compact/clear 等で新しい session_id を発行した場合、
+                    // 古いセッションを新しい方へ統合する（#23: 一覧の分裂対策）。
+                    if hookEvent == "SessionStart" {
+                        manager.reconcileSessionStart(newId: parsed.sessionId, pid: pid)
+                    }
                     EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
                     EventProcessor.backfillSession(
                         parsed.sessionId, cwd: cwd, transcriptPath: transcriptPath,

@@ -36,6 +36,7 @@ final class SessionSweepCoordinator {
             let reason: String = switch item.reason {
             case .directoryDeleted: "ディレクトリ削除"
             case .timeout: "タイムアウト"
+            case .processDead: "プロセス終了"
             }
             NotificationCenter.default.post(
                 name: .agentNotchSessionSwept,
