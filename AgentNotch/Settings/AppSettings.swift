@@ -165,8 +165,9 @@ extension Defaults.Keys {
 
     // Sound settings per event
     static let soundCompleted = Key<SoundChoice>("soundCompleted", default: .system("Glass"))
-    // タスク完了音（Glass）と聞き分けやすいよう、subagent 完了はデフォルトで別の音にする。
-    static let soundSubagentCompleted = Key<SoundChoice>("soundSubagentCompleted", default: .system("Pop"))
+    // subagent 完了は並列実行（Workflow で 5〜16 並行）だと頻発するため、デフォルトは無音。
+    // 鳴らしたい場合は設定から選択する。
+    static let soundSubagentCompleted = Key<SoundChoice>("soundSubagentCompleted", default: .none)
     static let soundPermission = Key<SoundChoice>("soundPermission", default: .system("Funk"))
     static let soundError = Key<SoundChoice>("soundError", default: .system("Basso"))
     static let soundEnabled = Key<Bool>("soundEnabled", default: true)
