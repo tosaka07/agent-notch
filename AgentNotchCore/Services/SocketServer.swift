@@ -16,14 +16,31 @@ public struct PendingSocketResponse: Sendable {
     public let toolUseId: String
     public let connection: NWConnection
     public let receivedAt: Date
+    /// `askUserQuestion` の場合のみ、元の `tool_input`（`questions` を含む）を保持する。
+    /// Claude Code は `updatedInput` をツールの入力スキーマ全体として検証するため、
+    /// `answers` だけを返すと必須の `questions` が欠落してバリデーションエラーになる。
+    /// 応答時に元の `tool_input` に `answers` をマージして送り返す必要がある。
+    public let toolInput: JSONBox?
 
-    public init(kind: Kind, sessionId: String, toolUseId: String, connection: NWConnection, receivedAt: Date) {
+    public init(
+        kind: Kind, sessionId: String, toolUseId: String, connection: NWConnection, receivedAt: Date,
+        toolInput: JSONBox? = nil
+    ) {
         self.kind = kind
         self.sessionId = sessionId
         self.toolUseId = toolUseId
         self.connection = connection
         self.receivedAt = receivedAt
+        self.toolInput = toolInput
     }
+}
+
+/// `[String: Any]` を Sendable な境界を跨いで受け渡すための箱。
+/// hook JSON はプリミティブ値のみで構成され、SocketServer 内部でしか使わないため
+/// `@unchecked Sendable` として扱う（LockedArray / LockedDict と同様の許容）。
+public final class JSONBox: @unchecked Sendable {
+    public let value: [String: Any]
+    public init(_ value: [String: Any]) { self.value = value }
 }
 
 public final class SocketServer: Sendable {
@@ -102,15 +119,18 @@ public final class SocketServer: Sendable {
     /// AskUserQuestion の回答を送る。
     /// Claude Code 内部の期待形式: `hookSpecificOutput.decision.updatedInput.answers` に
     /// `{question_text: answer_label}` の dict を入れる。
+    /// `updatedInput` は AskUserQuestion ツールの入力スキーマ全体として検証されるため、
+    /// 元の `tool_input`（`questions` を含む）を土台にして `answers` を足し込む。
+    /// これを怠ると「required parameter questions is missing」で失敗する（#6）。
     public func respondToAskQuestion(toolUseId: String, answers: [String: String]) {
+        var updatedInput = _pending.peek(toolUseId)?.toolInput?.value ?? [:]
+        updatedInput["answers"] = answers
         let response: [String: Any] = [
             "hookSpecificOutput": [
                 "hookEventName": "PermissionRequest",
                 "decision": [
                     "behavior": "allow",
-                    "updatedInput": [
-                        "answers": answers
-                    ]
+                    "updatedInput": updatedInput
                 ]
             ]
         ]
@@ -182,6 +202,11 @@ final class LockedDict<Key: Hashable & Sendable, Value: Sendable>: @unchecked Se
     @discardableResult
     func remove(_ key: Key) -> Value? {
         lock.lock(); let v = dict.removeValue(forKey: key); lock.unlock(); return v
+    }
+
+    /// 削除せずに参照するだけの取得。
+    func peek(_ key: Key) -> Value? {
+        lock.lock(); let v = dict[key]; lock.unlock(); return v
     }
 
     func all() -> [(Key, Value)] {
