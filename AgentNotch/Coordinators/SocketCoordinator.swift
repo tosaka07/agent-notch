@@ -36,12 +36,16 @@ final class SocketCoordinator {
                 let transcriptPath = message["transcript_path"] as? String
                 let pid = (message["_pid"] as? NSNumber)?.int32Value
                 let tty = message["_tty"] as? String
+                let permissionMode = parsed.permissionMode
 
                 Task { @MainActor in
                     EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
                     EventProcessor.backfillSession(
                         parsed.sessionId, cwd: cwd, transcriptPath: transcriptPath,
                         pid: pid, tty: tty, manager: manager
+                    )
+                    EventProcessor.applyPermissionMode(
+                        sessionId: parsed.sessionId, rawMode: permissionMode, manager: manager
                     )
                 }
 

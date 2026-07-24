@@ -134,6 +134,54 @@ struct ClaudeEventParserTests {
         }
     }
 
+    // MARK: - permission_mode (共通フィールド)
+
+    @Test("PermissionRequest for ExitPlanMode maps to permissionRequested (plan review)")
+    func permissionRequestExitPlanMode() {
+        let json: [String: Any] = [
+            "hook_event_name": "PermissionRequest",
+            "session_id": "sess-050",
+            "tool_name": "ExitPlanMode",
+            "tool_input": ["plan": "1. Do X\n2. Do Y"],
+            "permission_mode": "plan",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .permissionRequested(info) = event else {
+            Issue.record("Expected permissionRequested, got \(event)")
+            return
+        }
+        #expect(info.sessionId == "sess-050")
+        #expect(info.toolName == "ExitPlanMode")
+    }
+
+    @Test("permissionMode(from:) reads the common permission_mode field")
+    func permissionModeCommonField() {
+        let json: [String: Any] = [
+            "hook_event_name": "PreToolUse",
+            "session_id": "sess-051",
+            "tool_name": "Read",
+            "permission_mode": "plan",
+        ]
+        #expect(ClaudeEventParser.permissionMode(from: json) == "plan")
+    }
+
+    @Test("permissionMode(from:) is nil when the field is absent")
+    func permissionModeMissing() {
+        let json: [String: Any] = [
+            "hook_event_name": "PreToolUse",
+            "session_id": "sess-052",
+        ]
+        #expect(ClaudeEventParser.permissionMode(from: json) == nil)
+    }
+
+    @Test(
+        "PermissionMode(rawValue:) accepts all known Claude Code modes",
+        arguments: ["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]
+    )
+    func permissionModeRawValues(raw: String) {
+        #expect(PermissionMode(rawValue: raw) != nil)
+    }
+
     @Test("PreToolUse with TaskCreate maps to taskCreated")
     func taskCreate() {
         let json: [String: Any] = [

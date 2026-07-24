@@ -61,6 +61,13 @@ struct SessionCardView: View {
                     .font(DSTypography.mono(s(6), weight: .medium))
                     .tracking(0.3)
                     .foregroundStyle(session.agentType.color.opacity(0.5))
+
+                if session.permissionMode == .plan {
+                    Text("PLAN")
+                        .font(DSTypography.mono(s(6), weight: .semibold))
+                        .tracking(0.3)
+                        .foregroundStyle(DSColors.signalPlan.opacity(0.85))
+                }
             }
             .frame(width: dotMatrixSize)
 
@@ -177,7 +184,12 @@ struct SessionCardView: View {
                     .foregroundStyle(DSColors.inkDim)
                     .lineLimit(1)
             } else if session.status == .permissionWaiting {
-                if let perm = session.pendingPermissions.first {
+                if let perm = session.pendingPermissions.first, perm.isPlanReview {
+                    Text("PLAN REVIEW")
+                        .font(DSTypography.mono(s(8), weight: .medium))
+                        .tracking(0.5)
+                        .foregroundStyle(DSColors.signalPlan.opacity(0.9))
+                } else if let perm = session.pendingPermissions.first {
                     Text("APPROVE:")
                         .font(DSTypography.mono(s(8), weight: .medium))
                         .tracking(0.5)

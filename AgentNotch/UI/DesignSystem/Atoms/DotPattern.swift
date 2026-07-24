@@ -13,6 +13,8 @@ enum DotPattern: Hashable {
     case complete
     /// 並行実行中の subagent 数（1–9 に clamp）を 2×2 ブロックの脈動で表現する。
     case swarm(active: Int)
+    /// Plan モード終了確認（`ExitPlanMode` の承認待ち）。書類（横線 3 本）の形で alert と区別する。
+    case planReview
 
     var signalColor: Color {
         switch self {
@@ -23,6 +25,7 @@ enum DotPattern: Hashable {
         case .fault: return DSColors.signalError
         case .complete: return DSColors.signalDone
         case .swarm: return DSColors.signalWorking
+        case .planReview: return DSColors.signalPlan
         }
     }
 }
@@ -56,6 +59,7 @@ enum DotBitmap {
         case .working: barFill(time: time)
         case .alert: blinkExclamation(time: time)
         case .fault: flickerCross(time: time)
+        case .planReview: blinkPlanDocument(time: time)
         case .complete: smileyFull // unreachable, but required for exhaustive switch
         case .swarm: smileyFull // unreachable, cellGrid が先に処理する
         }
@@ -137,6 +141,23 @@ enum DotBitmap {
         return grid
     }()
 
+    /// 書類（横線 3 本 = plan テキストのイメージ）。alert（`!`）とは形状で明確に区別できる。
+    private static let planDocument: [[Bool]] = parse("""
+    .............
+    .............
+    ...#######...
+    ...#.....#...
+    ...#.###.#...
+    ...#.....#...
+    ...#.###.#...
+    ...#.....#...
+    ...#.###.#...
+    ...#.....#...
+    ...#######...
+    .............
+    .............
+    """)
+
     private static let prompt: [[Bool]] = parse("""
     .............
     .............
@@ -206,6 +227,11 @@ enum DotBitmap {
 
     private static func blinkExclamation(time: TimeInterval) -> [[Bool]] {
         time.truncatingRemainder(dividingBy: 0.56) < 0.28 ? exclamation : emptyGrid()
+    }
+
+    /// alert よりゆったりした周期で点滅させ、リズムでも alert と区別できるようにする。
+    private static func blinkPlanDocument(time: TimeInterval) -> [[Bool]] {
+        time.truncatingRemainder(dividingBy: 1.0) < 0.6 ? planDocument : emptyGrid()
     }
 
     private static func flickerCross(time: TimeInterval) -> [[Bool]] {

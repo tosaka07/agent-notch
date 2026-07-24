@@ -42,4 +42,6 @@ enum DSColors {
     static let signalError = Color(red: 1.000, green: 0.231, blue: 0.188)     // #FF3B30
     /// done / completed
     static let signalDone = Color(red: 0.204, green: 0.831, blue: 0.600)      // #34D399
+    /// plan mode / plan レビュー待ち（ExitPlanMode の確認）
+    static let signalPlan = Color(red: 0.635, green: 0.510, blue: 1.000)      // #A282FF
 }

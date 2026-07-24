@@ -54,6 +54,9 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var doneAt: Date?
     public var pendingQuestion: PendingQuestion?
     public var lastActivityAt: Date
+    /// 現在のパーミッションモード（`default` / `acceptEdits` / `plan` / `dontAsk` / `bypassPermissions`）。
+    /// hook イベント共通フィールド `permission_mode` から反映される。未受信の間は nil。
+    public var permissionMode: PermissionMode?
     /// エージェント内部のタスク一覧（TaskCreate/TaskUpdate で管理される）。
     public var tasks: [AgentTask] = []
 
