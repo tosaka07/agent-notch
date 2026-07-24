@@ -33,7 +33,13 @@ extension SessionStatus {
 extension UnifiedSession {
     var dotPattern: DotPattern {
         switch status {
-        case .permissionWaiting, .error, .done, .completed:
+        case .permissionWaiting:
+            // Plan モード終了確認（ExitPlanMode）は通常の alert とは別パターンで識別する。
+            if pendingPermissions.first?.isPlanReview == true {
+                return .planReview
+            }
+            return status.dotPattern
+        case .error, .done, .completed:
             return status.dotPattern
         default:
             if runningSubagentCount > 0 {
