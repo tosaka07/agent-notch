@@ -101,8 +101,18 @@ public final class SocketServer: Sendable {
 
     // MARK: - Deferred Permission Response
 
-    public func addPending(_ response: PendingSocketResponse) {
-        _pending.set(response.toolUseId, response)
+    /// `_pending` へ登録する。同じ `toolUseId` が既に登録されている場合は「先勝ち」とし、
+    /// 既存エントリを保持したまま登録を拒否する（socket ハイジャック対策 #24）。
+    /// 呼び出し側は戻り値が `false` の場合、新規 connection を閉じること。
+    @discardableResult
+    public func addPending(_ response: PendingSocketResponse) -> Bool {
+        let inserted = _pending.setIfAbsent(response.toolUseId, response)
+        if !inserted {
+            Log.socket.warning(
+                "addPending: toolUseId=\(response.toolUseId) は既に登録済み。衝突を検知したため新規登録を拒否（先勝ち）。sessionId=\(response.sessionId) kind=\(response.kind.rawValue)"
+            )
+        }
+        return inserted
     }
 
     /// 通常の PermissionRequest（tool allow/deny）の応答を送る。
@@ -206,6 +216,17 @@ final class LockedDict<Key: Hashable & Sendable, Value: Sendable>: @unchecked Se
 
     func set(_ key: Key, _ value: Value) {
         lock.lock(); dict[key] = value; lock.unlock()
+    }
+
+    /// キーが未登録の場合のみ値を挿入する（check-and-set をロック内で一発化し TOCTOU を避ける）。
+    /// 戻り値: 挿入できたら true、既に存在して拒否したら false。
+    @discardableResult
+    func setIfAbsent(_ key: Key, _ value: Value) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if dict[key] != nil { return false }
+        dict[key] = value
+        return true
     }
 
     @discardableResult

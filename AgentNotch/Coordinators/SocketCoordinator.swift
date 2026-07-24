@@ -65,14 +65,23 @@ final class SocketCoordinator {
                 }
 
                 guard let d = deferred else { return [String: Any]() }
-                serverBox.server?.addPending(PendingSocketResponse(
+                let pending = PendingSocketResponse(
                     kind: d.kind,
                     sessionId: d.sessionId,
                     toolUseId: d.toolUseId,
                     connection: connection,
                     receivedAt: Date(),
                     toolInput: d.toolInput
-                ))
+                )
+                // 既存の toolUseId と衝突した場合は先勝ちで拒否される（socket ハイジャック対策 #24）。
+                // 拒否されたら、正規セッションの応答経路を乗っ取ろうとした新規 connection 側を閉じる。
+                guard serverBox.server?.addPending(pending) == true else {
+                    Log.socket.warning(
+                        "Rejected duplicate/hijack-attempt pending toolUseId=\(d.toolUseId); closing new connection"
+                    )
+                    connection.cancel()
+                    return nil
+                }
                 Log.socket.info("Deferred \(d.kind.rawValue) toolUseId=\(d.toolUseId)")
                 return nil
             }
