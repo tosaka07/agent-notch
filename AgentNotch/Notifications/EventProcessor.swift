@@ -72,7 +72,9 @@ enum EventProcessor {
             handleStopFailure(sessionId: sessionId, errorType: errorType, agentType: agentType, manager: manager)
 
         case let .compactingDone(sessionId):
-            manager.session(for: sessionId)?.status = .thinking
+            if let session = manager.session(for: sessionId) {
+                setStatusUnlessPermissionPending(session, .thinking)
+            }
 
         case let .sessionIdle(sessionId):
             SessionFinalizer.finalize(sessionId: sessionId, manager: manager)
@@ -99,6 +101,16 @@ enum EventProcessor {
     }
 
     // MARK: - Individual handlers
+
+    /// `pendingPermissions` が残っている間は `.permissionWaiting` の表示を維持すべき、という共通ガード。
+    /// subagent が並列実行されている場合、承認待ちの subagent とは別の subagent の
+    /// PreToolUse/PostToolUse/SubagentStart 等が同じ session_id の status を更新してしまい、
+    /// 承認待ちバッジが誤って消えるのを防ぐ（#19）。
+    @MainActor
+    private static func setStatusUnlessPermissionPending(_ session: UnifiedSession, _ status: SessionStatus) {
+        guard session.pendingPermissions.isEmpty else { return }
+        session.status = status
+    }
 
     @MainActor
     private static func handleSessionStarted(
@@ -152,7 +164,9 @@ enum EventProcessor {
     ) {
         let session = manager.session(for: info.sessionId)
             ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
-        session.status = .toolRunning
+        // Issue #19: subagent が並列実行中、別の subagent の PreToolUse が届いて
+        // permissionWaiting のバッジを誤って消してしまわないようにガードする。
+        setStatusUnlessPermissionPending(session, .toolRunning)
         session.currentTool = ToolInfo(
             id: info.toolUseId, name: info.toolName, summary: info.summary,
             input: info.toolInput, startedAt: Date(), status: .running
@@ -183,7 +197,7 @@ enum EventProcessor {
             if session.recentTools.count > 50 { session.recentTools.removeLast() }
         }
         session.currentTool = nil
-        session.status = .thinking
+        setStatusUnlessPermissionPending(session, .thinking)
     }
 
     @MainActor
@@ -237,7 +251,7 @@ enum EventProcessor {
         // 完了状態を潰すことがあるので .done は保持する。
         // 次の userPrompt / toolStarted で遷移するまで完了表示を維持。
         if session.status == .done { return }
-        session.status = .idle
+        setStatusUnlessPermissionPending(session, .idle)
     }
 
     @MainActor
@@ -247,7 +261,7 @@ enum EventProcessor {
         let session = manager.session(for: info.sessionId)
             ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
         session.startSubagent(agentType: info.agentType, agentId: info.agentId)
-        session.status = .subagentRunning
+        setStatusUnlessPermissionPending(session, .subagentRunning)
         Log.events.info("subagentStarted id=\(info.sessionId) type=\(info.agentType) agentId=\(info.agentId ?? "-")")
     }
 

@@ -75,6 +75,18 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
         subagents.filter { $0.status == .running }.count
     }
 
+    /// PermissionRequest / AskUserQuestion への応答（承認・拒否・回答）を処理した直後に
+    /// 遷移すべき status を返す。
+    /// - 他にまだ未処理の pendingPermissions / pendingQuestion があれば `.permissionWaiting` を維持する。
+    /// - 無ければ、subagent がまだ実行中かどうかで `.subagentRunning` / `.thinking` を選ぶ。
+    /// 呼び出し側は `pendingPermissions` / `pendingQuestion` をクリアした「後」に呼ぶこと（#19）。
+    public func statusAfterPermissionResolved() -> SessionStatus {
+        if !pendingPermissions.isEmpty || pendingQuestion != nil {
+            return .permissionWaiting
+        }
+        return runningSubagentCount > 0 ? .subagentRunning : .thinking
+    }
+
     /// `GitInfoResolver.resolve(cwd:)` で非同期に解決された git メタ情報のキャッシュ。
     /// 未解決の間は nil。`EventProcessor.backfillSession` が初回に一度だけセットする。
     public var gitInfo: GitInfo?

@@ -137,7 +137,9 @@ final class SocketCoordinator {
         socketServer?.respondToAskQuestion(toolUseId: toolUseId, answers: flatAnswers)
         if let session = sessionManager.session(for: sessionId) {
             session.pendingQuestion = nil
-            session.status = .thinking
+            // #19: 他にまだ pending な承認/質問があれば permissionWaiting を維持し、
+            // 無ければ subagent 実行中かどうかで復帰先を決める（thinking に決め打ちしない）。
+            session.status = session.statusAfterPermissionResolved()
             sessionManager.notifyChange()
         }
     }
@@ -145,7 +147,9 @@ final class SocketCoordinator {
     private func clearPendingPermission(sessionId: String, toolUseId: String) {
         guard let session = sessionManager.session(for: sessionId) else { return }
         session.pendingPermissions.removeAll { $0.toolUseId == toolUseId }
-        session.status = .thinking
+        // #19: 他にまだ pending な承認/質問があれば permissionWaiting を維持し、
+        // 無ければ subagent 実行中かどうかで復帰先を決める（thinking に決め打ちしない）。
+        session.status = session.statusAfterPermissionResolved()
         sessionManager.notifyChange()
     }
 }
