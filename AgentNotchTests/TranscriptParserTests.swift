@@ -95,7 +95,31 @@ struct TranscriptParserTests {
         #expect(TranscriptParser.firstUserMessage(at: tmpPath) == nil)
     }
 
-    // MARK: - sanitizeUserPromptText
+    // MARK: - sanitizeUserPromptText (画像参照マーカーの整形)
+
+    @Test("sanitizeUserPromptText replaces a single image reference block with [画像]")
+    func sanitizeSingleImageOnly() {
+        let text = "[Image: source: /Users/dev/.claude/image-cache/abc.png]"
+        #expect(TranscriptParser.sanitizeUserPromptText(text) == "[画像]")
+    }
+
+    @Test("sanitizeUserPromptText keeps surrounding text and replaces image block with [画像]")
+    func sanitizeImageMixedWithText() {
+        let text = "この画像を見て [Image: source: /Users/dev/.claude/image-cache/abc.png] 直してください"
+        #expect(
+            TranscriptParser.sanitizeUserPromptText(text)
+                == "この画像を見て [画像] 直してください"
+        )
+    }
+
+    @Test("sanitizeUserPromptText collapses multiple image reference blocks into [画像×N]")
+    func sanitizeMultipleImages() {
+        let text = "[Image: source: /a.png] [Image: source: /b.png] この2枚を比較して"
+        #expect(
+            TranscriptParser.sanitizeUserPromptText(text)
+                == "[画像×2] この2枚を比較して"
+        )
+    }
 
     @Test("sanitizeUserPromptText returns unmodified text when no image reference is present")
     func sanitizeNoImage() {

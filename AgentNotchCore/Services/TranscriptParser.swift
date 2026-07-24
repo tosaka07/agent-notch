@@ -115,7 +115,8 @@ public enum TranscriptParser {
     }
 
     /// ユーザー入力テキストを表示用に整形する。
-    /// スラッシュコマンドやシステム注入コマンドタグは表示対象外として `nil` を返す。
+    /// - スラッシュコマンドやシステム注入コマンドタグは表示対象外として `nil` を返す。
+    /// - 画像参照ブロック（`[Image: ...]`）は `[画像]`（複数なら `[画像×N]`）マーカーに置換する。
     ///
     /// transcript から抽出したテキストだけでなく、UserPromptSubmit hook のペイロードに
     /// 直接含まれる `prompt` にも同じ整形を適用するために public にしている。
@@ -123,7 +124,31 @@ public enum TranscriptParser {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("/") { return nil }
         if trimmed.hasPrefix("<") && trimmed.contains("command") { return nil }
-        return trimmed
+        return formatImageReferences(in: trimmed)
+    }
+
+    /// `[Image: source: /path/to/file]` のような画像参照ブロックを `[画像]` マーカーに置換する。
+    /// 複数ある場合は 1 個のマーカーに集約し `[画像×N]` にする。
+    private static func formatImageReferences(in text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"\[Image:[^\]]*\]"#, options: [.caseInsensitive]) else {
+            return text
+        }
+        let mutable = NSMutableString(string: text)
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: mutable.length))
+        guard !matches.isEmpty else { return text }
+
+        let marker = matches.count == 1 ? "[画像]" : "[画像×\(matches.count)]"
+        // 後ろから置換することで、前方の match の range がずれない。
+        // 最初の match だけマーカーに置換し、残りは単純に削除する。
+        for (index, match) in matches.enumerated().reversed() {
+            mutable.replaceCharacters(in: match.range, with: index == 0 ? marker : "")
+        }
+
+        let collapsed = mutable.replacingOccurrences(
+            of: #"[ \t]{2,}"#, with: " ", options: .regularExpression,
+            range: NSRange(location: 0, length: mutable.length)
+        )
+        return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Returns the last assistant text message from the transcript (for completion notifications).
