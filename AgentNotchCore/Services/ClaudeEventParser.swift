@@ -133,7 +133,9 @@ public struct AskQuestionInfo: Sendable {
 
 public enum ClaudeEvent: Sendable {
     case sessionStarted(SessionInfo)
-    case userPrompt(sessionId: String)
+    /// `prompt` は UserPromptSubmit hook のペイロードに含まれる場合のみ non-nil。
+    /// 含まれない場合は呼び出し側で transcript 読み込みにフォールバックする。
+    case userPrompt(sessionId: String, prompt: String?)
     case toolStarted(ToolStartInfo)
     case toolCompleted(ToolEndInfo)
     case toolFailed(ToolFailInfo)
@@ -176,7 +178,8 @@ public enum ClaudeEventParser {
             return .sessionStarted(info)
 
         case "UserPromptSubmit":
-            return .userPrompt(sessionId: sessionId)
+            let prompt = json["prompt"] as? String
+            return .userPrompt(sessionId: sessionId, prompt: prompt)
 
         case "PreToolUse":
             let toolName = json["tool_name"] as? String ?? ""

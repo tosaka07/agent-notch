@@ -94,4 +94,16 @@ struct TranscriptParserTests {
 
         #expect(TranscriptParser.firstUserMessage(at: tmpPath) == nil)
     }
+
+    // MARK: - sanitizeUserPromptText
+
+    @Test("sanitizeUserPromptText returns unmodified text when no image reference is present")
+    func sanitizeNoImage() {
+        #expect(TranscriptParser.sanitizeUserPromptText("Fix the auth bug") == "Fix the auth bug")
+    }
+
+    @Test("sanitizeUserPromptText returns nil for slash commands")
+    func sanitizeSlashCommand() {
+        #expect(TranscriptParser.sanitizeUserPromptText("/compact") == nil)
+    }
 }

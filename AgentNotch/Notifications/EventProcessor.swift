@@ -25,8 +25,8 @@ enum EventProcessor {
         case let .sessionStarted(info):
             handleSessionStarted(info, agentType: agentType, manager: manager)
 
-        case let .userPrompt(sessionId):
-            handleUserPrompt(sessionId: sessionId, agentType: agentType, manager: manager)
+        case let .userPrompt(sessionId, prompt):
+            handleUserPrompt(sessionId: sessionId, prompt: prompt, agentType: agentType, manager: manager)
 
         case let .toolStarted(info):
             handleToolStarted(info, agentType: agentType, manager: manager)
@@ -101,7 +101,7 @@ enum EventProcessor {
 
     @MainActor
     private static func handleUserPrompt(
-        sessionId: String, agentType: AgentType, manager: SessionManager
+        sessionId: String, prompt: String?, agentType: AgentType, manager: SessionManager
     ) {
         Log.events.info("userPrompt id=\(sessionId)")
         let session = manager.session(for: sessionId)
@@ -109,7 +109,14 @@ enum EventProcessor {
         session.status = .thinking
         NotificationCenter.default.post(name: .agentNotchSessionResumed, object: sessionId)
 
-        // lastUserPrompt を非同期で更新
+        // UserPromptSubmit hook のペイロードに prompt が含まれていれば、それを直接反映する。
+        // transcript 書き込み待ち（sleep + 再読み込み）が不要になり、古い内容を拾う問題を回避できる。
+        if let prompt, let sanitized = TranscriptParser.sanitizeUserPromptText(prompt) {
+            session.lastUserPrompt = sanitized
+            return
+        }
+
+        // フォールバック: ペイロードに prompt が無い場合は transcript から読む。
         // UserPromptSubmit hook は transcript 書き込みより先に飛ぶことがあるため、
         // 少し待ってから読む。
         if let path = session.transcriptPath {

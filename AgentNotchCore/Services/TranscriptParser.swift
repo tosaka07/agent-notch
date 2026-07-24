@@ -111,6 +111,15 @@ public enum TranscriptParser {
         }()
 
         guard let text else { return nil }
+        return sanitizeUserPromptText(text)
+    }
+
+    /// ユーザー入力テキストを表示用に整形する。
+    /// スラッシュコマンドやシステム注入コマンドタグは表示対象外として `nil` を返す。
+    ///
+    /// transcript から抽出したテキストだけでなく、UserPromptSubmit hook のペイロードに
+    /// 直接含まれる `prompt` にも同じ整形を適用するために public にしている。
+    public static func sanitizeUserPromptText(_ text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("/") { return nil }
         if trimmed.hasPrefix("<") && trimmed.contains("command") { return nil }
