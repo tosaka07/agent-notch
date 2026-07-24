@@ -35,17 +35,20 @@ struct SessionCardView: View {
     @Default(.cardPromptSource) private var promptSource
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
+    /// 左カラムの DotMatrix サイズ。一覧の縦密度を上げるため 48px から圧縮。
+    private let dotMatrixSize: CGFloat = 36
+
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             // Left: DotMatrix + meta labels
-            VStack(spacing: 4) {
+            VStack(spacing: 2) {
                 DotMatrix(
                     pattern: session.dotPattern,
-                    cellSize: 3.2,
+                    cellSize: 3.2 * dotMatrixSize / 48,
                     dotFillRatio: 0.5,
                     animationStartTime: session.doneAt
                 )
-                .frame(width: 48, height: 48)
+                .frame(width: dotMatrixSize, height: dotMatrixSize)
 
                 if let model = session.model {
                     Text(shortModel(model))
@@ -59,10 +62,10 @@ struct SessionCardView: View {
                     .tracking(0.3)
                     .foregroundStyle(session.agentType.color.opacity(0.5))
             }
-            .frame(width: 48)
+            .frame(width: dotMatrixSize)
 
             // Middle: info rows
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 identityRow
                 purposeRow
                 activityRow
@@ -73,8 +76,8 @@ struct SessionCardView: View {
             // Right: action column (menu + app icon)
             actionColumn
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(Color(red: 0x0C / 255.0, green: 0x13 / 255.0, blue: 0x12 / 255.0))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .opacity(isUserDone ? 0.5 : 1.0)
@@ -222,29 +225,40 @@ struct SessionCardView: View {
 
     // MARK: - Row 4: Tasks
 
+    /// task/subagent 各チップの subject/name に許容する最大幅。
+    /// 幅不足時に HStack 全体が潰れて隣接チップと連結して見える(#11)のを防ぐため、
+    /// 可変長パートだけをここで切り詰め、他のパートは fixedSize で保護する。
+    private let chipLabelMaxWidth: CGFloat = 70
+
     @ViewBuilder
     private var taskRow: some View {
         let tasks = session.tasks
         if !tasks.isEmpty {
             HStack(spacing: 8) {
-                ForEach(tasks.prefix(6)) { task in
+                ForEach(tasks.prefix(4)) { task in
                     HStack(spacing: 3) {
                         Text(task.status.glyph)
                             .foregroundStyle(task.status.color)
+                            .fixedSize()
                         Text(task.subject)
                             .foregroundStyle(task.status == .completed ? DSColors.inkMute : DSColors.inkDim)
                             .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(width: chipLabelMaxWidth, alignment: .leading)
                         if task.status == .inProgress, let assignee = task.assignee {
                             Text("@\(assignee)")
                                 .foregroundStyle(DSColors.inkMute)
+                                .lineLimit(1)
+                                .fixedSize()
                         }
                     }
                 }
-                if tasks.count > 6 {
-                    Text("+\(tasks.count - 6)")
+                if tasks.count > 4 {
+                    Text("+\(tasks.count - 4)")
                         .foregroundStyle(DSColors.inkMute)
+                        .fixedSize()
                 }
-                Spacer()
+                Spacer(minLength: 0)
             }
             .font(DSTypography.mono(s(8)))
         }
@@ -254,7 +268,7 @@ struct SessionCardView: View {
 
     /// 右端に縦積みで ⊙ menu + app icon を配置。
     private var actionColumn: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 2) {
             // ⊙ Menu (ellipsis.circle)
             SessionActionMenu(
                 userState: userState,
@@ -265,8 +279,8 @@ struct SessionCardView: View {
                 onToggleDone: actions.toggleDone,
                 onJumpToTerminal: { TerminalJumper.jump(pid: session.pid, tty: session.tty) },
                 onRemove: actions.remove,
-                labelSize: 14,
-                labelFrame: CGSize(width: 28, height: 28),
+                labelSize: 13,
+                labelFrame: CGSize(width: 24, height: 24),
                 symbolName: "ellipsis.circle"
             )
 
@@ -278,15 +292,15 @@ struct SessionCardView: View {
                     if let icon = session.terminalAppIcon as? NSImage {
                         Image(nsImage: icon)
                             .resizable()
-                            .frame(width: 20, height: 20)
+                            .frame(width: 18, height: 18)
                     } else {
                         Image(systemName: "arrow.up.right.square")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(DSColors.inkMute)
                     }
                 }
                 .buttonStyle(.plain)
-                .frame(width: 28, height: 28)
+                .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
             }
         }
