@@ -89,10 +89,13 @@ public final class SocketServer: Sendable {
         }
 
         listener.start(queue: queue)
+        startSweepTimer()
     }
 
     public func stop() {
         listener.cancel()
+        _sweepTimer.get()?.cancel()
+        _sweepTimer.set(nil)
         for conn in _connections.removeAll() { conn.cancel() }
         for (_, p) in _pending.all() { p.connection.cancel() }
         _pending.removeAll()
@@ -100,6 +103,18 @@ public final class SocketServer: Sendable {
     }
 
     // MARK: - Deferred Permission Response
+
+    /// TTL（`_pending` エントリの生存期間上限）。
+    /// `HookHandler.recvTimeoutSeconds`（120s）が実際の待ち上限で、hook プロセスは
+    /// その時間で recv を諦めて pass-through に倒れる（`HookInstaller` の
+    /// PermissionRequest hook timeout ＝ 86400s は Claude Code 側の外側タイムアウトで、
+    /// 内側の 120s の方が必ず先に発火するため拘束力を持たない）。
+    /// よって 120s を超えたエントリは応答が届いても意味がなく、破棄してよい。
+    /// 多少のマージンとして 10s 足す。
+    static let pendingTTLSeconds: TimeInterval = 130
+    private static let sweepIntervalSeconds: TimeInterval = 30
+
+    private let _sweepTimer = LockedBox<DispatchSourceTimer>()
 
     /// `_pending` へ登録する。同じ `toolUseId` が既に登録されている場合は「先勝ち」とし、
     /// 既存エントリを保持したまま登録を拒否する（socket ハイジャック対策 #24）。
@@ -113,6 +128,33 @@ public final class SocketServer: Sendable {
             )
         }
         return inserted
+    }
+
+    /// TTL を超過した pending エントリを破棄し、connection をクローズする（#25）。
+    /// sweep タイマーから定期的に呼ばれる。純粋なロジック部分は `isExpired` に切り出してテスト可能にしている。
+    func sweepExpiredPending(now: Date = Date()) {
+        let expired = _pending.removeAll { Self.isExpired(receivedAt: $0.receivedAt, now: now) }
+        for pending in expired {
+            Log.socket.warning(
+                "sweepExpiredPending: TTL 超過（\(Self.pendingTTLSeconds)s）で破棄 toolUseId=\(pending.toolUseId) sessionId=\(pending.sessionId) kind=\(pending.kind.rawValue)"
+            )
+            pending.connection.cancel()
+        }
+    }
+
+    /// `receivedAt` から `now` までの経過時間が TTL 以上かどうかを判定する純関数。
+    static func isExpired(receivedAt: Date, now: Date, ttl: TimeInterval = pendingTTLSeconds) -> Bool {
+        now.timeIntervalSince(receivedAt) >= ttl
+    }
+
+    private func startSweepTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + Self.sweepIntervalSeconds, repeating: Self.sweepIntervalSeconds)
+        timer.setEventHandler { [weak self] in
+            self?.sweepExpiredPending()
+        }
+        timer.resume()
+        _sweepTimer.set(timer)
     }
 
     /// 通常の PermissionRequest（tool allow/deny）の応答を送る。
@@ -238,7 +280,35 @@ final class LockedDict<Key: Hashable & Sendable, Value: Sendable>: @unchecked Se
         lock.lock(); let items = Array(dict); lock.unlock(); return items
     }
 
+    /// `predicate` を満たすエントリを削除し、削除した値の一覧を返す。
+    @discardableResult
+    func removeAll(where predicate: (Value) -> Bool) -> [Value] {
+        lock.lock()
+        defer { lock.unlock() }
+        var removed: [Value] = []
+        for (key, value) in dict where predicate(value) {
+            removed.append(value)
+            dict.removeValue(forKey: key)
+        }
+        return removed
+    }
+
     func removeAll() {
         lock.lock(); dict.removeAll(); lock.unlock()
+    }
+}
+
+/// 単一の値を lock 付きで保持するホルダー（mutable な var を持てない `Sendable` class から
+/// タイマー等の参照型状態を安全に持ち回すために使う）。
+final class LockedBox<T>: @unchecked Sendable {
+    private var value: T?
+    private let lock = NSLock()
+
+    func set(_ newValue: T?) {
+        lock.lock(); value = newValue; lock.unlock()
+    }
+
+    func get() -> T? {
+        lock.lock(); defer { lock.unlock() }; return value
     }
 }
