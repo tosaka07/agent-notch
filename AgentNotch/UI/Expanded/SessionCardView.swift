@@ -225,29 +225,40 @@ struct SessionCardView: View {
 
     // MARK: - Row 4: Tasks
 
+    /// task/subagent 各チップの subject/name に許容する最大幅。
+    /// 幅不足時に HStack 全体が潰れて隣接チップと連結して見える(#11)のを防ぐため、
+    /// 可変長パートだけをここで切り詰め、他のパートは fixedSize で保護する。
+    private let chipLabelMaxWidth: CGFloat = 70
+
     @ViewBuilder
     private var taskRow: some View {
         let tasks = session.tasks
         if !tasks.isEmpty {
             HStack(spacing: 8) {
-                ForEach(tasks.prefix(6)) { task in
+                ForEach(tasks.prefix(4)) { task in
                     HStack(spacing: 3) {
                         Text(task.status.glyph)
                             .foregroundStyle(task.status.color)
+                            .fixedSize()
                         Text(task.subject)
                             .foregroundStyle(task.status == .completed ? DSColors.inkMute : DSColors.inkDim)
                             .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(width: chipLabelMaxWidth, alignment: .leading)
                         if task.status == .inProgress, let assignee = task.assignee {
                             Text("@\(assignee)")
                                 .foregroundStyle(DSColors.inkMute)
+                                .lineLimit(1)
+                                .fixedSize()
                         }
                     }
                 }
-                if tasks.count > 6 {
-                    Text("+\(tasks.count - 6)")
+                if tasks.count > 4 {
+                    Text("+\(tasks.count - 4)")
                         .foregroundStyle(DSColors.inkMute)
+                        .fixedSize()
                 }
-                Spacer()
+                Spacer(minLength: 0)
             }
             .font(DSTypography.mono(s(8)))
         }

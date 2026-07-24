@@ -9,6 +9,10 @@ struct SubagentChipsRow: View {
     let subagents: [SubagentRun]
     var fontSize: CGFloat = 8
 
+    /// agentType 名に許容する最大幅。幅不足時にチップ全体が潰れて隣接チップと
+    /// 連結して見える(#11)のを防ぐため、可変長の name だけを固定幅で切り詰める。
+    private let nameMaxWidth: CGFloat = 60
+
     private var running: [SubagentRun] {
         subagents.filter { $0.status == .running }.sorted { $0.startedAt < $1.startedAt }
     }
@@ -25,26 +29,33 @@ struct SubagentChipsRow: View {
                         HStack(spacing: 3) {
                             Text("◆")
                                 .foregroundStyle(DSColors.signalWorking)
+                                .fixedSize()
                             Text(run.agentType)
                                 .foregroundStyle(DSColors.inkDim)
                                 .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(width: nameMaxWidth, alignment: .leading)
                             Text(elapsed(since: run.startedAt, at: context.date))
                                 .foregroundStyle(DSColors.inkMute)
+                                .fixedSize()
                         }
                     }
                     if running.count > 3 {
                         Text("+\(running.count - 3)")
                             .foregroundStyle(DSColors.inkMute)
+                            .fixedSize()
                     }
                     if completedCount > 0 {
                         HStack(spacing: 3) {
                             Text("◇")
                                 .foregroundStyle(DSColors.inkMute)
+                                .fixedSize()
                             Text("\(completedCount) done")
                                 .foregroundStyle(DSColors.inkMute)
+                                .fixedSize()
                         }
                     }
-                    Spacer()
+                    Spacer(minLength: 0)
                 }
                 .font(DSTypography.mono(fontSize))
             }
