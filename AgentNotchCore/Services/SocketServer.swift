@@ -107,13 +107,20 @@ public final class SocketServer: Sendable {
 
     /// 通常の PermissionRequest（tool allow/deny）の応答を送る。
     public func respondToPermission(toolUseId: String, decision: String, reason: String?) {
+        // `_pending` から一度だけ remove し、その結果を土台に応答を組み立てて同じエントリの
+        // connection に送る。peek→remove の二段構成は TOCTOU（間に cancelPending 等が割り込むと
+        // 応答先 connection と内容が食い違う、または無応答になる）になるため一発ロック化している。
+        guard let pending = _pending.remove(toolUseId) else {
+            Log.socket.error("respondToPermission: no pending for toolUseId=\(toolUseId) decision=\(decision)")
+            return
+        }
         let response: [String: Any] = [
             "hookSpecificOutput": [
                 "hookEventName": "PermissionRequest",
                 "decision": ["behavior": decision, "message": reason ?? ""]
             ]
         ]
-        sendDeferredResponse(toolUseId: toolUseId, response: response, logContext: "permission decision=\(decision)")
+        sendDeferredResponse(pending, response: response, logContext: "permission decision=\(decision)")
     }
 
     /// AskUserQuestion の回答を送る。
@@ -123,7 +130,11 @@ public final class SocketServer: Sendable {
     /// 元の `tool_input`（`questions` を含む）を土台にして `answers` を足し込む。
     /// これを怠ると「required parameter questions is missing」で失敗する（#6）。
     public func respondToAskQuestion(toolUseId: String, answers: [String: String]) {
-        var updatedInput = _pending.peek(toolUseId)?.toolInput?.value ?? [:]
+        guard let pending = _pending.remove(toolUseId) else {
+            Log.socket.error("respondToAskQuestion: no pending for toolUseId=\(toolUseId)")
+            return
+        }
+        var updatedInput = pending.toolInput?.value ?? [:]
         updatedInput["answers"] = answers
         let response: [String: Any] = [
             "hookSpecificOutput": [
@@ -134,15 +145,13 @@ public final class SocketServer: Sendable {
                 ]
             ]
         ]
-        sendDeferredResponse(toolUseId: toolUseId, response: response, logContext: "askUserQuestion answers=\(answers.count)")
+        sendDeferredResponse(pending, response: response, logContext: "askUserQuestion answers=\(answers.count)")
     }
 
-    private func sendDeferredResponse(toolUseId: String, response: [String: Any], logContext: String) {
-        guard let pending = _pending.remove(toolUseId) else {
-            Log.socket.error("sendDeferredResponse: no pending for toolUseId=\(toolUseId) (\(logContext))")
-            return
-        }
-        Log.socket.info("sendDeferredResponse kind=\(pending.kind.rawValue) toolUseId=\(toolUseId) \(logContext)")
+    /// すでに `_pending` から取り出し済みの `PendingSocketResponse` を使って応答を送る。
+    /// 削除は呼び出し側の責務（remove 1 回きりの一発ロック化のため）。
+    private func sendDeferredResponse(_ pending: PendingSocketResponse, response: [String: Any], logContext: String) {
+        Log.socket.info("sendDeferredResponse kind=\(pending.kind.rawValue) toolUseId=\(pending.toolUseId) \(logContext)")
         guard let data = try? SocketProtocol.encode(response) else {
             Log.socket.error("sendDeferredResponse: encode failed")
             pending.connection.cancel()
@@ -202,11 +211,6 @@ final class LockedDict<Key: Hashable & Sendable, Value: Sendable>: @unchecked Se
     @discardableResult
     func remove(_ key: Key) -> Value? {
         lock.lock(); let v = dict.removeValue(forKey: key); lock.unlock(); return v
-    }
-
-    /// 削除せずに参照するだけの取得。
-    func peek(_ key: Key) -> Value? {
-        lock.lock(); let v = dict[key]; lock.unlock(); return v
     }
 
     func all() -> [(Key, Value)] {
