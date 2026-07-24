@@ -230,12 +230,22 @@ public final class SessionManager: ObservableObject {
         sessions.values.first { $0.pid == pid && $0.id != excludedId }
     }
 
+    /// `reconcileSessionStart` が古いセッションの統合を行ってよい `SessionInfo.source` の集合。
+    /// 「同一プロセス内での会話の継続」を意味する source のみ許可する。
+    /// `startup` は含めない: agent teams の teammate が同一プロセス内で新規セッションとして
+    /// 起動する場合も pid は親と同じになり得るため、`startup` まで対象にするとリーダー
+    /// セッションを誤って削除してしまう（レビュー指摘）。
+    private static let reconcilableSources: Set<String> = ["resume", "clear", "compact"]
+
     /// `/compact` `/clear` `resume` 等で Claude Code が同一プロセス上で新しい session_id を
     /// 発行した場合に、古い session_id のセッションを新しい方へ統合する（#23: 一覧の分裂対策）。
     /// 同一 pid の既存セッションが見つかれば、その pin/mute 状態を新しい id に引き継いだ上で削除する。
-    /// pid が不明、または一致する既存セッションが無い場合は何もしない。
+    /// `source` が `resume`/`clear`/`compact` のいずれでもない場合（`startup` を含む）は、
+    /// 別プロセス・別会話の可能性があるため何もしない。プロセスごと死んだ旧セッションは
+    /// `sweepStale` の pid 生死チェックが別途回収する。
     @discardableResult
-    public func reconcileSessionStart(newId: String, pid: Int32?) -> Bool {
+    public func reconcileSessionStart(newId: String, pid: Int32?, source: String?) -> Bool {
+        guard let source, Self.reconcilableSources.contains(source) else { return false }
         guard let pid, let old = session(withPid: pid, excluding: newId) else { return false }
 
         if let state = userStates[old.id], !state.isDefault {

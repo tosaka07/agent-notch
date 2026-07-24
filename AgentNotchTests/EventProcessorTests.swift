@@ -79,4 +79,56 @@ struct EventProcessorTests {
 
         #expect(session.status == .permissionWaiting)
     }
+
+    @Test("permissionWaiting from a pending AskUserQuestion also survives a concurrent tool event")
+    func pendingQuestionSurvivesConcurrentToolEvent() {
+        let manager = SessionManager()
+        let sessionId = "s1"
+
+        let subagentStart = ClaudeEventParser.parse([
+            "hook_event_name": "SubagentStart",
+            "session_id": sessionId,
+            "agent_type": "explorer",
+            "agent_id": "agent-a",
+        ])
+        EventProcessor.apply(subagentStart, agentType: .claudeCode, manager: manager)
+        let session = manager.session(for: sessionId)!
+        #expect(session.status == .subagentRunning)
+
+        // 別の subagent が AskUserQuestion（PermissionRequest 経由）で回答待ちに遷移
+        let askQuestion = ClaudeEventParser.parse([
+            "hook_event_name": "PermissionRequest",
+            "session_id": sessionId,
+            "tool_name": "AskUserQuestion",
+            "tool_use_id": "tool-q1",
+            "tool_input": [
+                "questions": [
+                    ["question": "どちらの方針にしますか？", "options": [["label": "A"], ["label": "B"]]],
+                ],
+            ],
+        ])
+        EventProcessor.apply(askQuestion, agentType: .claudeCode, manager: manager)
+        #expect(session.status == .permissionWaiting)
+        #expect(session.pendingQuestion != nil)
+
+        // 回答待ちの間に、別 subagent の PreToolUse/PostToolUse が届いてもバッジを消してはいけない。
+        let otherToolStart = ClaudeEventParser.parse([
+            "hook_event_name": "PreToolUse",
+            "session_id": sessionId,
+            "tool_name": "Read",
+            "tool_use_id": "tool-2",
+            "tool_input": ["file_path": "/tmp/x"],
+        ])
+        EventProcessor.apply(otherToolStart, agentType: .claudeCode, manager: manager)
+        #expect(session.status == .permissionWaiting)
+
+        let otherToolEnd = ClaudeEventParser.parse([
+            "hook_event_name": "PostToolUse",
+            "session_id": sessionId,
+            "tool_name": "Read",
+            "tool_use_id": "tool-2",
+        ])
+        EventProcessor.apply(otherToolEnd, agentType: .claudeCode, manager: manager)
+        #expect(session.status == .permissionWaiting)
+    }
 }

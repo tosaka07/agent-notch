@@ -102,13 +102,13 @@ enum EventProcessor {
 
     // MARK: - Individual handlers
 
-    /// `pendingPermissions` が残っている間は `.permissionWaiting` の表示を維持すべき、という共通ガード。
-    /// subagent が並列実行されている場合、承認待ちの subagent とは別の subagent の
-    /// PreToolUse/PostToolUse/SubagentStart 等が同じ session_id の status を更新してしまい、
-    /// 承認待ちバッジが誤って消えるのを防ぐ（#19）。
+    /// `pendingPermissions` / `pendingQuestion` が残っている間は `.permissionWaiting` の表示を
+    /// 維持すべき、という共通ガード。subagent が並列実行されている場合、承認待ち・回答待ちの
+    /// subagent とは別の subagent の PreToolUse/PostToolUse/SubagentStart 等が同じ session_id の
+    /// status を更新してしまい、承認待ち/回答待ちバッジが誤って消えるのを防ぐ（#19）。
     @MainActor
     private static func setStatusUnlessPermissionPending(_ session: UnifiedSession, _ status: SessionStatus) {
-        guard session.pendingPermissions.isEmpty else { return }
+        guard session.pendingPermissions.isEmpty, session.pendingQuestion == nil else { return }
         session.status = status
     }
 

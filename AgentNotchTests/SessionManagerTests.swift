@@ -211,18 +211,47 @@ struct SessionManagerTests {
 
     // MARK: - #23: reconcileSessionStart (pid ベースのセッション統合)
 
-    @Test("reconcileSessionStart merges an old session with the same pid into the new id")
-    func reconcileSessionStartMergesSamePid() {
+    @Test(
+        "reconcileSessionStart merges an old session with the same pid for resume/clear/compact sources",
+        arguments: ["resume", "clear", "compact"]
+    )
+    func reconcileSessionStartMergesSamePidForContinuationSources(source: String) {
         let manager = SessionManager()
         let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
         old.pid = 4242
         old.status = .thinking
 
-        let merged = manager.reconcileSessionStart(newId: "new-session", pid: 4242)
+        let merged = manager.reconcileSessionStart(newId: "new-session", pid: 4242, source: source)
 
         #expect(merged)
         #expect(manager.session(for: "old-session") == nil)
         #expect(manager.allSessions.count == 0) // 新しい方はまだ getOrCreateSession されていない
+    }
+
+    @Test("reconcileSessionStart does NOT merge when source is startup (e.g. teammate launching in the same process)")
+    func reconcileSessionStartSkipsStartupSource() {
+        let manager = SessionManager()
+        let leader = manager.getOrCreateSession(id: "leader-session", agentType: .claudeCode)
+        leader.pid = 4242
+        leader.status = .thinking
+
+        // teammate が同一プロセス内で新規セッションとして起動するケースを模する。
+        // pid は親と同じでも source=startup なので、リーダーセッションを誤って消してはいけない。
+        let merged = manager.reconcileSessionStart(newId: "teammate-session", pid: 4242, source: "startup")
+
+        #expect(merged == false)
+        #expect(manager.session(for: "leader-session") != nil)
+    }
+
+    @Test("reconcileSessionStart does NOT merge when source is nil or unknown")
+    func reconcileSessionStartSkipsUnknownSource() {
+        let manager = SessionManager()
+        let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
+        old.pid = 4242
+
+        #expect(manager.reconcileSessionStart(newId: "new-session", pid: 4242, source: nil) == false)
+        #expect(manager.reconcileSessionStart(newId: "new-session", pid: 4242, source: "something-else") == false)
+        #expect(manager.session(for: "old-session") != nil)
     }
 
     @Test("reconcileSessionStart carries pin/mute state over to the new session id")
@@ -232,7 +261,7 @@ struct SessionManagerTests {
         old.pid = 99
         manager.setPinned("old-session", true)
 
-        _ = manager.reconcileSessionStart(newId: "new-session", pid: 99)
+        _ = manager.reconcileSessionStart(newId: "new-session", pid: 99, source: "compact")
         _ = manager.getOrCreateSession(id: "new-session", agentType: .claudeCode)
 
         #expect(manager.userState(for: "new-session").pinned)
@@ -244,8 +273,8 @@ struct SessionManagerTests {
         let manager = SessionManager()
         _ = manager.getOrCreateSession(id: "s1", agentType: .claudeCode)
 
-        #expect(manager.reconcileSessionStart(newId: "s2", pid: nil) == false)
-        #expect(manager.reconcileSessionStart(newId: "s2", pid: 12345) == false)
+        #expect(manager.reconcileSessionStart(newId: "s2", pid: nil, source: "resume") == false)
+        #expect(manager.reconcileSessionStart(newId: "s2", pid: 12345, source: "resume") == false)
         #expect(manager.allSessions.count == 1)
     }
 

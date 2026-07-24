@@ -37,12 +37,14 @@ final class SocketCoordinator {
                 let pid = (message["_pid"] as? NSNumber)?.int32Value
                 let tty = message["_tty"] as? String
                 let permissionMode = parsed.permissionMode
+                let sessionStartSource = message["source"] as? String
 
                 Task { @MainActor in
-                    // 同一プロセス（pid）が resume/compact/clear 等で新しい session_id を発行した場合、
-                    // 古いセッションを新しい方へ統合する（#23: 一覧の分裂対策）。
+                    // 同一プロセス（pid）が resume/compact/clear で新しい session_id を発行した場合、
+                    // 古いセッションを新しい方へ統合する（#23: 一覧の分裂対策）。source が
+                    // startup（teammate の新規セッション起動等も含む）の場合は統合しない。
                     if hookEvent == "SessionStart" {
-                        manager.reconcileSessionStart(newId: parsed.sessionId, pid: pid)
+                        manager.reconcileSessionStart(newId: parsed.sessionId, pid: pid, source: sessionStartSource)
                     }
                     EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
                     EventProcessor.backfillSession(
