@@ -79,6 +79,11 @@ struct SessionDetailView: View {
                     permissionActions.answerQuestion(session.id, q.toolUseId, answers)
                     navigateAfterResolving()
                 }
+                // toolUseId で View identity を切る。同一セッションで pendingQuestion が
+                // 別の質問セットに差し替わったとき、currentIndex 等の @State を
+                // 引き継いでしまうと questions[currentIndex] が index out of range に
+                // なりうるため、質問セットごとに View を作り直す。
+                .id(q.toolUseId)
                 .padding(.horizontal, 14).padding(.top, 8)
                 // Other の自由入力 TextField はパネルが key window でないと
                 // キーボード入力を受け付けられない（NotchPanel は既定で canBecomeKey=false）。
