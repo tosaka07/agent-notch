@@ -106,7 +106,8 @@ struct NotchEventRouter: ViewModifier {
         else { return }
 
         Log.notification.info("Completion flare for session=\(sessionId)")
-        glow.trigger(color: .green)
+        let projectName = userInfo["projectName"] as? String
+        glow.trigger(color: .green, label: projectName)
 
         guard viewModel.mode == .compact || viewModel.mode == .notification
         else { return }

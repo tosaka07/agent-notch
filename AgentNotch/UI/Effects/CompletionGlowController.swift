@@ -11,12 +11,31 @@ import SwiftUI
 final class CompletionGlowController {
     var intensity: CGFloat = 0
     var color: Color = .green
+    /// glow と一緒に短時間だけ表示するラベル（repo 名など）。
+    /// 選択画面（expanded / sessionDetail）表示中に裏で別セッションが完了した際、
+    /// どのセッションが光っているか分かるようにする（#3）。
+    var label: String?
 
-    func trigger(color: Color) {
+    private var labelTask: Task<Void, Never>?
+
+    func trigger(color: Color, label: String? = nil) {
         self.color = color
         withAnimation(.easeOut(duration: 0.4)) {
             intensity = 1
         }
+
+        if let label {
+            self.label = label
+            labelTask?.cancel()
+            labelTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(4))
+                guard let self, !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.6)) {
+                    self.label = nil
+                }
+            }
+        }
+
         // 通知が発生しない経路（expanded モード等）のフォールバック
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(8))
@@ -29,5 +48,8 @@ final class CompletionGlowController {
 
     func cancel() {
         intensity = 0
+        label = nil
+        labelTask?.cancel()
+        labelTask = nil
     }
 }
