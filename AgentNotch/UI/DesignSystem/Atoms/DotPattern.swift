@@ -338,22 +338,41 @@ enum DotBitmap {
 
     // MARK: - Swarm animation (subagent 並行数)
 
-    /// 13×13 に 2×2 ブロックを 3×3 配置した際の各ブロック左上座標（読み順）。
-    private static let swarmBlockPositions: [(row: Int, col: Int)] = [
-        (2, 2), (2, 6), (2, 10),
-        (6, 2), (6, 6), (6, 10),
-        (10, 2), (10, 6), (10, 10),
+    /// 13×13 を 3×3 グリッド（各セルに 2×2 ブロックを配置）で分割した際の格子座標→実座標変換。
+    /// grid row/col は 0/1/2 を取り、実座標は `2, 6, 10`（ブロック 2 セル + 隙間 2 セル）に対応する。
+    private static func gridPos(_ row: Int, _ col: Int) -> (row: Int, col: Int) {
+        (row * 4 + 2, col * 4 + 2)
+    }
+
+    /// active 数ごとのブロック配置（3×3 grid 座標、読み順 = 点灯順）。
+    ///
+    /// 1〜3 個は中央行に収め、4 個以上は可能な限り中心 (1,1) に対して対称になるよう選ぶ
+    /// （6〜8 個は中央行 (1,*) を優先的に埋めず上下 2 行を使うことで、重心が中心からずれないようにする）。
+    /// これにより #20 で問題だった「少数のときブロックが上段に寄る」を解消する。
+    private static let swarmGridLayouts: [Int: [(Int, Int)]] = [
+        1: [(1, 1)],
+        2: [(1, 0), (1, 2)],
+        3: [(1, 0), (1, 1), (1, 2)],
+        4: [(0, 0), (0, 2), (2, 0), (2, 2)],
+        5: [(0, 1), (1, 0), (1, 1), (1, 2), (2, 1)],
+        6: [(0, 0), (0, 1), (0, 2), (2, 0), (2, 1), (2, 2)],
+        7: [(0, 0), (0, 1), (0, 2), (1, 1), (2, 0), (2, 1), (2, 2)],
+        8: [(0, 0), (0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1), (2, 2)],
+        9: [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2)],
     ]
 
     private static let swarmPulsePeriod = 1.2
     private static let swarmPhaseOffset = 0.25
 
-    /// `active`（1–9 に clamp）個のブロックを読み順に点灯。各ブロックは index × 0.25s の位相オフセットで脈動する。
+    /// `active`（1–9 に clamp）個のブロックを `swarmGridLayouts` の配置で点灯。
+    /// 各ブロックは index × 0.25s の位相オフセットで脈動する。
     private static func swarmAnimation(time: TimeInterval, active: Int, color: Color) -> [[DotCell]] {
         var cells = emptyCellGrid()
-        let count = max(1, min(swarmBlockPositions.count, active))
-        for index in 0..<count {
-            let (row, col) = swarmBlockPositions[index]
+        let clamped = max(1, min(9, active))
+        let layout = swarmGridLayouts[clamped] ?? swarmGridLayouts[1]!
+        for index in 0..<layout.count {
+            let (gridRow, gridCol) = layout[index]
+            let (row, col) = gridPos(gridRow, gridCol)
             let phase = (time - Double(index) * swarmPhaseOffset)
                 .truncatingRemainder(dividingBy: swarmPulsePeriod)
             let normalizedPhase = phase < 0 ? phase + swarmPulsePeriod : phase
