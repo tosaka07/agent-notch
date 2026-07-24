@@ -64,9 +64,11 @@ struct SessionDetailView: View {
                     permission: perm,
                     onApprove: {
                         permissionActions.approve(session.id, perm.toolUseId)
+                        navigateAfterResolving()
                     },
                     onDeny: {
                         permissionActions.deny(session.id, perm.toolUseId, "Denied via Agent Notch")
+                        navigateAfterResolving()
                     }
                 )
                 .padding(.horizontal, 14).padding(.top, 8)
@@ -75,6 +77,7 @@ struct SessionDetailView: View {
             if let q = session.pendingQuestion {
                 QuestionBanner(questions: q.questions) { answers in
                     permissionActions.answerQuestion(session.id, q.toolUseId, answers)
+                    navigateAfterResolving()
                 }
                 .padding(.horizontal, 14).padding(.top, 8)
                 // Other の自由入力 TextField はパネルが key window でないと
@@ -394,6 +397,21 @@ struct SessionDetailView: View {
                     loadChatAsync()
                 }
             }
+        }
+    }
+
+    // MARK: - Navigation
+
+    /// permission / question に応答した直後の遷移。
+    /// 他セッションに未回答の question / permission が残っていれば連続でそこへ遷移し、
+    /// 無ければ展開一覧（expanded）に戻る（#5）。
+    private func navigateAfterResolving() {
+        if let next = sessionManager.sortedSessions(order: .urgency).first(where: { other in
+            other.id != session.id && (other.pendingQuestion != nil || !other.pendingPermissions.isEmpty)
+        }) {
+            onShowSession(next.id)
+        } else {
+            onBack()
         }
     }
 
