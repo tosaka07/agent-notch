@@ -30,6 +30,53 @@ public struct ToolFailInfo: Sendable {
     public let error: String
 }
 
+public struct SubagentStartInfo: Sendable {
+    public let sessionId: String
+    public let agentType: String
+    /// Claude/Codex どちらも `agent_id`（Claude は `subagent_id` の場合あり）。無ければ FIFO フォールバック対象。
+    public let agentId: String?
+}
+
+public struct SubagentStopInfo: Sendable {
+    public let sessionId: String
+    public let agentId: String?
+    public let agentType: String?
+    /// Codex の `agent_transcript_path`。保持のみ（親履歴複製の罠があるため解析はしない）。
+    public let agentTranscriptPath: String?
+}
+
+public struct TaskCreatedInfo: Sendable {
+    /// tool（TaskCreate）経由か、first-class の TaskCreated hook 経由か。
+    public enum Source: Sendable, Equatable {
+        case tool
+        case hook
+    }
+
+    public let sessionId: String
+    public let subject: String
+    public let description: String
+    /// hook 経由（`source == .hook`）のみ non-nil。tool 経由は未確定なので nil。
+    public let taskId: String?
+    public let assignee: String?
+    public let teamName: String?
+    public let source: Source
+}
+
+public struct TaskCompletedInfo: Sendable {
+    public let sessionId: String
+    public let taskId: String?
+    public let subject: String?
+    public let completedBy: String?
+    public let teamName: String?
+}
+
+public struct TeammateIdleInfo: Sendable {
+    public let sessionId: String
+    public let teamName: String?
+    public let teammateName: String?
+    public let teammateSessionId: String?
+}
+
 public struct PermissionInfo: Sendable {
     public let sessionId: String
     public let toolName: String
@@ -94,14 +141,16 @@ public enum ClaudeEvent: Sendable {
     case notification(sessionId: String, type: String, message: String)
     case sessionIdle(String)
     case sessionEnded(String)
-    case subagentStopped(sessionId: String)
+    case subagentStopped(SubagentStopInfo)
     case askQuestion(AskQuestionInfo)
-    case subagentStarted(sessionId: String, agentType: String)
+    case subagentStarted(SubagentStartInfo)
     case compacting(sessionId: String)
     case compactingDone(sessionId: String)
     case stopFailure(sessionId: String, errorType: String)
-    case taskCreated(sessionId: String, subject: String, description: String)
+    case taskCreated(TaskCreatedInfo)
+    case taskCompleted(TaskCompletedInfo)
     case taskUpdated(sessionId: String, taskId: String, status: String)
+    case teammateIdle(TeammateIdleInfo)
     case unknown
 }
 
@@ -146,7 +195,10 @@ public enum ClaudeEventParser {
             if toolName == "TaskCreate" {
                 let subject = rawInput["subject"] as? String ?? ""
                 let description = rawInput["description"] as? String ?? ""
-                return .taskCreated(sessionId: sessionId, subject: subject, description: description)
+                return .taskCreated(TaskCreatedInfo(
+                    sessionId: sessionId, subject: subject, description: description,
+                    taskId: nil, assignee: nil, teamName: nil, source: .tool
+                ))
             }
             if toolName == "TaskUpdate" {
                 let taskId = rawInput["taskId"] as? String ?? ""
@@ -213,12 +265,30 @@ public enum ClaudeEventParser {
         case "Stop":
             return .sessionIdle(sessionId)
 
+        case "TeammateIdle":
+            // Claude Code 2.1 の agent teams 有効時は Stop の代わりにこれが飛ぶことがある。
+            return .teammateIdle(TeammateIdleInfo(
+                sessionId: sessionId,
+                teamName: json["team_name"] as? String,
+                teammateName: json["teammate_name"] as? String,
+                teammateSessionId: json["teammate_session_id"] as? String
+            ))
+
         case "SubagentStart":
             let agentType = json["agent_type"] as? String ?? "unknown"
-            return .subagentStarted(sessionId: sessionId, agentType: agentType)
+            let agentId = json["agent_id"] as? String ?? json["subagent_id"] as? String
+            return .subagentStarted(SubagentStartInfo(
+                sessionId: sessionId, agentType: agentType, agentId: agentId
+            ))
 
         case "SubagentStop":
-            return .subagentStopped(sessionId: sessionId)
+            let agentId = json["agent_id"] as? String ?? json["subagent_id"] as? String
+            return .subagentStopped(SubagentStopInfo(
+                sessionId: sessionId,
+                agentId: agentId,
+                agentType: json["agent_type"] as? String,
+                agentTranscriptPath: json["agent_transcript_path"] as? String
+            ))
 
         case "SessionEnd":
             return .sessionEnded(sessionId)
@@ -232,6 +302,27 @@ public enum ClaudeEventParser {
         case "StopFailure":
             let errorType = json["error"] as? String ?? "unknown"
             return .stopFailure(sessionId: sessionId, errorType: errorType)
+
+        case "TaskCreated":
+            // Claude Code 2.1+ の first-class イベント（TaskCreate ツール経由とは別経路）。
+            return .taskCreated(TaskCreatedInfo(
+                sessionId: sessionId,
+                subject: json["task_title"] as? String ?? "",
+                description: json["task_description"] as? String ?? "",
+                taskId: json["task_id"] as? String,
+                assignee: json["assigned_to"] as? String,
+                teamName: json["team_name"] as? String,
+                source: .hook
+            ))
+
+        case "TaskCompleted":
+            return .taskCompleted(TaskCompletedInfo(
+                sessionId: sessionId,
+                taskId: json["task_id"] as? String,
+                subject: json["task_title"] as? String,
+                completedBy: json["completed_by"] as? String,
+                teamName: json["team_name"] as? String
+            ))
 
         default:
             return .unknown

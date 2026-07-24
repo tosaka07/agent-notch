@@ -24,6 +24,10 @@ public enum HookInstaller {
         ("SessionEnd", nil, nil),
         ("PreCompact", "auto", nil),
         ("PostCompact", nil, nil),
+        // Claude Code 2.1+ の first-class イベント
+        ("TaskCreated", nil, nil),
+        ("TaskCompleted", nil, nil),
+        ("TeammateIdle", nil, nil),
     ]
 
     // MARK: - Codex CLI hooks (hooks.json)
@@ -34,6 +38,9 @@ public enum HookInstaller {
         ("PreToolUse", "", nil),
         ("PostToolUse", "", nil),
         ("Stop", nil, nil),
+        ("SubagentStart", nil, nil),
+        ("SubagentStop", nil, nil),
+        ("Notification", "", nil),
     ]
 
     /// Install hooks for all supported agents.
@@ -225,8 +232,10 @@ public enum HookInstaller {
         NSHomeDirectory() + "/.codex/config.toml"
     }
 
-    /// Ensure `codex_hooks = true` exists under `[features]` in ~/.codex/config.toml.
-    /// Preserves all existing content — only appends the flag if missing.
+    /// Ensure Codex hooks are enabled under `[features]` in ~/.codex/config.toml.
+    /// Canonical flag name is `hooks = true`; `codex_hooks = true` is a deprecated alias.
+    /// Preserves all existing content — only appends the canonical flag if neither is present,
+    /// and never removes an existing `codex_hooks = true`.
     private static func ensureCodexHooksEnabled() {
         let path = codexConfigPath()
         let dir = (path as NSString).deletingLastPathComponent
@@ -234,8 +243,15 @@ public enum HookInstaller {
 
         let content = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
 
-        // Already enabled — nothing to do
-        if content.range(of: #"codex_hooks\s*=\s*true"#, options: .regularExpression) != nil {
+        // 既に canonical (`hooks = true`) または deprecated alias (`codex_hooks = true`) が
+        // あれば何もしない。
+        let hasCanonical = content.range(
+            of: #"(?<![a-zA-Z_])hooks\s*=\s*true"#, options: .regularExpression
+        ) != nil
+        let hasDeprecatedAlias = content.range(
+            of: #"codex_hooks\s*=\s*true"#, options: .regularExpression
+        ) != nil
+        if hasCanonical || hasDeprecatedAlias {
             return
         }
 
@@ -243,12 +259,12 @@ public enum HookInstaller {
 
         if let featIdx = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "[features]" }) {
             // Insert right after the [features] line
-            lines.insert("codex_hooks = true", at: featIdx + 1)
+            lines.insert("hooks = true", at: featIdx + 1)
         } else {
             // No [features] section — append at end
             if let last = lines.last, !last.isEmpty { lines.append("") }
             lines.append("[features]")
-            lines.append("codex_hooks = true")
+            lines.append("hooks = true")
         }
 
         let updated = lines.joined(separator: "\n")

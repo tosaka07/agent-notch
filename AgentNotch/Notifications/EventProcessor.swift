@@ -46,8 +46,14 @@ enum EventProcessor {
         case let .notification(sessionId, type, _):
             handleNotification(sessionId: sessionId, type: type, agentType: agentType, manager: manager)
 
-        case let .subagentStarted(sessionId, _):
-            handleSubagentStarted(sessionId: sessionId, agentType: agentType, manager: manager)
+        case let .subagentStarted(info):
+            handleSubagentStarted(info, agentType: agentType, manager: manager)
+
+        case let .subagentStopped(info):
+            handleSubagentStopped(info, manager: manager)
+
+        case let .teammateIdle(info):
+            handleTeammateIdle(info, manager: manager)
 
         case let .stopFailure(sessionId, errorType):
             handleStopFailure(sessionId: sessionId, errorType: errorType, agentType: agentType, manager: manager)
@@ -65,13 +71,16 @@ enum EventProcessor {
         case let .compacting(sessionId):
             manager.session(for: sessionId)?.status = .compacting
 
-        case let .taskCreated(sessionId, subject, _):
-            handleTaskCreated(sessionId: sessionId, subject: subject, agentType: agentType, manager: manager)
+        case let .taskCreated(info):
+            handleTaskCreated(info, agentType: agentType, manager: manager)
+
+        case let .taskCompleted(info):
+            handleTaskCompleted(info, agentType: agentType, manager: manager)
 
         case let .taskUpdated(sessionId, taskId, status):
             handleTaskUpdated(sessionId: sessionId, taskId: taskId, status: status, manager: manager)
 
-        case .subagentStopped, .unknown:
+        case .unknown:
             break
         }
     }
@@ -101,8 +110,11 @@ enum EventProcessor {
         NotificationCenter.default.post(name: .agentNotchSessionResumed, object: sessionId)
 
         // lastUserPrompt を非同期で更新
+        // UserPromptSubmit hook は transcript 書き込みより先に飛ぶことがあるため、
+        // 少し待ってから読む。
         if let path = session.transcriptPath {
             Task.detached {
+                try? await Task.sleep(for: .milliseconds(500))
                 let prompt = TranscriptParser.lastUserMessage(at: path)
                 await MainActor.run {
                     if let s = manager.session(for: sessionId), let prompt {
@@ -196,28 +208,71 @@ enum EventProcessor {
         guard type == "idle_prompt" else { return }
         let session = manager.session(for: sessionId)
             ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
+        // Claude Code 2.1 以降、Stop 直後に idle_prompt が飛んできて
+        // 完了状態を潰すことがあるので .done は保持する。
+        // 次の userPrompt / toolStarted で遷移するまで完了表示を維持。
+        if session.status == .done { return }
         session.status = .idle
     }
 
     @MainActor
     private static func handleSubagentStarted(
-        sessionId: String, agentType: AgentType, manager: SessionManager
+        _ info: SubagentStartInfo, agentType: AgentType, manager: SessionManager
     ) {
-        let session = manager.session(for: sessionId)
-            ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
+        let session = manager.session(for: info.sessionId)
+            ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
+        session.startSubagent(agentType: info.agentType, agentId: info.agentId)
         session.status = .subagentRunning
+        Log.events.info("subagentStarted id=\(info.sessionId) type=\(info.agentType) agentId=\(info.agentId ?? "-")")
+    }
+
+    @MainActor
+    private static func handleSubagentStopped(_ info: SubagentStopInfo, manager: SessionManager) {
+        guard let session = manager.session(for: info.sessionId) else { return }
+        let matched = session.stopSubagent(
+            agentId: info.agentId, agentType: info.agentType, transcriptPath: info.agentTranscriptPath
+        )
+        // 並行 subagent が全て終わった時のみ status を戻す。.done / .permissionWaiting は潰さない。
+        if session.status == .subagentRunning, session.runningSubagentCount == 0 {
+            session.status = .thinking
+        }
+        Log.events.info("subagentStopped id=\(info.sessionId) agentId=\(info.agentId ?? "-") matched=\(matched)")
+    }
+
+    @MainActor
+    private static func handleTeammateIdle(_ info: TeammateIdleInfo, manager: SessionManager) {
+        SessionFinalizer.finalize(sessionId: info.sessionId, manager: manager)
+
+        if let own = manager.session(for: info.sessionId) {
+            own.teamName = own.teamName ?? info.teamName
+            own.teammateName = own.teammateName ?? info.teammateName
+        }
+        if let teammateId = info.teammateSessionId, let teammate = manager.session(for: teammateId) {
+            teammate.teamName = teammate.teamName ?? info.teamName
+            teammate.teammateName = teammate.teammateName ?? info.teammateName
+        }
     }
 
     @MainActor
     private static func handleTaskCreated(
-        sessionId: String, subject: String, agentType: AgentType, manager: SessionManager
+        _ info: TaskCreatedInfo, agentType: AgentType, manager: SessionManager
     ) {
-        let session = manager.session(for: sessionId)
-            ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
-        // Claude Code は連番 ID（"1", "2", ...）を振る。作成順で推定。
-        let nextId = String(session.tasks.count + 1)
-        session.tasks.append(AgentTask(id: nextId, subject: subject))
-        Log.events.info("taskCreated id=\(sessionId) task=#\(nextId) \(subject)")
+        let session = manager.session(for: info.sessionId)
+            ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
+        session.tasks = AgentTaskReconciler.reconcileCreated(tasks: session.tasks, info: info)
+        if let teamName = info.teamName { session.teamName = session.teamName ?? teamName }
+        Log.events.info("taskCreated id=\(info.sessionId) subject=\(info.subject)")
+    }
+
+    @MainActor
+    private static func handleTaskCompleted(
+        _ info: TaskCompletedInfo, agentType: AgentType, manager: SessionManager
+    ) {
+        let session = manager.session(for: info.sessionId)
+            ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
+        session.tasks = AgentTaskReconciler.reconcileCompleted(tasks: session.tasks, info: info)
+        if let teamName = info.teamName { session.teamName = session.teamName ?? teamName }
+        Log.events.info("taskCompleted id=\(info.sessionId) taskId=\(info.taskId ?? "-") by=\(info.completedBy ?? "-")")
     }
 
     @MainActor
@@ -258,7 +313,10 @@ enum EventProcessor {
         pid: Int32?, tty: String?, manager: SessionManager
     ) {
         guard let session = manager.session(for: sessionId) else { return }
-        session.lastActivityAt = Date()
+        // done 後は lastActivityAt を更新しない（完了アニメーションの開始時刻がリセットされるのを防ぐ）
+        if session.status != .done {
+            session.lastActivityAt = Date()
+        }
 
         if session.cwd == nil, let cwd { session.cwd = cwd }
         if session.transcriptPath == nil, let transcriptPath { session.transcriptPath = transcriptPath }
@@ -316,10 +374,11 @@ enum EventProcessor {
         guard !session.firstUserPromptResolved, let path = session.transcriptPath else { return }
         session.firstUserPromptResolved = true
         Task.detached {
-            let prompt = TranscriptParser.firstUserMessage(at: path)
+            let (first, last) = TranscriptParser.userMessages(at: path)
             await MainActor.run {
                 if let s = manager.session(for: sessionId) {
-                    s.firstUserPrompt = prompt
+                    s.firstUserPrompt = first
+                    s.lastUserPrompt = last
                     manager.notifyChange()
                 }
             }

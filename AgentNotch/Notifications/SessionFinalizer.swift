@@ -15,9 +15,11 @@ enum SessionFinalizer {
         guard let session = manager.session(for: sessionId) else { return }
 
         session.status = .done
+        session.doneAt = Date()
         session.currentTool = nil
         session.pendingPermissions.removeAll()
         session.pendingQuestion = nil
+        session.foldRunningSubagentsToCompleted()
 
         // 非同期処理のために MainActor で値を snapshot
         let transcriptPath = session.transcriptPath

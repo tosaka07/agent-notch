@@ -114,6 +114,15 @@ public final class SessionManager: ObservableObject {
             }
         }
 
+        // team グループ内はリーダー（teammateName == nil）を先頭に並べる。
+        if grouping == .team {
+            buckets = buckets.map { bucket in
+                let leaders = bucket.items.filter { $0.teammateName == nil }
+                let members = bucket.items.filter { $0.teammateName != nil }
+                return (bucket.key, bucket.title, leaders + members)
+            }
+        }
+
         return buckets.map { SessionGroup(key: $0.key, title: $0.title, sessions: $0.items) }
     }
 
@@ -166,6 +175,10 @@ public final class SessionManager: ObservableObject {
             return (name, name)
         case .agent:
             return (session.agentType.rawValue, session.agentType.displayName)
+        case .team:
+            let name = session.teamName ?? "__solo__"
+            let title = session.teamName ?? "NO TEAM"
+            return (name, title)
         }
     }
 
@@ -205,6 +218,11 @@ public final class SessionManager: ObservableObject {
 
     public func session(for id: String) -> UnifiedSession? {
         sessions[id]
+    }
+
+    /// 指定 teamName に所属する（active/completed 問わない）全セッション。team ボードの読み取りに使う。
+    public func teamSessions(name: String) -> [UnifiedSession] {
+        sessions.values.filter { $0.teamName == name }
     }
 
     public func removeSession(id: String) {

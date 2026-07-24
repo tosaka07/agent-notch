@@ -176,4 +176,36 @@ struct SessionManagerTests {
         manager.setMuted("s", true)
         #expect(manager.isMuted("s"))
     }
+
+    @Test("groupedSessions by team groups by teamName with leader first, and untagged sessions land in NO TEAM")
+    func groupByTeam() {
+        let manager = SessionManager()
+        let leader = manager.getOrCreateSession(id: "leader", agentType: .claudeCode)
+        leader.teamName = "alpha-team"
+        let member = manager.getOrCreateSession(id: "member", agentType: .claudeCode)
+        member.teamName = "alpha-team"
+        member.teammateName = "researcher"
+        let solo = manager.getOrCreateSession(id: "solo", agentType: .claudeCode)
+
+        let groups = manager.groupedSessions(order: .latestActivity, grouping: .team)
+
+        #expect(groups.count == 2)
+        let teamGroup = groups.first { $0.title == "alpha-team" }
+        #expect(teamGroup?.sessions.map(\.id) == ["leader", "member"])
+        let noTeamGroup = groups.first { $0.title == "NO TEAM" }
+        #expect(noTeamGroup?.sessions.map(\.id) == ["solo"])
+    }
+
+    @Test("teamSessions(name:) returns all sessions tagged with the given teamName")
+    func teamSessionsHelper() {
+        let manager = SessionManager()
+        let leader = manager.getOrCreateSession(id: "leader", agentType: .claudeCode)
+        leader.teamName = "alpha-team"
+        let member = manager.getOrCreateSession(id: "member", agentType: .claudeCode)
+        member.teamName = "alpha-team"
+        _ = manager.getOrCreateSession(id: "solo", agentType: .claudeCode)
+
+        let result = manager.teamSessions(name: "alpha-team").map(\.id).sorted()
+        #expect(result == ["leader", "member"])
+    }
 }

@@ -50,10 +50,24 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var lastUserPrompt: String?
     /// 完了時の最後のアシスタントメッセージ（SessionFinalizer がセット）
     public var lastAssistantMessage: String?
+    /// セッションが done になった瞬間の時刻（完了アニメーションの開始基準）
+    public var doneAt: Date?
     public var pendingQuestion: PendingQuestion?
     public var lastActivityAt: Date
     /// エージェント内部のタスク一覧（TaskCreate/TaskUpdate で管理される）。
     public var tasks: [AgentTask] = []
+
+    /// 実行中・完了済みの subagent 一覧（古い順）。completed は最大 50 件まで。
+    public var subagents: [SubagentRun] = []
+    /// agent teams のチーム名（TeammateIdle / TaskCreated/TaskCompleted の team_name から反映）。
+    public var teamName: String?
+    /// agent teams でのこのセッションのメンバー名（TeammateIdle の teammate_name から反映）。
+    /// nil ならチームリーダー（または team 未所属）とみなす。
+    public var teammateName: String?
+
+    public var runningSubagentCount: Int {
+        subagents.filter { $0.status == .running }.count
+    }
 
     /// `GitInfoResolver.resolve(cwd:)` で非同期に解決された git メタ情報のキャッシュ。
     /// 未解決の間は nil。`EventProcessor.backfillSession` が初回に一度だけセットする。
@@ -74,6 +88,74 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
 
     /// worktree 名（worktree でなければ nil）。
     public var worktreeName: String? { gitInfo?.worktreeName }
+
+    /// SubagentStart を記録する。
+    public func startSubagent(agentType: String, agentId: String?, at date: Date = Date()) {
+        subagents.append(SubagentRun(
+            id: agentId ?? UUID().uuidString,
+            agentType: agentType,
+            startedAt: date,
+            hasExplicitId: agentId != nil
+        ))
+    }
+
+    /// SubagentStop を対応する run に反映する。
+    /// マッチ優先順: agentId 一致 → agentType 一致の最古 running → 最古の running → 無ければ false（二重 Stop 耐性）。
+    @discardableResult
+    public func stopSubagent(
+        agentId: String?, agentType: String?, transcriptPath: String?, at date: Date = Date()
+    ) -> Bool {
+        var matchedIndex: Int?
+
+        if let agentId {
+            matchedIndex = subagents.firstIndex { $0.status == .running && $0.id == agentId }
+        }
+        if matchedIndex == nil, let agentType {
+            matchedIndex = oldestRunningIndex { $0.agentType == agentType }
+        }
+        if matchedIndex == nil {
+            matchedIndex = oldestRunningIndex { _ in true }
+        }
+
+        guard let index = matchedIndex else { return false }
+        subagents[index].status = .completed
+        subagents[index].endedAt = date
+        if let transcriptPath { subagents[index].transcriptPath = transcriptPath }
+        trimCompletedSubagents()
+        return true
+    }
+
+    /// 実行中の subagent を全て completed に畳む（セッション終了時に使用）。
+    public func foldRunningSubagentsToCompleted(at date: Date = Date()) {
+        for index in subagents.indices where subagents[index].status == .running {
+            subagents[index].status = .completed
+            subagents[index].endedAt = date
+        }
+    }
+
+    private func oldestRunningIndex(where predicate: (SubagentRun) -> Bool) -> Int? {
+        subagents.indices
+            .filter { subagents[$0].status == .running && predicate(subagents[$0]) }
+            .min { subagents[$0].startedAt < subagents[$1].startedAt }
+    }
+
+    /// completed を古い順に落として最大 50 件に制限する。
+    private func trimCompletedSubagents() {
+        guard subagents.count > 50 else { return }
+        var overflow = subagents.count - 50
+        let completedOldestFirst = subagents.indices
+            .filter { subagents[$0].status == .completed }
+            .sorted { (subagents[$0].endedAt ?? .distantPast) < (subagents[$1].endedAt ?? .distantPast) }
+
+        var toRemove = Set<Int>()
+        for index in completedOldestFirst {
+            guard overflow > 0 else { break }
+            toRemove.insert(index)
+            overflow -= 1
+        }
+        guard !toRemove.isEmpty else { return }
+        subagents = subagents.enumerated().filter { !toRemove.contains($0.offset) }.map(\.element)
+    }
 
     public init(
         id: String,

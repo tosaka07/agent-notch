@@ -116,13 +116,15 @@ struct ClaudeEventParserTests {
             ] as [String: Any],
         ]
         let event = ClaudeEventParser.parse(json)
-        guard case let .taskCreated(sessionId, subject, description) = event else {
+        guard case let .taskCreated(info) = event else {
             Issue.record("Expected taskCreated, got \(event)")
             return
         }
-        #expect(sessionId == "sess-010")
-        #expect(subject == "Fix auth validation")
-        #expect(description == "Add input validation to the auth module")
+        #expect(info.sessionId == "sess-010")
+        #expect(info.subject == "Fix auth validation")
+        #expect(info.description == "Add input validation to the auth module")
+        #expect(info.taskId == nil)
+        #expect(info.source == .tool)
     }
 
     @Test("PreToolUse with TaskUpdate maps to taskUpdated")
@@ -145,5 +147,163 @@ struct ClaudeEventParserTests {
         #expect(sessionId == "sess-010")
         #expect(taskId == "2")
         #expect(status == "completed")
+    }
+
+    // MARK: - SubagentStart / SubagentStop
+
+    @Test("SubagentStart maps to subagentStarted with agent_id present")
+    func subagentStartWithAgentId() {
+        let json: [String: Any] = [
+            "hook_event_name": "SubagentStart",
+            "session_id": "sess-020",
+            "agent_type": "Explore",
+            "agent_id": "agent-abc",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .subagentStarted(info) = event else {
+            Issue.record("Expected subagentStarted, got \(event)")
+            return
+        }
+        #expect(info.sessionId == "sess-020")
+        #expect(info.agentType == "Explore")
+        #expect(info.agentId == "agent-abc")
+    }
+
+    @Test("SubagentStart falls back to subagent_id when agent_id is missing")
+    func subagentStartFallsBackToSubagentId() {
+        let json: [String: Any] = [
+            "hook_event_name": "SubagentStart",
+            "session_id": "sess-021",
+            "agent_type": "code-reviewer",
+            "subagent_id": "sub-xyz",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .subagentStarted(info) = event else {
+            Issue.record("Expected subagentStarted, got \(event)")
+            return
+        }
+        #expect(info.agentId == "sub-xyz")
+    }
+
+    @Test("SubagentStart with no id fields maps agentId to nil")
+    func subagentStartWithoutId() {
+        let json: [String: Any] = [
+            "hook_event_name": "SubagentStart",
+            "session_id": "sess-022",
+            "agent_type": "Explore",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .subagentStarted(info) = event else {
+            Issue.record("Expected subagentStarted, got \(event)")
+            return
+        }
+        #expect(info.agentId == nil)
+    }
+
+    @Test("SubagentStop maps full Codex payload correctly")
+    func subagentStopCodexFull() {
+        let json: [String: Any] = [
+            "hook_event_name": "SubagentStop",
+            "session_id": "sess-023",
+            "agent_id": "agent-abc",
+            "agent_type": "Explore",
+            "agent_transcript_path": "/tmp/agent-abc.jsonl",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .subagentStopped(info) = event else {
+            Issue.record("Expected subagentStopped, got \(event)")
+            return
+        }
+        #expect(info.sessionId == "sess-023")
+        #expect(info.agentId == "agent-abc")
+        #expect(info.agentType == "Explore")
+        #expect(info.agentTranscriptPath == "/tmp/agent-abc.jsonl")
+    }
+
+    @Test("SubagentStop maps minimal Claude payload correctly")
+    func subagentStopClaudeMinimal() {
+        let json: [String: Any] = [
+            "hook_event_name": "SubagentStop",
+            "session_id": "sess-024",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .subagentStopped(info) = event else {
+            Issue.record("Expected subagentStopped, got \(event)")
+            return
+        }
+        #expect(info.sessionId == "sess-024")
+        #expect(info.agentId == nil)
+        #expect(info.agentType == nil)
+        #expect(info.agentTranscriptPath == nil)
+    }
+
+    // MARK: - First-class TaskCreated / TaskCompleted
+
+    @Test("TaskCreated (first-class hook) maps with taskId/assignee/teamName")
+    func taskCreatedFirstClass() {
+        let json: [String: Any] = [
+            "hook_event_name": "TaskCreated",
+            "session_id": "sess-030",
+            "task_id": "task-1",
+            "task_title": "Fix auth validation",
+            "task_description": "Add input validation",
+            "assigned_to": "researcher",
+            "team_name": "alpha-team",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .taskCreated(info) = event else {
+            Issue.record("Expected taskCreated, got \(event)")
+            return
+        }
+        #expect(info.sessionId == "sess-030")
+        #expect(info.taskId == "task-1")
+        #expect(info.subject == "Fix auth validation")
+        #expect(info.description == "Add input validation")
+        #expect(info.assignee == "researcher")
+        #expect(info.teamName == "alpha-team")
+        #expect(info.source == .hook)
+    }
+
+    @Test("TaskCompleted (first-class hook) maps with taskId/completedBy/teamName")
+    func taskCompletedFirstClass() {
+        let json: [String: Any] = [
+            "hook_event_name": "TaskCompleted",
+            "session_id": "sess-030",
+            "task_id": "task-1",
+            "completed_by": "researcher",
+            "completion_status": "success",
+            "team_name": "alpha-team",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .taskCompleted(info) = event else {
+            Issue.record("Expected taskCompleted, got \(event)")
+            return
+        }
+        #expect(info.sessionId == "sess-030")
+        #expect(info.taskId == "task-1")
+        #expect(info.completedBy == "researcher")
+        #expect(info.teamName == "alpha-team")
+    }
+
+    // MARK: - TeammateIdle
+
+    @Test("TeammateIdle maps team_name/teammate_name/teammate_session_id")
+    func teammateIdle() {
+        let json: [String: Any] = [
+            "hook_event_name": "TeammateIdle",
+            "session_id": "sess-040",
+            "team_name": "alpha-team",
+            "teammate_name": "researcher",
+            "teammate_session_id": "sess-041",
+        ]
+        let event = ClaudeEventParser.parse(json)
+        guard case let .teammateIdle(info) = event else {
+            Issue.record("Expected teammateIdle, got \(event)")
+            return
+        }
+        #expect(info.sessionId == "sess-040")
+        #expect(info.teamName == "alpha-team")
+        #expect(info.teammateName == "researcher")
+        #expect(info.teammateSessionId == "sess-041")
     }
 }

@@ -32,6 +32,8 @@ public enum SessionGrouping: String, Codable, CaseIterable, Sendable {
     case project
     /// エージェント種別（Claude Code / Codex / ...）。
     case agent
+    /// agent teams のチーム別（`teamName` が無いセッションは "NO TEAM" バケット）。
+    case team
 
     public var label: String {
         switch self {
@@ -39,6 +41,7 @@ public enum SessionGrouping: String, Codable, CaseIterable, Sendable {
         case .status: "ステータス別"
         case .project: "プロジェクト別"
         case .agent: "エージェント別"
+        case .team: "チーム別"
         }
     }
 }
