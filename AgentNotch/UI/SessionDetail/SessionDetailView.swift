@@ -18,6 +18,7 @@ struct SessionDetailView: View {
     @State private var isTeamExpanded: Bool
     @Default(.textSize) private var textSize
     @Environment(\.permissionActions) private var permissionActions
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
     private var scale: CGFloat { textSize.scale }
@@ -54,62 +55,105 @@ struct SessionDetailView: View {
 
             collapsibleSections
 
-            // Banners
-            if let perm = session.pendingPermissions.first {
-                PermissionBanner(
-                    permission: perm,
-                    onApprove: {
-                        permissionActions.approve(session.id, perm.toolUseId)
-                        navigateAfterResolvingIfCleared()
-                    },
-                    onDeny: {
-                        permissionActions.deny(session.id, perm.toolUseId, "Denied via Agent Notch")
-                        navigateAfterResolvingIfCleared()
-                    },
-                    onDismiss: {
-                        permissionActions.dismissExpired(session.id, perm.toolUseId)
-                        navigateAfterResolvingIfCleared()
-                    }
-                )
-                .padding(.horizontal, 14).padding(.top, 8)
-            }
-
-            if let q = session.pendingQuestion {
-                QuestionBanner(
-                    questions: q.questions,
-                    expiresAt: q.expiresAt,
-                    isExpired: q.isExpired,
-                    onAnswer: { answers in
-                        permissionActions.answerQuestion(session.id, q.toolUseId, answers)
-                        // 応答経路が失効していた場合は pendingQuestion が失効表示のまま残る。
-                        // その場合はこの画面に留まり、失効バナーをユーザーに見せる（issue #28）。
-                        navigateAfterResolvingIfCleared()
-                    },
-                    onDismiss: {
-                        permissionActions.dismissExpired(session.id, q.toolUseId)
-                        navigateAfterResolvingIfCleared()
-                    }
-                )
-                // toolUseId で View identity を切る。同一セッションで pendingQuestion が
-                // 別の質問セットに差し替わったとき、currentIndex 等の @State を
-                // 引き継いでしまうと questions[currentIndex] が index out of range に
-                // なりうるため、質問セットごとに View を作り直す。
-                .id(q.toolUseId)
-                .padding(.horizontal, 14).padding(.top, 8)
-                // Other の自由入力 TextField はパネルが key window でないと
-                // キーボード入力を受け付けられない（NotchPanel は既定で canBecomeKey=false）。
-                // 表示中だけ key focus を許可し、消えたら戻す（#2）。
-                .onAppear {
-                    NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: true)
-                }
-                .onDisappear {
-                    NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: false)
-                }
-            }
-
             timelineContent
+                // 割り込み（承認 / 質問）は下端に固定する。safeAreaInset なので
+                // タイムラインはバーの下までスクロールでき、**バナーが出てもログが
+                // 押し出されない**（読んでいた位置がずれない）。
+                .safeAreaInset(edge: .bottom, spacing: 0) { interruptionBar }
+                // 割り込みは下から滑り込ませる。突然現れるとログを読んでいる最中に
+                // 意識が飛ぶので、動きで「下に足された」ことを伝える。
+                .animation(.spring(response: 0.35, dampingFraction: 0.9), value: hasInterruption)
         }
         .onAppear { loadTimelineAsync() }
+    }
+
+    // MARK: - Interruption bar
+
+    /// 応答が必要なもの（承認 / 質問）を載せる下端固定のバー。
+    ///
+    /// # なぜモーダルにしないか
+    /// 「何を承認するか」の判断材料はログそのもの（直前に何をしていたか）なので、
+    /// sheet や alert で覆って文脈を隠すのは逆効果。かつ `NotchPanel` は nonactivating で
+    /// key window になれないため sheet と相性が悪い。**非モーダルだが固定**が要件。
+    ///
+    /// # なぜ下端か
+    /// 決定は下（sheet / alert のボタン配置の慣習）。タイムラインは bottom anchor なので、
+    /// **承認要求の直前のログがバーの真上に来る** = 文脈と決定が隣接する。
+    ///
+    /// # 立体感
+    /// **帯そのものは透明**で、material・角丸・意味色の縁・影はバナー（カード）側が持つ。
+    /// notch パネルの中にもう 1 枚の面が置かれているように見せたいので、帯に面を敷いて
+    /// しまうとカードとの二重の面になる。背後のログはカードの外側で透けて見える。
+    @ViewBuilder
+    private var interruptionBar: some View {
+        let permission = session.pendingPermissions.first
+        let question = session.pendingQuestion
+
+        if permission != nil || question != nil {
+            VStack(alignment: .leading, spacing: DSSpacing.md) {
+                if let permission {
+                    PermissionBanner(
+                        permission: permission,
+                        onApprove: {
+                            permissionActions.approve(session.id, permission.toolUseId)
+                            navigateAfterResolvingIfCleared()
+                        },
+                        onDeny: {
+                            permissionActions.deny(session.id, permission.toolUseId, "Denied via Agent Notch")
+                            navigateAfterResolvingIfCleared()
+                        },
+                        onDismiss: {
+                            permissionActions.dismissExpired(session.id, permission.toolUseId)
+                            navigateAfterResolvingIfCleared()
+                        }
+                    )
+                }
+
+                if let question {
+                    QuestionBanner(
+                        questions: question.questions,
+                        expiresAt: question.expiresAt,
+                        isExpired: question.isExpired,
+                        onAnswer: { answers in
+                            permissionActions.answerQuestion(session.id, question.toolUseId, answers)
+                            // 応答経路が失効していた場合は pendingQuestion が失効表示のまま残る。
+                            // その場合はこの画面に留まり、失効バナーをユーザーに見せる（issue #28）。
+                            navigateAfterResolvingIfCleared()
+                        },
+                        onDismiss: {
+                            permissionActions.dismissExpired(session.id, question.toolUseId)
+                            navigateAfterResolvingIfCleared()
+                        }
+                    )
+                    // toolUseId で View identity を切る。同一セッションで pendingQuestion が
+                    // 別の質問セットに差し替わったとき、currentIndex 等の @State を
+                    // 引き継いでしまうと questions[currentIndex] が index out of range に
+                    // なりうるため、質問セットごとに View を作り直す。
+                    .id(question.toolUseId)
+                    // Other の自由入力 TextField はパネルが key window でないと
+                    // キーボード入力を受け付けられない（NotchPanel は既定で canBecomeKey=false）。
+                    // 表示中だけ key focus を許可し、消えたら戻す（#2）。
+                    .onAppear {
+                        NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: true)
+                    }
+                    .onDisappear {
+                        NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: false)
+                    }
+                }
+            }
+            // カードとパネル端の間の隙間。浮いている面に見せるには、ヘッダーの
+            // 左右余白（20）より内側に置く必要がある。狭いとパネルに貼り付いて見える。
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
+            .padding(.top, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// 応答が必要なものがあるか（バーの出入りアニメーションの駆動値）。
+    private var hasInterruption: Bool {
+        !session.pendingPermissions.isEmpty || session.pendingQuestion != nil
     }
 
     /// ヘッダー（モック 1d）。
@@ -280,49 +324,6 @@ struct SessionDetailView: View {
         )
     }
 
-    // MARK: - Stats Bar
-
-    private var sessionStatsBar: some View {
-        HStack(spacing: DSSpacing.md) {
-            statItem(icon: "wrench", value: "\(session.toolCallCount)", label: "tools")
-            if session.totalInputTokens > 0 || session.totalOutputTokens > 0 {
-                statItem(icon: "arrow.down", value: formatTokens(session.totalInputTokens), label: "in")
-                statItem(icon: "arrow.up", value: formatTokens(session.totalOutputTokens), label: "out")
-                if session.totalCachedTokens > 0 {
-                    statItem(icon: "memorychip", value: formatTokens(session.totalCachedTokens), label: "cached")
-                }
-            }
-            Spacer()
-            if session.estimatedCost > 0 {
-                Text(String(format: "$%.3f", session.estimatedCost))
-                    .font(DSTypography.Native.monoCaption(scale, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func statItem(icon: String, value: String, label: String) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: icon)
-                .font(.system(size: 8))
-                .foregroundStyle(.tertiary)
-            Text(value)
-                .font(DSTypography.Native.monoCaption(scale, weight: .medium))
-                .foregroundStyle(.secondary)
-            Text(label)
-                .font(DSTypography.Native.caption2(scale))
-                .foregroundStyle(.tertiary)
-        }
-        .accessibilityLabel("\(label): \(value)")
-    }
-
-    private func formatTokens(_ count: Int) -> String {
-        if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
-        if count >= 1_000 { return String(format: "%.1fK", Double(count) / 1_000) }
-        return "\(count)"
-    }
-
     // MARK: - Subagents / Team (collapsible sections)
 
     @ViewBuilder
@@ -420,7 +421,8 @@ struct SessionDetailView: View {
                         ForEach(timeline) { item in
                             switch item {
                             case .message(let entry):
-                                ChatMessageView(entry: entry).id(item.id)
+                                ChatMessageView(entry: entry, agentType: session.agentType)
+                                    .id(item.id)
                             case .tool(let entry):
                                 ToolLogRow(entry: entry, expandAll: expandTools).id(item.id)
                             }

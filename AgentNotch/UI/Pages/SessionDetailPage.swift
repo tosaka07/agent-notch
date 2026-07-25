@@ -19,6 +19,11 @@ struct SessionDetailPage: View {
                 onBack: { viewModel.backToList() },
                 onShowSession: { id in viewModel.showSession(id) }
             )
+            // パネルの実寸を明示して中身を必ずこの幅に収める。
+            // 外殻（NotchShell）の frame は「提案」なので、中で固有幅を持つ要素
+            // （グリフや折り返さないテキスト）が現れると横にはみ出せてしまう。
+            .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
+            .clipped()
         } else {
             ExpandedPageView(
                 viewModel: viewModel,
