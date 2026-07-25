@@ -245,4 +245,52 @@ struct EventProcessorTests {
         #expect(session.pendingQuestion != nil)
         #expect(session.status == .permissionWaiting)
     }
+
+    @Test("applyPendingExpired は質問バナーを失効表示に切り替える (#28)")
+    func applyPendingExpiredMarksQuestionExpired() {
+        let manager = SessionManager()
+        let session = applyAskQuestion(manager: manager, sessionId: "s1")
+        let toolUseId = session.pendingQuestion!.toolUseId
+        #expect(session.pendingQuestion?.isExpired == false)
+
+        EventProcessor.applyPendingExpired(
+            sessionId: "s1", toolUseId: toolUseId, kind: .askUserQuestion, manager: manager
+        )
+        #expect(session.pendingQuestion?.isExpired == true)
+        // 失効してもバナー自体は残す（ユーザーに「届かなかった」ことを見せるため）。
+        #expect(session.pendingQuestion != nil)
+    }
+
+    @Test("applyPendingExpired は toolUseId が一致しない質問には触れない (#28)")
+    func applyPendingExpiredIgnoresMismatchedToolUseId() {
+        let manager = SessionManager()
+        let session = applyAskQuestion(manager: manager, sessionId: "s1")
+
+        EventProcessor.applyPendingExpired(
+            sessionId: "s1", toolUseId: "different-id", kind: .askUserQuestion, manager: manager
+        )
+        #expect(session.pendingQuestion?.isExpired == false)
+    }
+
+    @Test("applyPendingExpired は権限バナーを canRespond=false に切り替える (#28)")
+    func applyPendingExpiredMarksPermissionUnrespondable() {
+        let manager = SessionManager()
+        let permissionRequest = ClaudeEventParser.parse([
+            "hook_event_name": "PermissionRequest",
+            "session_id": "s1",
+            "tool_name": "Bash",
+            "tool_input": ["command": "ls"],
+        ])
+        EventProcessor.apply(permissionRequest, agentType: .claudeCode, manager: manager)
+        let session = manager.session(for: "s1")!
+        let toolUseId = session.pendingPermissions.first!.toolUseId
+        #expect(session.pendingPermissions.first?.canRespond == true)
+
+        EventProcessor.applyPendingExpired(
+            sessionId: "s1", toolUseId: toolUseId, kind: .permissionRequest, manager: manager
+        )
+        #expect(session.pendingPermissions.first?.canRespond == false)
+        // 失効してもエントリ自体は残す（Dismiss はユーザー操作で行う）。
+        #expect(session.pendingPermissions.count == 1)
+    }
 }

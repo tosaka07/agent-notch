@@ -49,12 +49,20 @@ public final class SocketServer: Sendable {
     private let listener: NWListener
     private let queue = DispatchQueue(label: "com.agentnotch.socketserver", qos: .userInitiated)
     public let onMessage: @Sendable ([String: Any], NWConnection) -> [String: Any]?
+    /// pending が応答不能になった（hook プロセスが recv timeout で諦めた・死んだ・TTL 超過した）
+    /// ときに呼ばれる。UI 側はこれを受けて該当バナーを「失効」表示に切り替える（issue #28:
+    /// 応答が届かないのに送れたように見える無言失敗を防ぐ）。socket queue 上で呼ばれる点に注意。
+    public let onPendingExpired: (@Sendable (PendingSocketResponse) -> Void)?
 
     private let _connections = LockedArray<SocketConnection>()
     private let _pending = LockedDict<String, PendingSocketResponse>()
 
-    public init(onMessage: @escaping @Sendable ([String: Any], NWConnection) -> [String: Any]?) throws {
+    public init(
+        onMessage: @escaping @Sendable ([String: Any], NWConnection) -> [String: Any]?,
+        onPendingExpired: (@Sendable (PendingSocketResponse) -> Void)? = nil
+    ) throws {
         self.onMessage = onMessage
+        self.onPendingExpired = onPendingExpired
 
         Self.removeStaleSocket()
 
@@ -97,8 +105,11 @@ public final class SocketServer: Sendable {
         _sweepTimer.get()?.cancel()
         _sweepTimer.set(nil)
         for conn in _connections.removeAll() { conn.cancel() }
-        for (_, p) in _pending.all() { p.connection.cancel() }
+        // remove を cancel より先に行う（cancelPending と同じ理由。停止時の意図的破棄なので
+        // watchPendingConnection 経由の onPendingExpired を発火させない）。
+        let pendings = _pending.all()
         _pending.removeAll()
+        for (_, p) in pendings { p.connection.cancel() }
         Self.removeStaleSocket()
     }
 
@@ -111,7 +122,9 @@ public final class SocketServer: Sendable {
     /// 内側の 120s の方が必ず先に発火するため拘束力を持たない）。
     /// よって 120s を超えたエントリは応答が届いても意味がなく、破棄してよい。
     /// 多少のマージンとして 10s 足す。
-    static let pendingTTLSeconds: TimeInterval = 130
+    /// なお通常は `watchPendingConnection` の EOF 検知が先に失効を検出するため、
+    /// この TTL sweep は検知漏れ（EOF が届かない異常系）に対する保険。
+    static let pendingTTLSeconds: TimeInterval = TimeInterval(HookHandler.recvTimeoutSeconds) + 10
     private static let sweepIntervalSeconds: TimeInterval = 30
 
     private let _sweepTimer = LockedBox<DispatchSourceTimer>()
@@ -126,8 +139,38 @@ public final class SocketServer: Sendable {
             Log.socket.warning(
                 "addPending: toolUseId=\(response.toolUseId) は既に登録済み。衝突を検知したため新規登録を拒否（先勝ち）。sessionId=\(response.sessionId) kind=\(response.kind.rawValue)"
             )
+        } else {
+            watchPendingConnection(response)
         }
         return inserted
+    }
+
+    /// deferred connection の切断（EOF / エラー）を監視する。
+    /// hook プロセスは送信後 recv でブロックするだけで追加データを送らないため、
+    /// この receive が完了する＝hook 側が接続を閉じた（recv timeout 満了 or プロセス終了）か、
+    /// こちらが応答送信後に cancel したか、のいずれか。前者なら pending を破棄して
+    /// `onPendingExpired` で UI に失効を通知する。後者は pending が既に remove 済みなので no-op。
+    private func watchPendingConnection(_ pending: PendingSocketResponse) {
+        pending.connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { [weak self] content, _, isComplete, error in
+            guard let self else { return }
+            if content != nil, !isComplete, error == nil {
+                // プロトコル上ここでデータが届くことは無いが、届いた場合は読み捨てて監視を続ける。
+                self.watchPendingConnection(pending)
+                return
+            }
+            self.expirePending(toolUseId: pending.toolUseId, reason: "hook connection closed")
+        }
+    }
+
+    /// pending を破棄して connection を閉じ、`onPendingExpired` を呼ぶ。
+    /// 既に応答済み・破棄済み（remove が nil）なら何もしない（冪等）。
+    private func expirePending(toolUseId: String, reason: String) {
+        guard let removed = _pending.remove(toolUseId) else { return }
+        Log.socket.warning(
+            "expirePending: \(reason) toolUseId=\(toolUseId) sessionId=\(removed.sessionId) kind=\(removed.kind.rawValue)"
+        )
+        removed.connection.cancel()
+        onPendingExpired?(removed)
     }
 
     /// TTL を超過した pending エントリを破棄し、connection をクローズする（#25）。
@@ -139,6 +182,7 @@ public final class SocketServer: Sendable {
                 "sweepExpiredPending: TTL 超過（\(Self.pendingTTLSeconds)s）で破棄 toolUseId=\(pending.toolUseId) sessionId=\(pending.sessionId) kind=\(pending.kind.rawValue)"
             )
             pending.connection.cancel()
+            onPendingExpired?(pending)
         }
     }
 
@@ -162,13 +206,17 @@ public final class SocketServer: Sendable {
     }
 
     /// 通常の PermissionRequest（tool allow/deny）の応答を送る。
-    public func respondToPermission(toolUseId: String, decision: String, reason: String?) {
+    /// 戻り値: 応答経路がまだ生きていて送信を開始できたら true。pending が無い
+    /// （TTL 破棄済み・hook 切断済み・二重応答）なら false。呼び出し側（UI）は
+    /// false のとき「応答が届かなかった」ことをユーザーに提示すること（issue #28）。
+    @discardableResult
+    public func respondToPermission(toolUseId: String, decision: String, reason: String?) -> Bool {
         // `_pending` から一度だけ remove し、その結果を土台に応答を組み立てて同じエントリの
         // connection に送る。peek→remove の二段構成は TOCTOU（間に cancelPending 等が割り込むと
         // 応答先 connection と内容が食い違う、または無応答になる）になるため一発ロック化している。
         guard let pending = _pending.remove(toolUseId) else {
             Log.socket.error("respondToPermission: no pending for toolUseId=\(toolUseId) decision=\(decision)")
-            return
+            return false
         }
         let response: [String: Any] = [
             "hookSpecificOutput": [
@@ -177,6 +225,7 @@ public final class SocketServer: Sendable {
             ]
         ]
         sendDeferredResponse(pending, response: response, logContext: "permission decision=\(decision)")
+        return true
     }
 
     /// AskUserQuestion の回答を送る。
@@ -185,10 +234,12 @@ public final class SocketServer: Sendable {
     /// `updatedInput` は AskUserQuestion ツールの入力スキーマ全体として検証されるため、
     /// 元の `tool_input`（`questions` を含む）を土台にして `answers` を足し込む。
     /// これを怠ると「required parameter questions is missing」で失敗する（#6）。
-    public func respondToAskQuestion(toolUseId: String, answers: [String: String]) {
+    /// 戻り値の意味は `respondToPermission` と同じ（false = 応答経路が失効済み）。
+    @discardableResult
+    public func respondToAskQuestion(toolUseId: String, answers: [String: String]) -> Bool {
         guard let pending = _pending.remove(toolUseId) else {
             Log.socket.error("respondToAskQuestion: no pending for toolUseId=\(toolUseId)")
-            return
+            return false
         }
         var updatedInput = pending.toolInput?.value ?? [:]
         updatedInput["answers"] = answers
@@ -202,6 +253,7 @@ public final class SocketServer: Sendable {
             ]
         ]
         sendDeferredResponse(pending, response: response, logContext: "askUserQuestion answers=\(answers.count)")
+        return true
     }
 
     /// すでに `_pending` から取り出し済みの `PendingSocketResponse` を使って応答を送る。
@@ -221,8 +273,11 @@ public final class SocketServer: Sendable {
     public func cancelPending(sessionId: String) {
         for (key, val) in _pending.all() {
             if val.sessionId == sessionId {
-                val.connection.cancel()
+                // remove を cancel より先に行う。cancel すると watchPendingConnection の
+                // ハンドラが発火するが、既に remove 済みなら expirePending は no-op になる
+                // （意図的な破棄なので onPendingExpired は呼ばない）。
                 _pending.remove(key)
+                val.connection.cancel()
             }
         }
     }

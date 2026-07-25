@@ -10,8 +10,12 @@ public enum HookHandler {
     private static let socketPath = "/tmp/agent-notch-\(NSUserName()).sock"
     /// send 用タイムアウト（fire-and-forget 経路）
     private static let sendTimeout: Int = 3
-    /// recv 用タイムアウト（deferred 経路）。ユーザーが GUI で操作する時間を許容
-    private static let recvTimeoutSeconds: Int = 120
+    /// recv 用タイムアウト（deferred 経路）。ユーザーが GUI で操作する時間を許容。
+    /// これを超えると hook は pass-through で exit し、agent 側（ターミナル）の通常プロンプトに
+    /// フォールバックする。伸ばすほど「notch を見ていないユーザー」のターミナルが無反応に見える
+    /// 時間が延びるため、むやみに伸ばさないこと。GUI 側はこの値を質問バナーの残り時間表示と
+    /// `SocketServer.pendingTTLSeconds` の基準として参照する。
+    public static let recvTimeoutSeconds: Int = 120
 
     public static func run(agentType: String = "claude") {
         // Read all of stdin

@@ -219,6 +219,32 @@ enum EventProcessor {
         session.status = session.statusAfterPermissionResolved()
     }
 
+    /// socket 側で pending が失効した（hook が recv timeout で去った・TTL 破棄）通知を
+    /// セッション状態に反映する。該当バナーを「失効」表示に切り替え、ユーザーに
+    /// ターミナルでの回答を促す（issue #28: 無言失敗の可視化）。
+    @MainActor
+    static func applyPendingExpired(
+        sessionId: String, toolUseId: String, kind: PendingSocketResponse.Kind, manager: SessionManager
+    ) {
+        guard let session = manager.session(for: sessionId) else { return }
+        switch kind {
+        case .askUserQuestion:
+            guard var question = session.pendingQuestion, question.toolUseId == toolUseId else { return }
+            question.isExpired = true
+            session.pendingQuestion = question
+        case .permissionRequest:
+            guard let index = session.pendingPermissions.firstIndex(where: { $0.toolUseId == toolUseId })
+            else { return }
+            let old = session.pendingPermissions[index]
+            session.pendingPermissions[index] = PermissionRequest(
+                id: old.id, agentType: old.agentType, sessionId: old.sessionId,
+                toolName: old.toolName, toolInput: old.toolInput, toolUseId: old.toolUseId,
+                timestamp: old.timestamp, canRespond: false
+            )
+        }
+        Log.events.info("pending expired kind=\(kind.rawValue) session=\(sessionId) toolUseId=\(toolUseId)")
+        manager.notifyChange()
+    }
 
     /// 現在実行中のツールを `.succeeded` / `.failed` で閉じて recentTools に積む共通ロジック。
     @MainActor
