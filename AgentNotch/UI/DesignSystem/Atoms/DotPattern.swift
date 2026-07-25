@@ -28,6 +28,35 @@ enum DotPattern: Hashable {
         case .planReview: return DSColors.signalPlan
         }
     }
+
+    /// `TimelineView` の最小 tick 間隔（秒）。
+    ///
+    /// 各パターンの実際の状態変化周期に基づく。`nil` は現状通り毎フレーム
+    /// （`TimelineView(.animation)`）で評価する必要があるパターン
+    /// （complete のフェード、swarm の sin 脈動など「見た目のなめらかさ」が要件のもの）。
+    ///
+    /// それ以外は on/off の離散的な切り替えか、13 分割程度の粗いステップでしか
+    /// 見た目が変わらないため、60fps+ で再評価しても無駄になる。以下は各パターンの
+    /// 実測周期から導出した間隔（変化頻度以下に間引くことで cellGrid 再計算・
+    /// View 再構築の回数を 1/4〜1/7 程度に削減できる）:
+    /// - `.standby`: 呼吸 opacity は sin 周期 1.4s。cellGrid 自体は不変（bitmap 固定）で
+    ///   opacity の見た目だけが変化するため 10fps 相当（0.1s）でも滑らかに見える
+    /// - `.thinking`: scanningColumn は 1.2s / 13 コマ ≈ 0.092s 間隔でしか列が動かない
+    /// - `.working`: barFill は 2.0s / 14 コマ ≈ 0.143s 間隔でしか埋まらない
+    /// - `.alert`: blink 周期 0.56s（on 0.28s / off 0.28s）
+    /// - `.fault`: flicker は 0.08s 刻みの hash 判定
+    /// - `.planReview`: blink 周期 1.0s（on 0.6s / off 0.4s）
+    var minimumTickInterval: TimeInterval? {
+        switch self {
+        case .standby: return 0.1
+        case .thinking: return 0.1
+        case .working: return 0.15
+        case .alert: return 0.2
+        case .fault: return 0.08
+        case .planReview: return 0.2
+        case .complete, .swarm: return nil
+        }
+    }
 }
 
 /// 13×13 ドットマトリクスの bitmap 計算。
@@ -309,22 +338,45 @@ enum DotBitmap {
 
     // MARK: - Swarm animation (subagent 並行数)
 
-    /// 13×13 に 2×2 ブロックを 3×3 配置した際の各ブロック左上座標（読み順）。
-    private static let swarmBlockPositions: [(row: Int, col: Int)] = [
-        (2, 2), (2, 6), (2, 10),
-        (6, 2), (6, 6), (6, 10),
-        (10, 2), (10, 6), (10, 10),
+    /// 13×13 を 3×3 グリッド（各セルに 2×2 ブロックを配置）で分割した際の格子座標→実座標変換。
+    /// grid row/col は 0/1/2 を取り、実座標は `2, 6, 10`（ブロック 2 セル + 隙間 2 セル）に対応する。
+    private static func gridPos(_ row: Int, _ col: Int) -> (row: Int, col: Int) {
+        (row * 4 + 2, col * 4 + 2)
+    }
+
+    /// active 数ごとのブロック配置（3×3 grid 座標、読み順 = 点灯順）。
+    ///
+    /// 1〜3 個は中央行に収め、4 個以上は可能な限り中心 (1,1) に対して対称になるよう選ぶ
+    /// （6〜8 個は中央行 (1,*) を優先的に埋めず上下 2 行を使うことで、重心が中心からずれないようにする）。
+    /// これにより #20 で問題だった「少数のときブロックが上段に寄る」を解消する。
+    ///
+    /// 各 active 数の配置は独立に定義しているため、active が変化するたびに配置全体が
+    /// 組み替わる（例: 3→4 で中央行から四隅へ）。並列 subagent の増減時にフォーメーションが
+    /// 跳んで見えるが、これは常に中心対称な配置を優先した結果生じるトレードオフとして許容する。
+    private static let swarmGridLayouts: [Int: [(Int, Int)]] = [
+        1: [(1, 1)],
+        2: [(1, 0), (1, 2)],
+        3: [(1, 0), (1, 1), (1, 2)],
+        4: [(0, 0), (0, 2), (2, 0), (2, 2)],
+        5: [(0, 1), (1, 0), (1, 1), (1, 2), (2, 1)],
+        6: [(0, 0), (0, 1), (0, 2), (2, 0), (2, 1), (2, 2)],
+        7: [(0, 0), (0, 1), (0, 2), (1, 1), (2, 0), (2, 1), (2, 2)],
+        8: [(0, 0), (0, 1), (0, 2), (1, 0), (1, 2), (2, 0), (2, 1), (2, 2)],
+        9: [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2)],
     ]
 
     private static let swarmPulsePeriod = 1.2
     private static let swarmPhaseOffset = 0.25
 
-    /// `active`（1–9 に clamp）個のブロックを読み順に点灯。各ブロックは index × 0.25s の位相オフセットで脈動する。
+    /// `active`（1–9 に clamp）個のブロックを `swarmGridLayouts` の配置で点灯。
+    /// 各ブロックは index × 0.25s の位相オフセットで脈動する。
     private static func swarmAnimation(time: TimeInterval, active: Int, color: Color) -> [[DotCell]] {
         var cells = emptyCellGrid()
-        let count = max(1, min(swarmBlockPositions.count, active))
-        for index in 0..<count {
-            let (row, col) = swarmBlockPositions[index]
+        let clamped = max(1, min(9, active))
+        let layout = swarmGridLayouts[clamped] ?? swarmGridLayouts[1]!
+        for index in 0..<layout.count {
+            let (gridRow, gridCol) = layout[index]
+            let (row, col) = gridPos(gridRow, gridCol)
             let phase = (time - Double(index) * swarmPhaseOffset)
                 .truncatingRemainder(dividingBy: swarmPulsePeriod)
             let normalizedPhase = phase < 0 ? phase + swarmPulsePeriod : phase

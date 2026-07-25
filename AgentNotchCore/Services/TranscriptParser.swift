@@ -127,10 +127,15 @@ public enum TranscriptParser {
         return formatImageReferences(in: trimmed)
     }
 
+    /// 呼び出し毎のコンパイルコストを避けるため static let にホイストしている。
+    private static let imageReferenceRegex = try? NSRegularExpression(
+        pattern: #"\[Image:[^\]]*\]"#, options: [.caseInsensitive]
+    )
+
     /// `[Image: source: /path/to/file]` のような画像参照ブロックを `[画像]` マーカーに置換する。
     /// 複数ある場合は 1 個のマーカーに集約し `[画像×N]` にする。
     private static func formatImageReferences(in text: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: #"\[Image:[^\]]*\]"#, options: [.caseInsensitive]) else {
+        guard let regex = imageReferenceRegex else {
             return text
         }
         let mutable = NSMutableString(string: text)

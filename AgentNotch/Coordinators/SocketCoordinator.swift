@@ -39,27 +39,6 @@ final class SocketCoordinator {
                 let permissionMode = parsed.permissionMode
                 let sessionStartSource = message["source"] as? String
 
-                Task { @MainActor in
-                    // 同一プロセス（pid）が resume/compact/clear で新しい session_id を発行した場合、
-                    // 古いセッションを新しい方へ統合する（#23: 一覧の分裂対策）。source が
-                    // startup（teammate の新規セッション起動等も含む）の場合は統合しない。
-                    // pid だけでなく cwd も一致条件に含めることで、_pid を偽装した SessionStart
-                    // 送信による他セッションの乗っ取りの難易度を上げている（レビュー指摘 / issue #24 で恒久対策）。
-                    if hookEvent == "SessionStart" {
-                        manager.reconcileSessionStart(
-                            newId: parsed.sessionId, pid: pid, cwd: cwd, source: sessionStartSource
-                        )
-                    }
-                    EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
-                    EventProcessor.backfillSession(
-                        parsed.sessionId, cwd: cwd, transcriptPath: transcriptPath,
-                        pid: pid, tty: tty, manager: manager
-                    )
-                    EventProcessor.applyPermissionMode(
-                        sessionId: parsed.sessionId, rawMode: permissionMode, manager: manager
-                    )
-                }
-
                 // `PermissionRequest` hook 経由のときだけ deferred にする（tool_response を注入できる唯一の経路）。
                 // `PreToolUse` 経由の AskUserQuestion は即時応答しないと agent がブロックされる上、
                 // 応答しても tool_response にならないので pass-through。
@@ -75,16 +54,63 @@ final class SocketCoordinator {
                     deferred = nil
                 }
 
-                guard let d = deferred else { return [String: Any]() }
-                serverBox.server?.addPending(PendingSocketResponse(
-                    kind: d.kind,
-                    sessionId: d.sessionId,
-                    toolUseId: d.toolUseId,
-                    connection: connection,
-                    receivedAt: Date(),
-                    toolInput: d.toolInput
-                ))
-                Log.socket.info("Deferred \(d.kind.rawValue) toolUseId=\(d.toolUseId)")
+                // deferred なケースは、addPending の成否を「先に」同期的に確定させる
+                // （addPending 自体は MainActor 非依存で同期）。
+                // ここで成功しなかった（＝既存 toolUseId と衝突＝ハイジャック試行）場合、
+                // 後段の apply で UI に pendingPermissions/pendingQuestion を追加してしまうと、
+                // ユーザー視点では正規の承認リクエストに見えるのに、実際に承認/拒否した応答は
+                // 攻撃者が握る新規 connection に送られてしまう（security review 指摘）。
+                // そのため apply 自体をスキップし、新規 connection を閉じて即 return する。
+                var pendingRegistered = true
+                if let d = deferred {
+                    let pending = PendingSocketResponse(
+                        kind: d.kind,
+                        sessionId: d.sessionId,
+                        toolUseId: d.toolUseId,
+                        connection: connection,
+                        receivedAt: Date(),
+                        toolInput: d.toolInput
+                    )
+                    pendingRegistered = serverBox.server?.addPending(pending) == true
+                    if !pendingRegistered {
+                        Log.socket.warning(
+                            "Rejected duplicate/hijack-attempt pending toolUseId=\(d.toolUseId); closing new connection"
+                        )
+                        connection.cancel()
+                    } else {
+                        Log.socket.info("Deferred \(d.kind.rawValue) toolUseId=\(d.toolUseId)")
+                    }
+                }
+
+                Task { @MainActor in
+                    // 同一プロセス（pid）が resume/compact/clear で新しい session_id を発行した場合、
+                    // 古いセッションを新しい方へ統合する（#23: 一覧の分裂対策）。source が
+                    // startup（teammate の新規セッション起動等も含む）の場合は統合しない。
+                    // pid だけでなく cwd も一致条件に含めることで、_pid を偽装した SessionStart
+                    // 送信による他セッションの乗っ取りの難易度を上げている（レビュー指摘 / issue #24 で恒久対策）。
+                    // SessionStart は deferred ではないため pendingRegistered は常に true だが、
+                    // reconcile 自体は apply より前・pendingRegistered ガードの外で行ってよい。
+                    if hookEvent == "SessionStart" {
+                        manager.reconcileSessionStart(
+                            newId: parsed.sessionId, pid: pid, cwd: cwd, source: sessionStartSource
+                        )
+                    }
+                    if pendingRegistered {
+                        EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
+                    }
+                    EventProcessor.backfillSession(
+                        parsed.sessionId, cwd: cwd, transcriptPath: transcriptPath,
+                        pid: pid, tty: tty, manager: manager
+                    )
+                    EventProcessor.applyPermissionMode(
+                        sessionId: parsed.sessionId, rawMode: permissionMode, manager: manager
+                    )
+                }
+
+                // deferred でなければ即時の空応答（pass-through）を返す。
+                // deferred の場合は成功・拒否いずれも応答は別経路（deferred送信 or 即クローズ）
+                // 済みなので、ここでは常に nil（immediate な応答をしない）を返す。
+                guard deferred != nil else { return [String: Any]() }
                 return nil
             }
             serverBox.server = server

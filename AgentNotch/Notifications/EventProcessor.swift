@@ -7,16 +7,23 @@ import Foundation
 /// - `apply(_:agentType:manager:)` は MainActor で Session を mutate する window。
 ///   switch は個別 handler に分解されており、各 handler が独立して読める。
 /// - `backfillSession(...)` は socket メッセージに付随する cwd/pid/tty 情報で Session を埋める。
+/// `EventProcessor.parseMessage(_:)` の戻り値。
+/// タプルだとフィールド追加のたびに呼び出し側の可読性が落ちるため struct に切り出している（Issue #26）。
+struct ParsedMessage: Sendable {
+    let event: ClaudeEvent
+    let agentType: AgentType
+    let sessionId: String
+    let permissionMode: String?
+}
+
 enum EventProcessor {
     /// 受信メッセージを type-safe な `ClaudeEvent` に変換し、agent type も判定する。
-    static func parseMessage(
-        _ message: [String: Any]
-    ) -> (event: ClaudeEvent, agentType: AgentType, sessionId: String, permissionMode: String?) {
+    static func parseMessage(_ message: [String: Any]) -> ParsedMessage {
         let event = ClaudeEventParser.parse(message)
         let sessionId = message["session_id"] as? String ?? ""
         let agentType: AgentType = (message["_agent_type"] as? String) == "codex" ? .codex : .claudeCode
         let permissionMode = ClaudeEventParser.permissionMode(from: message)
-        return (event, agentType, sessionId, permissionMode)
+        return ParsedMessage(event: event, agentType: agentType, sessionId: sessionId, permissionMode: permissionMode)
     }
 
     /// `permission_mode` を Session に反映する。session がまだ存在しない場合は何もしない
