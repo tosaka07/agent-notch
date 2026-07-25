@@ -112,7 +112,10 @@ struct ExpandedPageView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("使用量の詳細を開く")
                 .help("使用量の詳細を表示")
-                .padding(.leading, 16)
+                // 右翼のアイコンは 28pt のタップ領域の中央に描かれるので、絵柄の左端は
+                // パネル端から 16 + 7.5 ≒ 24pt の位置に来る。ゲージはグリフそのもので
+                // 内側余白を持たないため、同じ 24 を直接与えて絵柄の位置を左右で揃える。
+                .padding(.leading, 24)
             }
 
             Spacer()

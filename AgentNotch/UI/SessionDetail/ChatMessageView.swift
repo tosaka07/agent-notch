@@ -101,6 +101,11 @@ struct ChatMessageView: View {
                     .foregroundStyle(DSColors.inkMute)
             }
 
+            if !isUser, let agentType {
+                // エージェントの発言はロゴを添える（自分の発言との差が一目で付く）。
+                AgentMark(agentType: agentType, size: s(9), alignedWithFontSize: s(9))
+            }
+
             Text(roleLabel)
                 .foregroundStyle(roleColor.opacity(isUser ? 1 : 0.9))
 

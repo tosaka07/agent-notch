@@ -17,29 +17,55 @@ struct NotchShell: ViewModifier {
         )
     }
 
+    /// 面（material / glass）を見せるか。
+    ///
+    /// `compact` は notch 実寸なので必ず不透明な黒（物理 notch と完全に重なる）。
+    /// `notification` は notch より下に伸びるぶん、**リキッドグラスのときだけ**透かす。
+    /// 黒い notch をガラスの縁が囲む見え方になり、通知が「notch から生えた」ように見える。
+    /// すりガラス（material の近似）では下端が白っぽく濁って通知の文字が読みにくいので、
+    /// 従来どおり黒のままにする。
+    private var showsSurface: Bool {
+        guard !reduceTransparency else { return false }
+        switch viewModel.mode {
+        case .compact: return false
+        case .notification: return panelSurfaceStyle == .liquidGlass
+        case .expanded, .sessionDetail, .usage: return true
+        }
+    }
+
+    /// 通知の暗幕に切り替えるか（リキッドグラスの通知だけ）。
+    private var showsNotchCutout: Bool {
+        panelSurfaceStyle == .liquidGlass && viewModel.mode == .notification && !reduceTransparency
+    }
+
+    /// 通知の暗幕。**物理 notch と重なる矩形だけ完全な黒**にして、周りはガラスを
+    /// 薄く曇らせるだけにする。こうすると黒い notch をガラスが囲んで広がって見える。
+    /// 素のガラスにしないのは、通知の文字が乗るため（明るい壁紙で白文字が読めなくなる）。
+    private var notificationScrim: some View {
+        Color.black.opacity(DSColors.notificationScrimOpacity)
+            .overlay(alignment: .top) {
+                Color.black
+                    .frame(
+                        width: viewModel.physicalNotchWidth,
+                        height: viewModel.physicalNotchHeight
+                    )
+            }
+    }
+
     /// パネルの背景。
     ///
-    /// compact / notification は notch の延長なので**不透明な黒**（物理 notch と地続きに見せる）。
-    /// 展開パネルは Apple の material を借りて半透明 + ブラーにする（モック 1b/1d の
-    /// `rgba(20,20,22,.94)` + `backdrop-filter: blur(34px) saturate(160%)` に相当）。
-    /// ドットの視認性を保つため黒を強めに重ね、Reduce Transparency 時は不透明に落とす。
-    ///
-    /// **material の View は出し入れせず、手前の黒の不透明度だけを変える**。
-    /// `if isExpanded` で material 自体を差し替えると、閉じる瞬間に material が
-    /// 角丸クリップ前の矩形のまま 1 フレーム残り、compact の角が四角く見える。
-    /// 常設して不透明度を補間すれば、展開パネルの色から compact の黒へ滑らかに溶ける。
-    ///
     /// # 暗幕の 3 モード（`Defaults[.panelSurfaceStyle]`）
-    /// - `.solid`: パネル全体を同じ濃さの黒で覆う（従来）
-    /// - `.gradient`: 上端は不透明な黒のまま、**下端で material に移行**する
+    /// - `.solid`: パネル全体を同じ濃さの黒で覆う（従来）。モック 1b/1d の
+    ///   `rgba(20,20,22,.94)` + `backdrop-filter: blur(34px)` に相当
+    /// - `.gradient`: 上端は不透明な黒のまま、**下 3 割で material に移行**する
     /// - `.liquidGlass`: 面を macOS 26 の `glassEffect` で作り、下端は暗幕を完全に外す
     ///
-    /// どのモードでも**面（material / glass）の View は出し入れせず、手前の黒の濃さだけ**を
-    /// 変える。`if` で面を差し替えると、閉じる瞬間に角丸クリップ前の矩形が 1 フレーム残り、
-    /// compact の角が四角く見える。グラデーションも固定で置き、compact 用の不透明黒を
-    /// opacity で被せて切り替える（`LinearGradient` は補間できないため）。
-    private func panelBackground(isExpanded: Bool) -> some View {
-        let translucent = isExpanded && !reduceTransparency
+    /// どのモードでも**面（material / glass）とグラデーションの View は出し入れせず、
+    /// 手前の黒の濃さだけ**を変える。`if` で面を差し替えると、閉じる瞬間に角丸クリップ前の
+    /// 矩形が 1 フレーム残り、compact の角が四角く見える（`LinearGradient` は補間できないので
+    /// stop をモードごとに差し替えるのも同じ問題を起こす）。
+    private var panelBackground: some View {
+        let translucent = showsSurface
         return panelSurface
             .overlay {
                 switch panelSurfaceStyle {
@@ -47,14 +73,23 @@ struct NotchShell: ViewModifier {
                     // compact では黒を不透明にして面を完全に覆う（= notch と地続きの黒）。
                     Color.black.opacity(translucent ? DSColors.panelScrimOpacity : 1)
                 case .gradient, .liquidGlass:
-                    LinearGradient(
-                        gradient: panelSurfaceStyle == .liquidGlass
-                            ? DSColors.panelGlassScrimGradient
-                            : DSColors.panelScrimGradient,
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .overlay(Color.black.opacity(translucent ? 0 : 1))
+                    ZStack {
+                        LinearGradient(
+                            gradient: panelSurfaceStyle == .liquidGlass
+                                ? DSColors.panelGlassScrimGradient
+                                : DSColors.panelScrimGradient,
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        // 通知だけは「notch は黒のまま、周りをガラスが囲む」形にする。
+                        // 下端に向かって抜けるグラデーションだと、notch から生えた帯ではなく
+                        // 「パネルが薄くなっている」ように見えるため。
+                        // どちらも常に置いて opacity で混ぜる（View を差し替えると
+                        // 角丸クリップ前の矩形が 1 フレーム残る）。
+                        notificationScrim
+                            .opacity(showsNotchCutout ? 1 : 0)
+                        Color.black.opacity(translucent ? 0 : 1)
+                    }
                 }
             }
             .overlay(alignment: .bottom) {
@@ -135,12 +170,13 @@ struct NotchShell: ViewModifier {
 
         content
             .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
-            .background(panelBackground(isExpanded: isExpanded))
+            .background(panelBackground)
             .clipShape(currentShape)
             .overlay {
                 // 縁は clip の外側に描く（clip 内だと線幅の半分が削られて掠れる）。
                 if panelSurfaceStyle == .liquidGlass, !reduceTransparency {
-                    glassEdge(translucent: isExpanded)
+                    // 通知も（リキッドグラスなら）ガラスなので、縁は showsSurface に従わせる。
+                    glassEdge(translucent: showsSurface)
                 }
             }
             .overlay(

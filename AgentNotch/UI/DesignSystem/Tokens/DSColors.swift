@@ -24,6 +24,11 @@ enum DSColors {
     static let panelScrimOpacity: Double = 0.72
     /// パネルの中に置くカードの暗幕。パネルより薄くして一段明るい面にする。
     static let cardScrimOpacity: Double = 0.56
+    /// 通知（notch のすぐ下に伸びる帯）でガラスに掛ける暗幕。
+    ///
+    /// 素のガラスにすると明るい壁紙で白文字が読めなくなるので、薄く曇らせる。
+    /// パネルの暗幕より大幅に薄いのは、**notch を囲むガラスとして見せたい**ため。
+    static let notificationScrimOpacity: Double = 0.34
 
     /// 黒の暗幕を滑らかに抜くグラデーションを組む。
     ///
