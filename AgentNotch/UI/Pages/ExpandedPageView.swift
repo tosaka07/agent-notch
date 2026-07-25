@@ -20,8 +20,8 @@ struct ExpandedPageView: View {
     @Default(.sessionGrouping) private var grouping
     @Default(.collapsedGroupIDs) private var collapsedGroupIDs
     @Default(.usageEnabled) private var usageEnabled
+    @Default(.usageGaugeMetric) private var usageGaugeMetric
     @Environment(\.permissionActions) private var permissionActions
-    @Default(.usageGaugeStyle) private var usageGaugeStyle
 
     @State private var showSortMenu = false
 
@@ -30,16 +30,34 @@ struct ExpandedPageView: View {
     /// トップバー左翼に横並びで出すゲージの一覧。Claude → Codex の順。
     ///
     /// 初回ポーリングが返る前（`snapshot == nil`）は percent を nil にしたプレースホルダを出す。
-    /// 何も出さないと起動直後に「ゲージが無い」ように見えて違和感があるため。
+    /// 何も出さないと起動直後に「ゲージが無い」ように見えて違和感があるため
+    /// （`UsageGauge` 側が nil をローディングのスピナーとして描く）。
     /// 一覧はどの agentType のセッションが並ぶか一定しないため、特定セッションには紐づけない。
-    private var headerUsages: [(agentType: AgentType, percent: Double?)] {
+    ///
+    /// どの枠（セッション / ウィークリー / …）を出すかは設定 `usageGaugeMetric` に従う。
+    private var headerUsages: [HeaderUsage] {
         guard usageEnabled else { return [] }
         guard let snapshot = usageCoordinator.snapshot else {
-            return [(AgentType.claudeCode, nil)]
+            return [HeaderUsage(agentType: .claudeCode, percent: nil, isUnavailable: false)]
         }
-        return [AgentType.claudeCode, .codex].compactMap { agentType in
-            snapshot.primaryUsedPercent(for: agentType).map { (agentType, Double?.some($0)) }
+        let resolved = [AgentType.claudeCode, .codex].compactMap { agentType in
+            snapshot.primaryWindow(for: agentType, metric: usageGaugeMetric).map {
+                HeaderUsage(agentType: agentType, percent: $0.usedPercent, isUnavailable: false)
+            }
         }
+        guard resolved.isEmpty else { return resolved }
+        // 1 つも取得できなかった場合も、使用量ページ（取得できない理由が出る）への
+        // 導線を残すため「取得なし」のゲージを 1 つだけ置く。
+        return [HeaderUsage(agentType: .claudeCode, percent: nil, isUnavailable: true)]
+    }
+
+    private struct HeaderUsage: Identifiable {
+        let agentType: AgentType
+        let percent: Double?
+        /// 取得を試みたが値が無い（従量課金・資格情報なし・取得失敗）。
+        let isUnavailable: Bool
+
+        var id: AgentType { agentType }
     }
 
     var body: some View {
@@ -84,9 +102,9 @@ struct ExpandedPageView: View {
                 Button {
                     viewModel.showUsage()
                 } label: {
-                    HStack(spacing: 14) {
-                        ForEach(headerUsages, id: \.agentType) { usage in
-                            usageBadge(agentType: usage.agentType, percent: usage.percent)
+                    HStack(spacing: 10) {
+                        ForEach(headerUsages) { usage in
+                            usageBadge(usage)
                         }
                     }
                     .contentShape(Rectangle())
@@ -118,26 +136,25 @@ struct ExpandedPageView: View {
         .frame(height: viewModel.physicalNotchHeight + 4)
     }
 
-    /// 使用量バッジ。グリフ + エージェント名（+ %）を組む（モック 1b）。
+    /// 使用量バッジ。エージェント 1 つにつきグリフ 1 個だけを置く（モック 1b）。
     ///
-    /// リング表示のときは形が残量を、テキストが値を語る役割分担なので % を併記する。
-    /// **数字表示のときはグリフ自体が値なので % テキストは出さない**（二重表示になる）。
-    private func usageBadge(agentType: AgentType, percent: Double?) -> some View {
-        HStack(spacing: 7) {
-            UsageGauge(usedPercent: percent, agentType: agentType)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(agentType.displayName.uppercased())
-                    .font(DSTypography.mono(s(8), weight: .semibold))
-                    .tracking(1.1)
-                    .foregroundStyle(DSColors.inkDim)
-                if usageGaugeStyle == .ring {
-                    Text(percent.map { "\(Int($0.rounded()))%" } ?? "--")
-                        .font(DSTypography.mono(s(11), weight: .semibold))
-                        .foregroundStyle(DSColors.ink.opacity(0.85))
-                        .monospacedDigit()
-                }
-            }
-        }
+    /// 設定が `.ring` ならリング、`.number` なら数字グリフ。**併記しない**——
+    /// リングは残量を形で語り切っているので % テキストは同じ情報の二重表示になり、
+    /// 「リングを選んだのに数字も出る」状態になる。どのエージェントかはグリフの色相で分かる
+    /// （`UsageGauge` の通常域の色 = `AgentType.color`）ので、名前テキストも置かない。
+    /// 正確な値と内訳は、このバッジをクリックして開く使用量ページ側の責務。
+    private func usageBadge(_ usage: HeaderUsage) -> some View {
+        let value = usage.percent.map { "\(Int($0.rounded()))%" }
+            ?? (usage.isUnavailable ? "取得できません" : "取得中")
+        let frame = usageGaugeMetric == .auto || usage.isUnavailable
+            ? ""
+            : " · \(usageGaugeMetric.label)"
+        return UsageGauge(
+            usedPercent: usage.percent,
+            agentType: usage.agentType,
+            isUnavailable: usage.isUnavailable
+        )
+        .help("\(usage.agentType.displayName)\(frame): \(value)")
     }
 
     private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
