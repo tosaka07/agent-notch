@@ -53,7 +53,7 @@ enum SessionFinalizer {
         let muted = manager.isMuted(sessionId)
 
         Task.detached {
-            let metrics = computeMetrics(transcriptPath: transcriptPath, model: model)
+            let metrics = await computeMetrics(transcriptPath: transcriptPath, model: model)
 
             await MainActor.run {
                 if let s = manager.session(for: sessionId) {
@@ -66,6 +66,10 @@ enum SessionFinalizer {
                     }
                 }
                 if !muted {
+                    // 「1 つ前のメッセージが出る」類の取り違えを追えるようにしておく。
+                    Log.notification.debug(
+                        "Completion message: \(metrics.lastMessage.prefix(60))"
+                    )
                     NotificationCenter.default.post(
                         name: .agentNotchSessionCompleted,
                         object: sessionId,
@@ -88,6 +92,10 @@ enum SessionFinalizer {
 
     // MARK: - Off-MainActor computation
 
+    /// transcript の追記完了を待つ回数と間隔。
+    private nonisolated static let settleAttempts = 6
+    private nonisolated static let settleInterval: Duration = .milliseconds(80)
+
     private struct Metrics {
         var inputTokens: Int = 0
         var outputTokens: Int = 0
@@ -97,8 +105,19 @@ enum SessionFinalizer {
     }
 
     /// transcript をパースして token/cost/最終メッセージを計算する。MainActor 外でも安全に呼べる。
-    private nonisolated static func computeMetrics(transcriptPath: String?, model: String?) -> Metrics {
+    ///
+    /// 読む前に**書き込みが落ち着くのを待つ**。`Stop` hook は agent が応答を終えた時点で
+    /// 飛んでくるが、そのとき transcript への追記はまだ済んでいないことがある。待たずに
+    /// 読むと最後の 1 件が入っておらず、**1 つ前のメッセージが完了通知に出る**。
+    private nonisolated static func computeMetrics(
+        transcriptPath: String?,
+        model: String?
+    ) async -> Metrics {
         var metrics = Metrics()
+
+        if let path = transcriptPath {
+            await waitForTranscriptToSettle(at: path)
+        }
 
         if let path = transcriptPath, let model {
             let usage = TranscriptParser.parseCumulativeUsage(at: path)
@@ -117,5 +136,27 @@ enum SessionFinalizer {
         }
 
         return metrics
+    }
+
+    /// transcript のサイズが変わらなくなるまで待つ（上限 `settleAttempts × settleInterval`）。
+    ///
+    /// 「追記が終わった」ことを知る手段が無いので、サイズが 2 回続けて同じなら
+    /// 書き終わったとみなす。通知が出るまでの遅れは最大でも 0.5 秒程度に収める
+    /// （完了に気づくのが遅れる方が、内容が古いより困る場面もあるため）。
+    private nonisolated static func waitForTranscriptToSettle(at path: String) async {
+        var previousSize: Int?
+        for _ in 0..<settleAttempts {
+            let size = fileSize(at: path)
+            if let previousSize, size == previousSize { return }
+            previousSize = size
+            try? await Task.sleep(for: settleInterval)
+        }
+    }
+
+    private nonisolated static func fileSize(at path: String) -> Int {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
+            return 0
+        }
+        return attributes[.size] as? Int ?? 0
     }
 }
