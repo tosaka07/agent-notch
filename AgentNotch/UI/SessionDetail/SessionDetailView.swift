@@ -9,7 +9,9 @@ struct SessionDetailView: View {
     /// TEAM セクションの行タップで別セッションの detail へ遷移するためのコールバック。
     var onShowSession: (String) -> Void = { _ in }
 
-    @State private var chatEntries: [ChatEntry] = []
+    @State private var timeline: [TranscriptEntry] = []
+    /// ツールの中身を一括で開くか（Claude Code の verbose トグル相当）。
+    @State private var expandTools = false
     @State private var isLoading = true
     @State private var isAtBottom = true
     @State private var isSubagentsExpanded: Bool
@@ -46,12 +48,7 @@ struct SessionDetailView: View {
 
             header
                 .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-
-            // Stats bar
-            sessionStatsBar
-                .padding(.horizontal, 20)
-                .padding(.bottom, 4)
+                .padding(.bottom, 10)
 
             Divider()
 
@@ -110,11 +107,15 @@ struct SessionDetailView: View {
                 }
             }
 
-            chatTabContent
+            timelineContent
         }
-        .onAppear { loadChatAsync() }
+        .onAppear { loadTimelineAsync() }
     }
 
+    /// ヘッダー（モック 1d）。
+    ///
+    /// `‹ 戻る` + 状態グリフ + 2 行の識別情報（repo/branch/pid と cwd/model/tok/cost）
+    /// + ツール一括トグル + ターミナルへ移動。状態を語るのは左のグリフだけ。
     private var header: some View {
         HStack(spacing: DSSpacing.sm) {
             Button { onBack() } label: {
@@ -124,95 +125,137 @@ struct SessionDetailView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
+            .keyboardShortcut(.cancelAction)
             .accessibilityLabel("戻る")
 
-            StatusIndicator(status: session.status, size: 7)
+            StateGlyphView(
+                state: session.glyphState,
+                size: s(24),
+                animationStartTime: session.doneAt
+            )
 
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: DSSpacing.xs) {
-                    Text(session.sessionTitle ?? projectName(session.cwd))
-                        .font(DSTypography.Native.headline(scale))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(session.agentType.displayName)
-                        .font(DSTypography.Native.caption2(scale, weight: .medium))
-                        .foregroundStyle(session.agentType.color)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(session.agentType.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
-                    if session.sessionTitle != nil {
-                        Text(projectName(session.cwd))
-                            .font(DSTypography.Native.monoCaption(scale))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }
-                }
-                HStack(spacing: 4) {
-                    if let model = session.model {
-                        Text(model)
-                            .foregroundStyle(.tertiary)
-                    }
-                    if let branch = session.gitBranch {
-                        let isWorktree = session.worktreeName != nil
-                        if session.model != nil {
-                            Text("·")
-                                .foregroundStyle(.tertiary)
-                        }
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 8))
-                            .foregroundStyle(isWorktree ? Color.cyan.opacity(0.7) : Color.secondary)
-                        Text(branch)
-                            .foregroundStyle(isWorktree ? Color.cyan.opacity(0.6) : Color.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                }
-                .font(DSTypography.Native.monoCaption2(scale))
+            VStack(alignment: .leading, spacing: 2) {
+                identityLine
+                metaLine
             }
 
-            Spacer()
+            Spacer(minLength: 0)
+
+            toolsToggle
 
             if session.pid != nil || session.tty != nil {
                 Button {
                     TerminalJumper.jump(pid: session.pid, tty: session.tty)
                 } label: {
                     HStack(spacing: 5) {
-                        VStack(alignment: .trailing, spacing: 1) {
-                            if let name = session.terminalAppName {
-                                Text(name)
-                                    .font(DSTypography.Native.monoCaption2(scale))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            if let tmux = session.tmuxPaneTarget {
-                                Text("tmux:\(tmux)")
-                                    .font(DSTypography.Native.monoCaption2(scale))
-                                    .foregroundStyle(Color.cyan.opacity(0.6))
-                            }
-                        }
                         if let icon = session.terminalAppIcon as? NSImage {
                             Image(nsImage: icon)
                                 .resizable()
-                                .frame(width: s(16), height: s(16))
-                        } else {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
+                                .frame(width: s(14), height: s(14))
                         }
+                        Text("ターミナル")
+                            .font(DSTypography.Native.caption(scale, weight: .semibold))
                     }
+                    .padding(.horizontal, 10)
+                    .frame(height: 26)
+                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
-                .help("Jump to terminal")
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("ターミナルへ移動")
                 .accessibilityLabel("ターミナルへ移動")
-            }
-
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(RelativeTimeFormatter.format(since: session.startedAt, relativeTo: context.date))
-                    .font(DSTypography.Native.monoCaption(scale, weight: .medium))
-                    .foregroundStyle(.secondary)
             }
 
             actionMenu
         }
+    }
+
+    /// 1 行目: repo · branch · pid。
+    private var identityLine: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DSSpacing.sm) {
+            Text(projectName(session.cwd))
+                .font(DSTypography.Native.headline(scale))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            if let branch = session.gitBranch {
+                Text(branch)
+                    .font(DSTypography.Native.monoCaption(scale))
+                    .foregroundStyle(session.worktreeName != nil ? Color.cyan.opacity(0.7) : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            if let pid = session.pid {
+                Text("pid \(pid)")
+                    .font(DSTypography.Native.monoCaption(scale))
+                    .foregroundStyle(.tertiary)
+            }
+            if session.permissionMode == .plan {
+                Text("PLAN")
+                    .font(DSTypography.mono(s(8), weight: .semibold))
+                    .tracking(0.7)
+                    .foregroundStyle(DSColors.signalPlan)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(DSColors.signalPlan.opacity(0.5), lineWidth: 0.5)
+                    )
+            }
+        }
+    }
+
+    /// 2 行目: cwd · エージェント · モデル · トークン · コスト（機械値なので mono）。
+    private var metaLine: some View {
+        Text(metaLineText)
+            .font(DSTypography.Native.monoCaption2(scale))
+            .tracking(0.4)
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+    }
+
+    private var metaLineText: String {
+        var parts: [String] = []
+        if let cwd = session.cwd {
+            parts.append(cwd.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+        }
+        parts.append(session.agentType.displayName.uppercased())
+        if let model = session.model {
+            parts.append(model.replacingOccurrences(of: "claude-", with: "").uppercased())
+        }
+        let tokens = session.totalInputTokens + session.totalOutputTokens
+        if tokens > 0 { parts.append("\(TokenFormatter.format(tokens)) TOK") }
+        if session.estimatedCost > 0 { parts.append(CostCalculator.formatCost(session.estimatedCost)) }
+        return parts.joined(separator: " · ")
+    }
+
+    /// ツールの中身を一括で開く / 畳むトグル。
+    ///
+    /// チャットとツールは 1 本のタイムラインに混ぜてあり、ツールは既定で 1 行に畳んである。
+    /// 「全部開いて追いたい」ときのために一括トグルを置く（Claude Code の verbose 表示相当）。
+    /// パネルは nonactivating で key window になれないため、ショートカットは効かない環境が
+    /// あることを前提にボタンを主たる操作にしている。
+    private var toolsToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { expandTools.toggle() }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: expandTools ? "chevron.down.square" : "chevron.right.square")
+                    .font(.system(size: s(10), weight: .medium))
+                Text("TOOLS")
+                    .font(DSTypography.mono(s(9), weight: .semibold))
+                    .tracking(0.8)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .keyboardShortcut("o", modifiers: .control)
+        .help(expandTools ? "ツールの中身を畳む（⌃O）" : "ツールの中身を開く（⌃O）")
+        .accessibilityLabel(expandTools ? "ツールの中身を畳む" : "ツールの中身を開く")
     }
 
     // MARK: - Action menu
@@ -356,11 +399,13 @@ struct SessionDetailView: View {
         }
     }
 
-    // MARK: - Chat Tab
+    // MARK: - Timeline
 
+    /// チャットとツール実行を時系列で混ぜた 1 本のタイムライン。
+    /// ツールは既定で 1 行に畳んであり、行のクリックかヘッダーの一括トグルで開く。
     @ViewBuilder
-    private var chatTabContent: some View {
-        if chatEntries.isEmpty && isLoading {
+    private var timelineContent: some View {
+        if timeline.isEmpty && isLoading {
             Spacer()
             ProgressView()
                 .controlSize(.small)
@@ -371,10 +416,14 @@ struct SessionDetailView: View {
                     Spacer(minLength: 0)
                         .frame(maxHeight: .infinity)
 
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(chatEntries) { entry in
-                            ChatMessageView(entry: entry)
-                                .id(entry.id)
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(timeline) { item in
+                            switch item {
+                            case .message(let entry):
+                                ChatMessageView(entry: entry).id(item.id)
+                            case .tool(let entry):
+                                ToolLogRow(entry: entry, expandAll: expandTools).id(item.id)
+                            }
                         }
 
                         if let tool = session.currentTool, tool.status == .running {
@@ -413,11 +462,11 @@ struct SessionDetailView: View {
                     }
                 }
                 .animation(.easeOut(duration: 0.2), value: isAtBottom)
-                .onChange(of: chatEntries.count) { _, _ in
+                .onChange(of: timeline.count) { _, _ in
                     if isAtBottom { scrollToBottom(proxy) }
                 }
                 .onReceive(sessionManager.objectWillChange) {
-                    loadChatAsync()
+                    loadTimelineAsync()
                 }
             }
         }
@@ -448,13 +497,17 @@ struct SessionDetailView: View {
 
     // MARK: - Data Loading
 
-    private func loadChatAsync(then scrollToEnd: Bool = false, proxy: ScrollViewProxy? = nil) {
-        guard let path = session.transcriptPath else { return }
+    /// transcript を読んでタイムラインを組み立てる（重い I/O なので off-MainActor）。
+    private func loadTimelineAsync(then scrollToEnd: Bool = false, proxy: ScrollViewProxy? = nil) {
+        guard let path = session.transcriptPath else {
+            isLoading = false
+            return
+        }
         Task { @MainActor in
             let entries = await Task.detached {
-                TranscriptReader.read(path: path, tail: 50)
+                TranscriptReader.readTimeline(path: path, tail: 60)
             }.value
-            chatEntries = entries
+            timeline = entries
             isLoading = false
             if scrollToEnd, let proxy {
                 scrollToBottom(proxy)
