@@ -10,6 +10,11 @@ public enum HookHandler {
     private static let socketPath = "/tmp/agent-notch-\(NSUserName()).sock"
     /// send 用タイムアウト（fire-and-forget 経路）
     private static let sendTimeout: Int = 3
+    /// fire-and-forget 経路で、サーバーが受信し終えるのを待つ上限。
+    ///
+    /// 通常は 1ms 程度で返る。ここで待たないとイベントが捨てられることがあるが
+    /// （`waitForServerToConsume` 参照）、agent をブロックしてはいけないので短く保つこと。
+    private static let consumeTimeoutMicroseconds: Int32 = 300_000
     /// recv 用タイムアウト（deferred 経路）。ユーザーが GUI で操作する時間を許容。
     /// これを超えると hook は pass-through で exit し、agent 側（ターミナル）の通常プロンプトに
     /// フォールバックする。伸ばすほど「notch を見ていないユーザー」のターミナルが無反応に見える
@@ -89,7 +94,7 @@ public enum HookHandler {
         return receiveResponse(fd: fd)
     }
 
-    /// fire-and-forget 経路。送信だけして即 close。
+    /// fire-and-forget 経路。応答は待たないが、**サーバーが読み取るまでは閉じない**。
     private static func sendToSocket(_ message: [String: Any]) {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { return }
@@ -99,8 +104,30 @@ public enum HookHandler {
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
         guard connectSocket(fd: fd) else { return }
-        _ = sendPayload(fd: fd, message: message)
-        // Don't wait for response. Kernel buffer ensures the server receives the data.
+        guard sendPayload(fd: fd, message: message) else { return }
+        waitForServerToConsume(fd: fd)
+    }
+
+    /// サーバーが受信して接続を閉じるのを待つ（最大 `consumeTimeoutMilliseconds`）。
+    ///
+    /// # なぜ待つ必要があるのか
+    /// 送信直後に close すると、**カーネルバッファにデータが残っていても捨てられる**ことが
+    /// ある。受信側は `NWConnection` の `.ready` 通知を待ってから receive を仕掛けるため、
+    /// その前に FIN が届くと「読む前に接続が終わった」状態になり、イベントが黙って消える。
+    /// 実測で 10 件中 4 件が失われていた（通知が出ない・状態が古いままになる原因）。
+    ///
+    /// サーバーは 1 メッセージを読み終えると接続を閉じるので、EOF を待てば受信は保証される。
+    /// 通常は 1ms 程度で返る。応答を解釈しないので fire-and-forget の性質は変わらない
+    /// （agent を待たせないという趣旨は、タイムアウトを十分短く取ることで守る）。
+    private static func waitForServerToConsume(fd: Int32) {
+        var tv = timeval(tv_sec: 0, tv_usec: consumeTimeoutMicroseconds)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var scratch = [UInt8](repeating: 0, count: 16)
+        // 戻り値は見ない。0（EOF = サーバーが読んで閉じた）/ タイムアウト / エラーの
+        // どれであっても、ここでできることは同じ（送るものは既に送った）。
+        _ = scratch.withUnsafeMutableBytes { buffer in
+            recv(fd, buffer.baseAddress!, buffer.count, 0)
+        }
     }
 
     // MARK: - Low-level helpers

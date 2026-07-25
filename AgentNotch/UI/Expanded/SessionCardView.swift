@@ -331,12 +331,6 @@ struct SessionCardView: View {
             HStack(spacing: 4) {
                 trailingStatusText
 
-                // ターミナルへ戻るのはカードから最も多く使う操作なので、
-                // メニューの中に埋めず 1 クリックで飛べる位置に出す。
-                if session.pid != nil || session.tty != nil {
-                    terminalJumpButton
-                }
-
                 SessionActionMenu(
                     userState: userState,
                     isUserDone: isUserDone,
@@ -351,6 +345,13 @@ struct SessionCardView: View {
                     labelFrame: CGSize(width: 20, height: 20),
                     symbolName: "ellipsis.circle"
                 )
+            }
+
+            // ターミナルへ戻るのはカードから最も多く使う操作なので、メニューの中に
+            // 埋めず 1 クリックで飛べる位置に置く。時刻と同じ行に並べると
+            // 「時刻の付属物」に見えるため、⋯ の真下に単独で置く。
+            if session.pid != nil || session.tty != nil {
+                terminalJumpButton
             }
 
             if let perm = pendingPermission {
