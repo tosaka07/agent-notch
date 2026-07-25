@@ -15,10 +15,8 @@ struct ExpandedPageView: View {
     @Default(.sessionSortOrder) private var sortOrder
     @Default(.sessionGrouping) private var grouping
     @Default(.collapsedGroupIDs) private var collapsedGroupIDs
-    @Default(.usageEnabled) private var usageEnabled
 
     @State private var showSortMenu = false
-    @StateObject private var usageCoordinator = UsageCoordinator()
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
@@ -48,25 +46,11 @@ struct ExpandedPageView: View {
                     .padding(.bottom, 4)
                 }
             }
-
-            if usageEnabled {
-                Divider().padding(.horizontal, 20)
-                UsageSectionView(snapshot: usageCoordinator.snapshot)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-            }
         }
-        .onAppear { if usageEnabled { usageCoordinator.start() } }
-        .onDisappear { usageCoordinator.stop() }
-        .onChange(of: usageEnabled) { _, enabled in
-            if enabled {
-                // 明示的な ON は「もう一度試してよい」という意思表示。
-                Task { await ClaudeCredentialsProvider.shared.reset() }
-                usageCoordinator.start()
-            } else {
-                usageCoordinator.stop()
-            }
-        }
+        // 使用量表示（USAGE）は #39 で SessionDetailView 右下の常時ゲージに一本化したため、
+        // ExpandedPageView 側の横長バーは廃止した。usageEnabled トグル OFF 時に Claude の
+        // 資格情報/undocumented API に一切触らないという #38 の意図は
+        // `NotchRootView.syncUsageCoordinator` 側でゲートして維持している。
     }
 
     // MARK: - Notch top bar (replaces header)

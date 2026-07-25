@@ -28,7 +28,10 @@ struct QuestionBanner: View {
     @State private var slideForward = true
 
     @Default(.textSize) private var textSize
-    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var scale: CGFloat { textSize.scale }
 
     private var currentQuestion: AskQuestionInfo.Question { questions[currentIndex] }
     private var isLastQuestion: Bool { currentIndex == questions.count - 1 }
@@ -36,7 +39,7 @@ struct QuestionBanner: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let expired = isExpired || context.date >= expiresAt
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DSSpacing.sm) {
                 if expired {
                     expiredSection
                 } else {
@@ -45,46 +48,52 @@ struct QuestionBanner: View {
                     ZStack {
                         questionSection(currentQuestion)
                             .id(currentQuestion.id)
-                            .transition(
-                                .asymmetric(
-                                    insertion: .move(edge: slideForward ? .trailing : .leading).combined(with: .opacity),
-                                    removal: .move(edge: slideForward ? .leading : .trailing).combined(with: .opacity)
-                                )
-                            )
+                            .transition(slideTransition)
                     }
                     .clipped()
 
                     navigationFooter
                 }
             }
-            .padding(12)
-            .background(expired ? Color.orange.opacity(0.08) : Color.blue.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .padding(DSSpacing.md)
+            .background(reduceTransparency ? AnyShapeStyle(.thickMaterial) : AnyShapeStyle(.regularMaterial))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(expired ? Color.orange.opacity(0.3) : Color.blue.opacity(0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(DSColors.signalAlert.opacity(0.35), lineWidth: 1)
             )
         }
         // banner 表示直後のマウス位置による誤タップ防止（Approve/Deny と同様の意図）。
         .armedAfter()
     }
 
+    /// Reduce Motion 時はスライドせず opacity のみでクロスフェードする。
+    private var slideTransition: AnyTransition {
+        if reduceMotion {
+            return .opacity
+        }
+        return .asymmetric(
+            insertion: .move(edge: slideForward ? .trailing : .leading).combined(with: .opacity),
+            removal: .move(edge: slideForward ? .leading : .trailing).combined(with: .opacity)
+        )
+    }
+
     /// 応答経路が失効した後の表示。回答はもう届かないため、選択肢の代わりに
     /// ターミナルでの回答を促す（issue #28: 無言失敗の可視化）。
     private var expiredSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: DSSpacing.sm) {
+            HStack(spacing: DSSpacing.xs) {
                 Image(systemName: "clock.badge.exclamationmark.fill")
-                    .foregroundStyle(.orange)
-                    .font(.system(size: s(14)))
+                    .foregroundStyle(DSColors.signalAlert)
+                    .font(DSTypography.Native.callout(scale))
                 Text("Response window expired")
-                    .font(.system(size: s(12), weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(DSTypography.Native.headline(scale))
+                    .foregroundStyle(.primary)
                 Spacer(minLength: 0)
             }
             Text("This answer can no longer be delivered. Reply directly in the terminal.")
-                .font(.system(size: s(10)))
-                .foregroundStyle(.white.opacity(0.7))
+                .font(DSTypography.Native.subheadline(scale))
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
@@ -92,42 +101,42 @@ struct QuestionBanner: View {
                     onDismiss()
                 } label: {
                     Text("Dismiss")
-                        .font(.system(size: s(10), weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 6)
-                        .background(Color.white.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        .font(DSTypography.Native.callout(scale, weight: .semibold))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityHint("この失効バナーを閉じます")
             }
         }
+        .accessibilityElement(children: .contain)
     }
 
     // MARK: - Sub views
 
     private func progressHeader(now: Date) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DSSpacing.xs) {
             if questions.count > 1 {
                 Button {
                     goToPrevious()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: s(10), weight: .bold))
-                        .foregroundStyle(currentIndex > 0 ? .white.opacity(0.7) : .white.opacity(0.15))
+                        .font(.system(size: 10, weight: .bold))
                         .frame(width: 16, height: 16)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .disabled(currentIndex == 0)
+                .accessibilityLabel("前の質問")
             }
 
             Image(systemName: "questionmark.circle.fill")
-                .foregroundStyle(.blue)
-                .font(.system(size: s(14)))
+                .foregroundStyle(DSColors.signalAlert)
+                .font(DSTypography.Native.callout(scale))
 
             Text("Claude is asking")
-                .font(.system(size: s(12), weight: .semibold))
-                .foregroundStyle(.white)
+                .font(DSTypography.Native.headline(scale))
+                .foregroundStyle(.primary)
 
             Spacer(minLength: 0)
 
@@ -135,49 +144,47 @@ struct QuestionBanner: View {
             let remaining = expiresAt.timeIntervalSince(now)
             if remaining < 30, remaining > 0 {
                 Text("\(Int(remaining))s")
-                    .font(DSTypography.mono(s(10), weight: .semibold))
-                    .foregroundStyle(.orange.opacity(0.9))
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.orange.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .font(DSTypography.Native.monoCaption(scale, weight: .semibold))
+                    .foregroundStyle(DSColors.signalAlert)
+                    .padding(.horizontal, DSSpacing.xs).padding(.vertical, 2)
+                    .background(DSColors.signalAlert.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                    .accessibilityLabel("残り \(Int(remaining)) 秒")
             }
 
             if questions.count > 1 {
                 Text("\(currentIndex + 1)/\(questions.count)")
-                    .font(DSTypography.mono(s(10), weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .font(DSTypography.Native.monoCaption(scale, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, DSSpacing.xs).padding(.vertical, 2)
+                    .background(.quaternary, in: Capsule())
+                    .accessibilityLabel("質問 \(currentIndex + 1) / \(questions.count)")
             }
         }
     }
 
     @ViewBuilder
     private func questionSection(_ q: AskQuestionInfo.Question) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: DSSpacing.xs) {
+            HStack(spacing: DSSpacing.xs) {
                 if let hdr = q.header, !hdr.isEmpty {
                     Text(hdr)
-                        .font(.system(size: s(9), weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .font(DSTypography.Native.caption2(scale, weight: .semibold))
+                        .foregroundStyle(.secondary)
                         .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 3))
                 }
                 if q.multiSelect {
                     Text("multi")
-                        .font(.system(size: s(8), weight: .semibold))
-                        .foregroundStyle(.cyan.opacity(0.6))
+                        .font(DSTypography.Native.caption2(scale, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
                         .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(Color.cyan.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
                 }
             }
 
             Text(q.question)
-                .font(.system(size: s(11)))
-                .foregroundStyle(.white.opacity(0.85))
+                .font(DSTypography.Native.callout(scale))
+                .foregroundStyle(.primary)
 
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(q.options) { opt in
@@ -204,28 +211,29 @@ struct QuestionBanner: View {
         } label: {
             HStack(alignment: .top, spacing: 7) {
                 Image(systemName: selectionIcon(multiSelect: multiSelect, selected: isSelected))
-                    .font(.system(size: s(11)))
-                    .foregroundStyle(isSelected ? Color.blue : .white.opacity(0.4))
+                    .font(DSTypography.Native.callout(scale))
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                     .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(option.label)
-                        .font(.system(size: s(10), weight: .medium))
-                        .foregroundStyle(.white)
+                        .font(DSTypography.Native.subheadline(scale, weight: .medium))
+                        .foregroundStyle(.primary)
                     if let desc = option.description, !desc.isEmpty {
                         Text(desc)
-                            .font(.system(size: s(9)))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .font(DSTypography.Native.caption(scale))
+                            .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 8).padding(.vertical, 5)
+            .padding(.horizontal, DSSpacing.sm).padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? Color.blue.opacity(0.22) : Color.white.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .background(isSelected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(option.description.map { "\(option.label). \($0)" } ?? option.label)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     @ViewBuilder
@@ -237,19 +245,20 @@ struct QuestionBanner: View {
         let hasText = !(otherInputs[questionId] ?? "").isEmpty
         HStack(alignment: .center, spacing: 7) {
             Image(systemName: selectionIcon(multiSelect: multiSelect, selected: hasText))
-                .font(.system(size: s(11)))
-                .foregroundStyle(hasText ? Color.blue : .white.opacity(0.4))
+                .font(DSTypography.Native.callout(scale))
+                .foregroundStyle(hasText ? Color.accentColor : .secondary)
             TextField("Other…", text: binding)
                 .textFieldStyle(.plain)
-                .font(.system(size: s(10)))
-                .foregroundStyle(.white)
+                .font(DSTypography.Native.subheadline(scale))
+                .foregroundStyle(.primary)
                 .onSubmit {
                     advanceOrSend()
                 }
         }
-        .padding(.horizontal, 8).padding(.vertical, 5)
-        .background(hasText ? Color.blue.opacity(0.22) : Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .padding(.horizontal, DSSpacing.sm).padding(.vertical, 5)
+        .background(hasText ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Other、自由入力")
     }
 
     private var navigationFooter: some View {
@@ -260,19 +269,18 @@ struct QuestionBanner: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(isLastQuestion ? "Send" : "Next")
-                        .font(.system(size: s(10), weight: .semibold))
                     if !isLastQuestion {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: s(9), weight: .semibold))
+                            .font(.system(size: 9, weight: .semibold))
                     }
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14).padding(.vertical, 6)
-                .background(canSend(currentQuestion) ? Color.blue.opacity(0.7) : Color.blue.opacity(0.25))
-                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .font(DSTypography.Native.callout(scale, weight: .semibold))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
             .disabled(!canSend(currentQuestion))
+            // Other の TextField 側にすでに onSubmit(Return) があり、defaultAction を
+            // 併用すると Return 1 回で advanceOrSend() が二重発火しうるため、あえて付けない。
         }
     }
 
@@ -309,7 +317,7 @@ struct QuestionBanner: View {
         if isLastQuestion {
             onAnswer(collectedAnswers())
         } else {
-            withAnimation(.easeInOut(duration: 0.22)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
                 slideForward = true
                 currentIndex += 1
             }
@@ -318,7 +326,7 @@ struct QuestionBanner: View {
 
     private func goToPrevious() {
         guard currentIndex > 0 else { return }
-        withAnimation(.easeInOut(duration: 0.22)) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) {
             slideForward = false
             currentIndex -= 1
         }
@@ -337,4 +345,53 @@ struct QuestionBanner: View {
         }
         return result
     }
+}
+
+#Preview("Question Banner") {
+    QuestionBanner(
+        questions: [
+            .init(
+                question: "どのアプローチで進めますか?",
+                header: "設計方針",
+                multiSelect: false,
+                options: [
+                    .init(label: "A: 段階的リファクタ", description: "既存 API を維持しつつ内部だけ置き換える", preview: nil),
+                    .init(label: "B: 全面書き換え", description: "破壊的変更を許容し、まっさらに作り直す", preview: nil),
+                ]
+            ),
+            .init(
+                question: "対象に含めるファイルは?",
+                header: nil,
+                multiSelect: true,
+                options: [
+                    .init(label: "PermissionBanner.swift", description: nil, preview: nil),
+                    .init(label: "QuestionBanner.swift", description: nil, preview: nil),
+                    .init(label: "SessionDetailView.swift", description: nil, preview: nil),
+                ]
+            ),
+        ],
+        onAnswer: { _ in }
+    )
+    .padding(24)
+    .frame(width: 360)
+    .background(Color.black)
+}
+
+#Preview("Question Banner (Expired)") {
+    QuestionBanner(
+        questions: [
+            .init(
+                question: "どのアプローチで進めますか?",
+                header: nil,
+                multiSelect: false,
+                options: [.init(label: "A", description: nil, preview: nil)]
+            ),
+        ],
+        isExpired: true,
+        onAnswer: { _ in },
+        onDismiss: {}
+    )
+    .padding(24)
+    .frame(width: 360)
+    .background(Color.black)
 }

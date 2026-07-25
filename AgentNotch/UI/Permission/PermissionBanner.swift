@@ -2,6 +2,10 @@ import AgentNotchCore
 import Defaults
 import SwiftUI
 
+/// tool 実行の許可確認バナー。ネイティブなダイアログ的振る舞い（HIG）:
+/// - `.borderedProminent` / `.bordered(role: .destructive)` の標準コントロール
+/// - Return で Approve、Esc で Deny（`.defaultAction` / `.cancelAction`）
+/// - `.regularMaterial` によるパネル背景 + signal color は縁取りのみ（面を塗らない）
 struct PermissionBanner: View {
     let permission: PermissionRequest
     var onApprove: () -> Void
@@ -10,87 +14,146 @@ struct PermissionBanner: View {
     var onDismiss: () -> Void = {}
 
     @Default(.textSize) private var textSize
-    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private var scale: CGFloat { textSize.scale }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: DSSpacing.sm) {
+            HStack(spacing: DSSpacing.xs) {
                 Image(systemName: permission.canRespond
                     ? "exclamationmark.shield.fill" : "clock.badge.exclamationmark.fill")
-                    .foregroundStyle(.orange)
-                    .font(.system(size: s(13)))
+                    .foregroundStyle(DSColors.signalAlert)
+                    .font(DSTypography.Native.callout(scale))
                 Text(permission.canRespond ? "Permission Required" : "Response window expired")
-                    .font(.system(size: s(11), weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .font(DSTypography.Native.headline(scale))
+                    .foregroundStyle(.primary)
             }
 
             // 応答経路が失効した場合は Approve/Deny の代わりにターミナルでの応答を促す
             // （issue #28: 押しても届かないボタンを出さない）。
             if !permission.canRespond {
                 Text("This decision can no longer be delivered. Respond directly in the terminal.")
-                    .font(.system(size: s(9)))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(DSTypography.Native.subheadline(scale))
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DSSpacing.xs) {
                 Text(permission.toolName)
-                    .font(.system(size: s(11), weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .font(DSTypography.Native.monoCallout(scale, weight: .medium))
+                    .foregroundStyle(.primary)
 
                 ForEach(Array(permission.toolInput.prefix(3)), id: \.key) { key, value in
                     Text("\(key): \(String(value.prefix(80)))")
-                        .font(.system(size: s(9), design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .font(DSTypography.Native.monoCaption(scale))
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
             }
-            .padding(10)
+            .padding(DSSpacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.05))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .background(reduceTransparency ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.regularMaterial))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            HStack(spacing: 10) {
+            HStack(spacing: DSSpacing.sm) {
                 if permission.canRespond {
-                    Button { onApprove() } label: {
-                        Text("Approve")
-                            .font(.system(size: s(11), weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 18).padding(.vertical, 7)
-                            .background(Color.green.opacity(0.65))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(.plain)
-
-                    Button { onDeny() } label: {
+                    Button(role: .destructive) {
+                        onDeny()
+                    } label: {
                         Text("Deny")
-                            .font(.system(size: s(11), weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .padding(.horizontal, 18).padding(.vertical, 7)
-                            .background(Color.red.opacity(0.45))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .font(DSTypography.Native.callout(scale, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityHint("この tool 実行を拒否します")
+
+                    Button {
+                        onApprove()
+                    } label: {
+                        Text("Approve")
+                            .font(DSTypography.Native.callout(scale, weight: .semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(DSColors.signalDone)
+                    .controlSize(.regular)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityHint("\(permission.toolName) の実行を許可します")
                 } else {
-                    Button { onDismiss() } label: {
+                    Button {
+                        onDismiss()
+                    } label: {
                         Text("Dismiss")
-                            .font(.system(size: s(11), weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 18).padding(.vertical, 7)
-                            .background(Color.white.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .font(DSTypography.Native.callout(scale, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityHint("この失効バナーを閉じます")
                 }
             }
             .armedAfter()
         }
-        .padding(14)
-        .background(Color.orange.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(DSSpacing.md)
+        .background(reduceTransparency ? AnyShapeStyle(.thickMaterial) : AnyShapeStyle(.regularMaterial))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.orange.opacity(0.25), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(DSColors.signalAlert.opacity(0.35), lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(permission.canRespond
+            ? "権限リクエスト: \(permission.toolName)"
+            : "権限リクエストの応答期限切れ: \(permission.toolName)")
+        // Approve/Deny の Return/Esc ショートカットはパネルが key window の間だけ効く
+        // （NotchPanel は既定 canBecomeKey=false）。表示中だけ許可し、消えたら戻す（#2 と同様の経路）。
+        .onAppear {
+            NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: true)
+        }
+        .onDisappear {
+            NotificationCenter.default.post(name: .agentNotchSetKeyFocus, object: false)
+        }
     }
+}
+
+#Preview("Permission Banner") {
+    PermissionBanner(
+        permission: PermissionRequest(
+            id: "1",
+            agentType: .claudeCode,
+            sessionId: "s1",
+            toolName: "Bash",
+            toolInput: ["command": "rm -rf build/", "description": "Clean build artifacts"],
+            toolUseId: "t1",
+            timestamp: .now,
+            canRespond: true
+        ),
+        onApprove: {},
+        onDeny: {}
+    )
+    .padding(24)
+    .frame(width: 360)
+    .background(Color.black)
+}
+
+#Preview("Permission Banner (Expired)") {
+    PermissionBanner(
+        permission: PermissionRequest(
+            id: "2",
+            agentType: .claudeCode,
+            sessionId: "s1",
+            toolName: "Bash",
+            toolInput: ["command": "rm -rf build/"],
+            toolUseId: "t2",
+            timestamp: .now,
+            canRespond: false
+        ),
+        onApprove: {},
+        onDeny: {},
+        onDismiss: {}
+    )
+    .padding(24)
+    .frame(width: 360)
+    .background(Color.black)
 }

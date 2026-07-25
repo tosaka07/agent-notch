@@ -5,6 +5,7 @@ import SwiftUI
 struct SessionDetailView: View {
     let session: UnifiedSession
     @ObservedObject var sessionManager: SessionManager
+    @ObservedObject var usageCoordinator: UsageCoordinator
     var onBack: () -> Void
     /// TEAM セクションの行タップで別セッションの detail へ遷移するためのコールバック。
     var onShowSession: (String) -> Void = { _ in }
@@ -14,19 +15,25 @@ struct SessionDetailView: View {
     @State private var isAtBottom = true
     @State private var isSubagentsExpanded: Bool
     @State private var isTeamExpanded: Bool
+    @State private var isUsageExpanded = false
     @Default(.textSize) private var textSize
+    @Default(.usageEnabled) private var usageEnabled
     @Environment(\.permissionActions) private var permissionActions
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    private var scale: CGFloat { textSize.scale }
 
     init(
         session: UnifiedSession,
         sessionManager: SessionManager,
+        usageCoordinator: UsageCoordinator,
         onBack: @escaping () -> Void,
         onShowSession: @escaping (String) -> Void = { _ in }
     ) {
         self.session = session
         self.sessionManager = sessionManager
+        self.usageCoordinator = usageCoordinator
         self.onBack = onBack
         self.onShowSession = onShowSession
         // デフォルトは実行中がある場合のみ展開する。
@@ -37,6 +44,15 @@ struct SessionDetailView: View {
         } else {
             _isTeamExpanded = State(initialValue: false)
         }
+    }
+
+    /// 右下の常時ゲージに出す「今どれくらいか」の一点情報。
+    /// Gemini CLI / Custom や、未取得（nil snapshot）の間は表示しない。
+    /// `usageEnabled` OFF の間は、コーディネータが停止済みでも古い snapshot を
+    /// 表示に使わない（#38 の「表示しない」という意図を display 層でも担保する）。
+    private var primaryUsagePercent: Double? {
+        guard usageEnabled else { return nil }
+        return usageCoordinator.snapshot?.primaryUsedPercent(for: session.agentType)
     }
 
     var body: some View {
@@ -52,9 +68,7 @@ struct SessionDetailView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 4)
 
-            Rectangle()
-                .fill(.white.opacity(0.08))
-                .frame(height: 0.5)
+            Divider()
 
             collapsibleSections
 
@@ -113,63 +127,73 @@ struct SessionDetailView: View {
 
             chatTabContent
         }
+        .overlay(alignment: .bottomTrailing) {
+            if let percent = primaryUsagePercent {
+                UsageGauge(usedPercent: percent, size: s(24))
+                    .padding(6)
+                    .background(
+                        reduceTransparency ? AnyShapeStyle(.thickMaterial) : AnyShapeStyle(.regularMaterial),
+                        in: Circle()
+                    )
+                    .padding(10)
+            }
+        }
         .onAppear { loadChatAsync() }
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DSSpacing.sm) {
             Button { onBack() } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: s(10), weight: .bold))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(width: 32, height: 32)
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
+            .accessibilityLabel("戻る")
 
             StatusIndicator(status: session.status, size: 7)
 
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
+                HStack(spacing: DSSpacing.xs) {
                     Text(session.sessionTitle ?? projectName(session.cwd))
-                        .font(.system(size: s(11), weight: .medium))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .font(DSTypography.Native.headline(scale))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     Text(session.agentType.displayName)
-                        .font(.system(size: s(8), weight: .medium))
-                        .foregroundStyle(session.agentType.color.opacity(0.7))
+                        .font(DSTypography.Native.caption2(scale, weight: .medium))
+                        .foregroundStyle(session.agentType.color)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(session.agentType.color.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .background(session.agentType.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
                     if session.sessionTitle != nil {
                         Text(projectName(session.cwd))
-                            .font(.system(size: s(9), design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.35))
+                            .font(DSTypography.Native.monoCaption(scale))
+                            .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
                 }
                 HStack(spacing: 4) {
                     if let model = session.model {
                         Text(model)
-                            .foregroundStyle(.white.opacity(0.3))
+                            .foregroundStyle(.tertiary)
                     }
                     if let branch = session.gitBranch {
                         let isWorktree = session.worktreeName != nil
                         if session.model != nil {
                             Text("·")
-                                .foregroundStyle(.white.opacity(0.2))
+                                .foregroundStyle(.tertiary)
                         }
                         Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: s(7)))
-                            .foregroundStyle(isWorktree ? .cyan.opacity(0.5) : .white.opacity(0.3))
+                            .font(.system(size: 8))
+                            .foregroundStyle(isWorktree ? Color.cyan.opacity(0.7) : Color.secondary)
                         Text(branch)
-                            .foregroundStyle(isWorktree ? .cyan.opacity(0.4) : .white.opacity(0.3))
+                            .foregroundStyle(isWorktree ? Color.cyan.opacity(0.6) : Color.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
                 }
-                .font(.system(size: s(8), design: .monospaced))
+                .font(DSTypography.Native.monoCaption2(scale))
             }
 
             Spacer()
@@ -182,13 +206,13 @@ struct SessionDetailView: View {
                         VStack(alignment: .trailing, spacing: 1) {
                             if let name = session.terminalAppName {
                                 Text(name)
-                                    .font(.system(size: s(8), design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.35))
+                                    .font(DSTypography.Native.monoCaption2(scale))
+                                    .foregroundStyle(.tertiary)
                             }
                             if let tmux = session.tmuxPaneTarget {
                                 Text("tmux:\(tmux)")
-                                    .font(.system(size: s(7), design: .monospaced))
-                                    .foregroundStyle(.cyan.opacity(0.35))
+                                    .font(DSTypography.Native.monoCaption2(scale))
+                                    .foregroundStyle(Color.cyan.opacity(0.6))
                             }
                         }
                         if let icon = session.terminalAppIcon as? NSImage {
@@ -197,19 +221,20 @@ struct SessionDetailView: View {
                                 .frame(width: s(16), height: s(16))
                         } else {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .font(.system(size: s(10)))
-                                .foregroundStyle(.white.opacity(0.4))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .help("Jump to terminal")
+                .accessibilityLabel("ターミナルへ移動")
             }
 
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(RelativeTimeFormatter.format(since: session.startedAt, relativeTo: context.date))
-                    .font(.system(size: s(9), weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .font(DSTypography.Native.monoCaption(scale, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
 
             actionMenu
@@ -241,7 +266,7 @@ struct SessionDetailView: View {
     // MARK: - Stats Bar
 
     private var sessionStatsBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DSSpacing.md) {
             statItem(icon: "wrench", value: "\(session.toolCallCount)", label: "tools")
             if session.totalInputTokens > 0 || session.totalOutputTokens > 0 {
                 statItem(icon: "arrow.down", value: formatTokens(session.totalInputTokens), label: "in")
@@ -253,24 +278,26 @@ struct SessionDetailView: View {
             Spacer()
             if session.estimatedCost > 0 {
                 Text(String(format: "$%.3f", session.estimatedCost))
-                    .font(.system(size: s(9), weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .font(DSTypography.Native.monoCaption(scale, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 
     private func statItem(icon: String, value: String, label: String) -> some View {
         HStack(spacing: 3) {
             Image(systemName: icon)
-                .font(.system(size: s(7)))
-                .foregroundStyle(.white.opacity(0.3))
+                .font(.system(size: 8))
+                .foregroundStyle(.tertiary)
             Text(value)
-                .font(.system(size: s(9), weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.5))
+                .font(DSTypography.Native.monoCaption(scale, weight: .medium))
+                .foregroundStyle(.secondary)
             Text(label)
-                .font(.system(size: s(8)))
-                .foregroundStyle(.white.opacity(0.25))
+                .font(DSTypography.Native.caption2(scale))
+                .foregroundStyle(.tertiary)
         }
+        .accessibilityLabel("\(label): \(value)")
     }
 
     private func formatTokens(_ count: Int) -> String {
@@ -283,7 +310,7 @@ struct SessionDetailView: View {
 
     @ViewBuilder
     private var collapsibleSections: some View {
-        if !session.subagents.isEmpty || session.teamName != nil {
+        if !session.subagents.isEmpty || session.teamName != nil || primaryUsagePercent != nil {
             VStack(alignment: .leading, spacing: 4) {
                 if !session.subagents.isEmpty {
                     collapsibleSection(
@@ -291,7 +318,7 @@ struct SessionDetailView: View {
                         count: session.subagents.count,
                         isExpanded: $isSubagentsExpanded
                     ) {
-                        SubagentListView(subagents: session.subagents, fontSize: s(9))
+                        SubagentListView(subagents: session.subagents, fontScale: scale)
                     }
                 }
                 if let team = session.teamName {
@@ -304,14 +331,43 @@ struct SessionDetailView: View {
                         TeamSection(
                             currentSessionId: session.id,
                             members: members,
-                            fontSize: s(9),
+                            fontScale: scale,
                             onShowSession: onShowSession
+                        )
+                    }
+                }
+                // 右下の UsageGauge は「今どれくらいか」の一点情報のみ。
+                // 週次・モデル別などの内訳はここを開いたときだけ見せる。
+                if primaryUsagePercent != nil {
+                    collapsibleSection(
+                        title: "USAGE",
+                        count: usageWindowCount,
+                        isExpanded: $isUsageExpanded
+                    ) {
+                        UsageDetailSection(
+                            agentType: session.agentType,
+                            snapshot: usageCoordinator.snapshot,
+                            scale: scale
                         )
                     }
                 }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 6)
+        }
+    }
+
+    /// USAGE セクションの件数バッジ（表示するウィンドウの数）。
+    private var usageWindowCount: Int {
+        switch session.agentType {
+        case .claudeCode:
+            guard let claude = usageCoordinator.snapshot?.claude else { return 0 }
+            return [claude.session, claude.weekAllModels, claude.weekModel].compactMap { $0 }.count
+        case .codex:
+            guard let codex = usageCoordinator.snapshot?.codex else { return 0 }
+            return [codex.primary, codex.secondary].compactMap { $0 }.count
+        case .geminiCLI, .custom:
+            return 0
         }
     }
 
@@ -330,21 +386,24 @@ struct SessionDetailView: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
-                        .font(.system(size: s(8), weight: .semibold))
-                        .foregroundStyle(DSColors.inkDim)
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
                         .frame(width: 10)
                     Text(title)
-                        .font(DSTypography.mono(s(9), weight: .medium))
+                        .font(DSTypography.Native.monoCaption(scale, weight: .medium))
                         .tracking(0.8)
-                        .foregroundStyle(DSColors.inkDim)
+                        .foregroundStyle(.secondary)
                     Text(String(format: "%02d", min(count, 99)))
-                        .font(DSTypography.mono(s(8), weight: .medium))
-                        .foregroundStyle(DSColors.inkMute)
+                        .font(DSTypography.Native.monoCaption2(scale, weight: .medium))
+                        .foregroundStyle(.tertiary)
                     Spacer()
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("\(title) \(count)件")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(isExpanded.wrappedValue ? "展開" : "折りたたみ")
 
             if isExpanded.wrappedValue {
                 content()
@@ -360,7 +419,6 @@ struct SessionDetailView: View {
             Spacer()
             ProgressView()
                 .controlSize(.small)
-                .tint(.white.opacity(0.4))
             Spacer()
         } else {
             ScrollViewReader { proxy in
@@ -397,16 +455,16 @@ struct SessionDetailView: View {
                             }
                         } label: {
                             Image(systemName: "chevron.down")
-                                .font(.system(size: s(10), weight: .bold))
-                                .foregroundStyle(.white.opacity(0.8))
+                                .font(.system(size: 11, weight: .semibold))
                                 .frame(width: 28, height: 28)
-                                .background(.white.opacity(0.1))
-                                .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.small)
+                        .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
                         .padding(.bottom, 8)
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                        .accessibilityLabel("最新のメッセージへスクロール")
                     }
                 }
                 .animation(.easeOut(duration: 0.2), value: isAtBottom)

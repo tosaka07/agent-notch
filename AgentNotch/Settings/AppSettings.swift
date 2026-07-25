@@ -77,6 +77,19 @@ enum NotificationTapAction: String, Defaults.Serializable, CaseIterable, Sendabl
     }
 }
 
+/// SessionDetailView 右下の常時表示ゲージの見せ方。タップで切り替わる。
+enum UsageGaugeStyle: String, Defaults.Serializable, CaseIterable, Sendable {
+    case ring
+    case number
+
+    var toggled: UsageGaugeStyle {
+        switch self {
+        case .ring: .number
+        case .number: .ring
+        }
+    }
+}
+
 enum DisplayModePreference: String, Defaults.Serializable, CaseIterable, Sendable {
     case followFocus
     case allDisplays
@@ -185,10 +198,15 @@ extension Defaults.Keys {
     /// セッションカードの目的行に表示するメッセージ。
     static let cardPromptSource = Key<CardPromptSource>("cardPromptSource", default: .firstUserMessage)
 
+    /// SessionDetailView 右下の常時表示ゲージ（リング / 数字）の表示形式。
+    static let usageGaugeStyle = Key<UsageGaugeStyle>("usageGaugeStyle", default: .ring)
+
     /// ExpandedPageView 下部の USAGE セクションが折りたたまれているか。
+    /// 旧横長バー（#39 で SessionDetailView のゲージに統合され削除）の名残。
+    /// 参照箇所は無いが、既存ユーザーの Defaults を無用に破棄しないため定義のみ残す。
     static let usageSectionCollapsed = Key<Bool>("usageSectionCollapsed", default: false)
 
-    /// 使用量（USAGE）セクションを表示するか。
+    /// 使用量（USAGE）表示を行うか。
     ///
     /// OFF にすると Claude の資格情報にも undocumented API にも一切触らなくなる。
     /// issue #35 の認証ダイアログは `ClaudeCredentialsStore` 側で根本対処済みのため
