@@ -240,7 +240,13 @@ public enum ClaudeEventParser {
 
         case "PermissionRequest":
             let toolName = json["tool_name"] as? String ?? ""
-            let toolUseId = json["tool_use_id"] as? String ?? ""
+            // Claude Code の PermissionRequest hook 入力には tool_use_id が含まれない
+            // （2.1.220 のバンドルで確認。PreToolUse と違い hookInput に tool_use_id を積まない）。
+            // 空文字にフォールバックすると全 PermissionRequest の pending キーが "" で衝突し、
+            // addPending の先勝ちによって後続リクエストが全て拒否される（issue #28 の根本原因）。
+            // リクエストごとに一意なローカル ID を生成し、UI 側の pending 表示と socket 応答の
+            // 対応付けキーとして使う（応答は hook プロセスの接続単位なので ID の実体は何でもよい）。
+            let toolUseId = json["tool_use_id"] as? String ?? UUID().uuidString
             let rawInput = json["tool_input"] as? [String: Any] ?? [:]
 
             // AskUserQuestion は PermissionRequest 経由で届くのが正規ルート。

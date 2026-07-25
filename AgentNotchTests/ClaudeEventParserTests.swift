@@ -95,6 +95,48 @@ struct ClaudeEventParserTests {
         #expect(info.toolInput["command"] == "rm -rf /tmp/test")
     }
 
+    @Test("PermissionRequest without tool_use_id generates unique local ids (issue #28)")
+    func permissionRequestGeneratesUniqueToolUseId() {
+        // Claude Code の PermissionRequest hook 入力には tool_use_id が含まれない。
+        // 空文字にフォールバックすると pending キーが全リクエストで衝突するため、
+        // リクエストごとに一意な ID が生成されることを保証する。
+        let json: [String: Any] = [
+            "hook_event_name": "PermissionRequest",
+            "session_id": "sess-002",
+            "tool_name": "Bash",
+            "tool_input": ["command": "ls"],
+        ]
+        guard case let .permissionRequested(first) = ClaudeEventParser.parse(json),
+              case let .permissionRequested(second) = ClaudeEventParser.parse(json) else {
+            Issue.record("Expected permissionRequested")
+            return
+        }
+        #expect(!first.toolUseId.isEmpty)
+        #expect(first.toolUseId != second.toolUseId)
+    }
+
+    @Test("PermissionRequest AskUserQuestion without tool_use_id generates a non-empty id")
+    func askQuestionViaPermissionRequestGeneratesToolUseId() {
+        let json: [String: Any] = [
+            "hook_event_name": "PermissionRequest",
+            "session_id": "sess-002",
+            "tool_name": "AskUserQuestion",
+            "tool_input": [
+                "questions": [
+                    [
+                        "question": "Which?",
+                        "options": [["label": "A"], ["label": "B"]],
+                    ]
+                ]
+            ],
+        ]
+        guard case let .askQuestion(info) = ClaudeEventParser.parse(json) else {
+            Issue.record("Expected askQuestion")
+            return
+        }
+        #expect(!info.toolUseId.isEmpty)
+    }
+
     @Test("Stop maps to sessionIdle")
     func stop() {
         let json: [String: Any] = [
