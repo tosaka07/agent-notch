@@ -58,8 +58,10 @@ final class NotchViewModel {
             return compactWidth
         case .expanded: return 520
         case .sessionDetail: return 620
-        // 使用量ページは一覧と同じ幅。ウィンドウ単位の内訳を縦に積むだけなので広げる必要はない。
-        case .usage: return 520
+        // 使用量ページはウィンドウ行が「ラベル + 目盛り + % + 残り + 絶対時刻」の 5 列構成で、
+        // 目盛りがグリフ（固定幅・縮まない）なので一覧の 520 では文字サイズ「大」で右端が
+        // 見切れる。詳細ページと同じ 620 にして固定列の合計 + 目盛りが必ず収まるようにする。
+        case .usage: return 620
         }
     }
 

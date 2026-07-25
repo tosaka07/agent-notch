@@ -19,6 +19,10 @@ extension Notification.Name {
     static let agentNotchHotKeyJumpNotification = Notification.Name("agentNotchHotKeyJumpNotification")
     /// ⌥⇧J — 現在表示中のセッションのターミナルへジャンプ
     static let agentNotchHotKeyJumpTerminal = Notification.Name("agentNotchHotKeyJumpTerminal")
+    /// ⌥⇧⏎: 表示中の権限リクエストを承認する。
+    static let agentNotchHotKeyApprove = Notification.Name("agentNotchHotKeyApprove")
+    /// ⌥⇧⌫: 表示中の権限リクエストを拒否する。
+    static let agentNotchHotKeyDeny = Notification.Name("agentNotchHotKeyDeny")
     /// NotchPanel のキーフォーカスを有効/無効にする（object: Bool）
     static let agentNotchSetKeyFocus = Notification.Name("agentNotchSetKeyFocus")
 }

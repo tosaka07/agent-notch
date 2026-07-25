@@ -145,6 +145,23 @@ public struct CodexUsageSnapshot: Sendable, Equatable {
     }
 }
 
+/// 常時表示ゲージにどの枠を出すか（設定から選択）。
+///
+/// エージェントごとに枠の呼び名が違う（Claude は session / week、Codex は primary /
+/// secondary）ため、**「5 時間相当」「週相当」という意味のレベル**で抽象化して選ばせる。
+/// 選んだ枠がそのエージェントに存在しない場合は `auto` にフォールバックする
+/// （設定のせいでゲージが消えるのは、設定の副作用として理不尽なため）。
+public enum UsageGaugeMetric: String, Sendable, CaseIterable {
+    /// 今いちばん逼迫している枠を自動で選ぶ（既定）。
+    case auto
+    /// セッション枠（Claude: current session / Codex: primary 5h）。
+    case session
+    /// 週次の全モデル枠（Claude: current week all models / Codex: secondary）。
+    case weekly
+    /// モデル別週次枠のうち最も高いもの（Claude のみ。Codex には無いので auto に落ちる）。
+    case weeklyModel
+}
+
 /// UI に渡す集約スナップショット。取得できなかった agent は nil のまま。
 public struct UsageSnapshot: Sendable, Equatable {
     public let claude: ClaudeUsageSnapshot?
@@ -159,6 +176,12 @@ public struct UsageSnapshot: Sendable, Equatable {
 
     public static let empty = UsageSnapshot(claude: nil, codex: nil, fetchedAt: .distantPast)
 
+    /// 取得を試みた結果、どのエージェントの使用量も得られなかったか。
+    ///
+    /// 「まだ取得していない（snapshot が nil）」と区別するために使う。UI はこれを見て
+    /// ローディング表示を打ち切る（取得できないものを待たせ続けないため）。
+    public var isEmpty: Bool { claude == nil && codex == nil }
+
     /// 常時表示ゲージ用に「そのセッションが最も気にすべき使用率」を 1 つ選ぶ。
     ///
     /// - Claude Code: **実際に効いている（`is_active`）枠を優先**し、無ければ最も使用率が
@@ -167,6 +190,54 @@ public struct UsageSnapshot: Sendable, Equatable {
     /// - Codex: primary（5 時間相当）を優先し、無ければ secondary（週次相当）。
     /// - Gemini CLI / Custom: 使用量取得手段が無いため常に `nil`（呼び出し側はゲージを非表示にする）。
     public func primaryUsedPercent(for agentType: AgentType) -> Double? {
+        primaryWindow(for: agentType)?.usedPercent
+    }
+
+    /// 常時表示ゲージに出す枠を 1 つ選ぶ。`metric` で指定した枠が無ければ `auto` に落とす。
+    ///
+    /// `usedPercent` だけでなく枠そのものを返すのは、呼び出し側が `severity` /
+    /// `resetsAt` も使えるようにするため。
+    public func primaryWindow(
+        for agentType: AgentType,
+        metric: UsageGaugeMetric = .auto
+    ) -> UsageWindow? {
+        if metric != .auto, let selected = window(for: agentType, metric: metric) {
+            return selected
+        }
+        return autoWindow(for: agentType)
+    }
+
+    /// 指定した意味レベルの枠を、エージェントごとの呼び名に解決する。
+    private func window(for agentType: AgentType, metric: UsageGaugeMetric) -> UsageWindow? {
+        switch agentType {
+        case .claudeCode:
+            guard let claude else { return nil }
+            switch metric {
+            case .auto: return nil
+            case .session: return claude.session
+            case .weekly: return claude.weekAllModels
+            case .weeklyModel:
+                return claude.weekModels.map(\.window).max { $0.usedPercent < $1.usedPercent }
+            }
+        case .codex:
+            guard let codex else { return nil }
+            switch metric {
+            case .auto, .weeklyModel: return nil
+            case .session: return codex.primary
+            case .weekly: return codex.secondary
+            }
+        case .geminiCLI, .custom:
+            return nil
+        }
+    }
+
+    /// `auto` の選び方。
+    ///
+    /// - Claude Code: **実際に効いている（`is_active`）枠を優先**し、無ければ最も使用率が
+    ///   高い枠を選ぶ。session だけを見ると、モデル別週次枠が先に上限に当たっている
+    ///   ケース（Fable 88% > session 86% 等）を見落とすため。
+    /// - Codex: primary（5 時間相当）を優先し、無ければ secondary（週次相当）。
+    private func autoWindow(for agentType: AgentType) -> UsageWindow? {
         switch agentType {
         case .claudeCode:
             guard let claude else { return nil }
@@ -174,11 +245,11 @@ public struct UsageSnapshot: Sendable, Equatable {
                 + claude.weekModels.map(\.window)
             guard !windows.isEmpty else { return nil }
             if let active = windows.filter(\.isActive).max(by: { $0.usedPercent < $1.usedPercent }) {
-                return active.usedPercent
+                return active
             }
-            return windows.map(\.usedPercent).max()
+            return windows.max { $0.usedPercent < $1.usedPercent }
         case .codex:
-            return codex?.primary?.usedPercent ?? codex?.secondary?.usedPercent
+            return codex?.primary ?? codex?.secondary
         case .geminiCLI, .custom:
             return nil
         }

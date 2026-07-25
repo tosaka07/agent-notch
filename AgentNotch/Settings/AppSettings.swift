@@ -95,6 +95,46 @@ enum UsageGaugeStyle: String, Defaults.Serializable, CaseIterable, Sendable {
     }
 }
 
+/// 展開パネルの背景の作り方。
+///
+/// notch は「上端が物理的な黒に接している」という制約があるので、上は必ず不透明な黒。
+/// 下端をどう終わらせるかだけが選択肢になる。
+enum PanelSurfaceStyle: String, Defaults.Serializable, CaseIterable, Sendable {
+    /// 一様な暗幕（従来）。パネル全体が同じ濃さの半透明。
+    case solid
+    /// 上端は不透明な黒のまま、**下端に向かって material へ移行**する。
+    /// 下端の縁にわずかな光沢を足して、板ではなくガラスの縁に見せる（近似）。
+    case gradient
+    /// `gradient` と同じ構成だが、面を **macOS 26 の Liquid Glass**（`glassEffect`）で作る。
+    /// material の近似ではなく本物のガラスなので、下端は完全に抜いて素のガラスを見せる。
+    case liquidGlass
+
+    var label: String {
+        switch self {
+        case .solid: "フラット"
+        case .gradient: "すりガラス"
+        case .liquidGlass: "リキッドグラス"
+        }
+    }
+}
+
+/// `UsageGaugeMetric`（どの枠をゲージに出すか）を設定として永続化する。
+///
+/// enum 自体は選択ロジックと一緒に `AgentNotchCore` に置いてある（Core は Defaults に
+/// 依存しないため、`Defaults.Serializable` 準拠だけを GUI 側で足す）。
+extension UsageGaugeMetric: Defaults.Serializable {}
+
+extension UsageGaugeMetric {
+    var label: String {
+        switch self {
+        case .auto: "自動（最も逼迫している枠）"
+        case .session: "セッション（5 時間枠）"
+        case .weekly: "ウィークリー（全モデル）"
+        case .weeklyModel: "ウィークリー（モデル別の最大）"
+        }
+    }
+}
+
 enum DisplayModePreference: String, Defaults.Serializable, CaseIterable, Sendable {
     case followFocus
     case allDisplays
@@ -205,6 +245,13 @@ extension Defaults.Keys {
 
     /// ExpandedPageView トップバー左翼の常時表示ゲージ（リング / 数字）の表示形式。
     static let usageGaugeStyle = Key<UsageGaugeStyle>("usageGaugeStyle", default: .ring)
+
+    /// 常時表示ゲージにどの枠（セッション / ウィークリー / …）を出すか。
+    static let usageGaugeMetric = Key<UsageGaugeMetric>("usageGaugeMetric", default: .auto)
+
+    /// 展開パネルの背景（フラット / 下端がガラスに移行）。
+    /// 既定は従来の見え方（`.solid`）。
+    static let panelSurfaceStyle = Key<PanelSurfaceStyle>("panelSurfaceStyle", default: .solid)
 
     /// ExpandedPageView 下部の USAGE セクションが折りたたまれているか。
     /// 旧横長バー（#39 で SessionDetailView のゲージに統合され削除）の名残。

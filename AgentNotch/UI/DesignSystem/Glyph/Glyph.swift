@@ -158,9 +158,12 @@ enum Glyph {
 
     // MARK: - A' · RING 13×13（使用量の円環ゲージ）
 
-    /// 13×13 の格子上の円環。角度順に `percent` まで点灯する。
-    /// 未点灯セルは `track`（エージェント色を薄く敷いて識別に使う）。
-    static func ring(percent: Double, lit: Color, track: Color) -> GlyphBitmap {
+    /// 円環を構成するセルの index を 12 時から時計回りに並べたもの。
+    ///
+    /// `ring` と `ringSpinner` で同じ環を共有する（片方だけ形が変わると
+    /// ローディング → 値確定の切り替わりで環が飛んで見える）。格子サイズは固定なので
+    /// 一度だけ計算する。
+    static let ringCellIndices: [Int] = {
         let center = 6.0, radius = 5.2
         var ordered: [(index: Int, angle: Double)] = []
         for y in 0..<stateSize {
@@ -173,15 +176,58 @@ enum Glyph {
                 ordered.append((y * stateSize + x, angle))
             }
         }
-        ordered.sort { $0.angle < $1.angle }
+        return ordered.sorted { $0.angle < $1.angle }.map(\.index)
+    }()
 
+    /// 13×13 の格子上の円環。角度順に `percent` まで点灯する。
+    /// 未点灯セルは `track`（エージェント色を薄く敷いて識別に使う）。
+    static func ring(percent: Double, lit: Color, track: Color) -> GlyphBitmap {
+        let indices = ringCellIndices
         let clamped = min(max(percent, 0), 100) / 100
         var colorByIndex: [Int: Color] = [:]
-        for (k, cell) in ordered.enumerated() {
-            let ratio = Double(k) / Double(ordered.count)
-            colorByIndex[cell.index] = ratio < clamped - 1e-9 ? lit : track
+        for (k, index) in indices.enumerated() {
+            let ratio = Double(k) / Double(indices.count)
+            colorByIndex[index] = ratio < clamped - 1e-9 ? lit : track
         }
+        return ringBitmap(colorByIndex: colorByIndex)
+    }
 
+    /// ローディング中の円環。値の代わりに**弧が 1 周し続ける**ことで「まだ取得中」を示す。
+    ///
+    /// 値が確定していない間に 0% の環を出すと「使用量 0」と読み違えられるため、
+    /// 数として読めない動き（回る弧）に置き換える。弧は先頭が最も濃く尾に向かって薄れ、
+    /// 進行方向が形だけで分かるようにする（色が消えても読める、という原則を守る）。
+    ///
+    /// - Parameters:
+    ///   - phase: 0〜1 の位相。1 で 1 周。範囲外は環状に丸める。
+    ///   - arcRatio: 弧の長さ（環全体に対する比）。
+    static func ringSpinner(
+        phase: Double,
+        arcRatio: Double = 0.3,
+        lit: Color,
+        track: Color
+    ) -> GlyphBitmap {
+        let indices = ringCellIndices
+        let count = indices.count
+        guard count > 0 else { return ringBitmap(colorByIndex: [:]) }
+
+        var colorByIndex: [Int: Color] = [:]
+        for index in indices { colorByIndex[index] = track }
+
+        let wrapped = phase - phase.rounded(.down)
+        let head = min(count - 1, Int(wrapped * Double(count)))
+        let arcCount = min(count, max(2, Int((Double(count) * arcRatio).rounded())))
+        for k in 0..<arcCount {
+            // 尾は head の手前側（= 進行方向の後ろ）に伸びる。
+            let position = ((head - k) % count + count) % count
+            let fade = 1 - Double(k) / Double(arcCount)
+            colorByIndex[indices[position]] = lit.opacity(0.25 + 0.75 * fade)
+        }
+        return ringBitmap(colorByIndex: colorByIndex)
+    }
+
+    /// 環のセル色マップから 13×13 のビットマップを組む。環に属さないセルは消灯。
+    private static func ringBitmap(colorByIndex: [Int: Color]) -> GlyphBitmap {
         var cells: [[DotCell]] = []
         for y in 0..<stateSize {
             var row: [DotCell] = []

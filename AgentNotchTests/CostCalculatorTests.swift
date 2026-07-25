@@ -74,6 +74,12 @@ struct CostCalculatorTests {
         #expect(CostCalculator.formatCost(1.234) == "$1.23")
         #expect(CostCalculator.formatCost(15.5) == "$15.50")
         // 3 桁以上は小数を落として桁を稼ぐ（notch の狭い幅で読めるように）。
-        #expect(CostCalculator.formatCost(2511.52) == "$2512")
+        #expect(CostCalculator.formatCost(2511.52) == "$2,512")
+        // 桁区切りは標準の currency FormatStyle 任せ。ロケールは en_US 固定なので
+        // 実行環境の地域設定に依らず同じ表記になる。
+        // ちょうど .5 は偶数側へ丸まる（FormatStyle の既定。printf と同じ挙動）。
+        #expect(CostCalculator.formatCost(1234.5) == "$1,234")
+        #expect(CostCalculator.formatCost(1235.7) == "$1,236")
+        #expect(CostCalculator.formatCost(99.999) == "$100.00")
     }
 }

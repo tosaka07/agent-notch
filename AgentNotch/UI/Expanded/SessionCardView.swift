@@ -73,18 +73,24 @@ struct SessionCardView: View {
         .onTapGesture { actions.tap() }
     }
 
-    /// 割り込み中は少し明るく、完了・ユーザー既読は沈める（モックの .055 / .035 / .02）。
+    /// 割り込み中は少し明るく、完了・ユーザー既読は沈める。
     private var cardBackground: Color {
-        if isAlert { return DSColors.ink.opacity(0.055) }
-        if isUserDone || session.status == .done { return DSColors.ink.opacity(0.02) }
-        return DSColors.ink.opacity(0.035)
+        if isAlert { return DSColors.ink.opacity(0.07) }
+        if isUserDone || session.status == .done { return DSColors.ink.opacity(0.03) }
+        return DSColors.ink.opacity(0.05)
     }
 
+    /// カードの輪郭。**通常時も枠を引く**。面の明度差（黒地に対して白 5%）だけでは
+    /// カードがどこで終わるのか読めず、行が地続きに見えてしまう。
+    /// 割り込み中だけ意味色にして、そこに目が行くようにする。
     private var cardBorder: Color {
-        guard isAlert else { return .clear }
-        return session.pendingPermissions.first?.isPlanReview == true
-            ? DSColors.signalPlan.opacity(0.28)
-            : DSColors.signalAlert.opacity(0.28)
+        if isAlert {
+            return session.pendingPermissions.first?.isPlanReview == true
+                ? DSColors.signalPlan.opacity(0.28)
+                : DSColors.signalAlert.opacity(0.28)
+        }
+        if isUserDone || session.status == .done { return DSColors.lineFaint }
+        return DSColors.lineDefault
     }
 
     // MARK: - Left column
@@ -96,18 +102,21 @@ struct SessionCardView: View {
                 size: glyphSize,
                 animationStartTime: session.doneAt
             )
-            Text(session.agentType.glyphLetter)
-                .font(DSTypography.mono(s(7), weight: .semibold))
-                .tracking(0.7)
-                .foregroundStyle(agentLetterColor)
+            // 1 文字（C / X）ではなく公式ロゴを置く。翼の「置けるのはグリフだけ」の
+            // 思想には反するが、ロゴは文字より速く読めるうえ、状態グリフとも混ざらない。
+            AgentMark(
+                agentType: session.agentType,
+                size: s(10),
+                color: agentMarkTint
+            )
         }
         .frame(width: glyphSize)
     }
 
-    private var agentLetterColor: Color {
-        if isAlert { return DSColors.signalAlert }
+    /// ロゴの色。既定は公式色（nil）だが、沈めたカードでは地の色に寄せて主張を抑える。
+    private var agentMarkTint: Color? {
         if session.status == .done || isUserDone { return DSColors.inkMute }
-        return DSColors.inkDim
+        return nil
     }
 
     // MARK: - Middle column
@@ -321,10 +330,12 @@ struct SessionCardView: View {
         VStack(alignment: .trailing, spacing: 6) {
             HStack(spacing: 4) {
                 trailingStatusText
+
                 SessionActionMenu(
                     userState: userState,
                     isUserDone: isUserDone,
-                    showTerminalJump: session.pid != nil || session.tty != nil,
+                    // 上のボタンに出しているのでメニューには重ねない。
+                    showTerminalJump: false,
                     onTogglePin: actions.togglePin,
                     onToggleMute: actions.toggleMute,
                     onToggleDone: actions.toggleDone,
@@ -336,11 +347,43 @@ struct SessionCardView: View {
                 )
             }
 
+            // ターミナルへ戻るのはカードから最も多く使う操作なので、メニューの中に
+            // 埋めず 1 クリックで飛べる位置に置く。時刻と同じ行に並べると
+            // 「時刻の付属物」に見えるため、⋯ の真下に単独で置く。
+            if session.pid != nil || session.tty != nil {
+                terminalJumpButton
+            }
+
             if let perm = pendingPermission {
                 approvalButtons(for: perm)
             }
         }
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    /// ターミナルへ移動。詳細画面と同じくターミナルアプリのアイコンで示す
+    /// （どのアプリに飛ぶのかが分かる）。取れない環境では記号にフォールバックする。
+    private var terminalJumpButton: some View {
+        Button {
+            TerminalJumper.jump(pid: session.pid, tty: session.tty)
+        } label: {
+            Group {
+                if let icon = session.terminalAppIcon as? NSImage {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .frame(width: s(13), height: s(13))
+                } else {
+                    Image(systemName: "arrow.right.square")
+                        .font(.system(size: s(12), weight: .medium))
+                        .foregroundStyle(DSColors.inkDim)
+                }
+            }
+            .frame(width: 20, height: 20)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("ターミナルへ移動")
+        .accessibilityLabel("ターミナルへ移動")
     }
 
     /// 承認待ちなら失効までの残り秒、それ以外は最終活動からの相対時刻。
@@ -422,19 +465,6 @@ struct SessionCardView: View {
 }
 
 // MARK: - Model → Glyph
-
-extension AgentType {
-    /// カード左列に出す 1 文字。翼と同じ「置けるのはグリフだけ」の思想で、
-    /// エージェント名は 1 文字に圧縮する（Claude = C / Codex = X）。
-    var glyphLetter: String {
-        switch self {
-        case .claudeCode: "C"
-        case .codex: "X"
-        case .geminiCLI: "G"
-        case .custom: "?"
-        }
-    }
-}
 
 extension AgentTask {
     var glyph: Glyph.TaskGlyph {

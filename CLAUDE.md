@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Agent Notch — macOS ネイティブの OSS アプリ。Mac の notch に AI コーディングエージェント（Claude Code, Codex 等）のセッション状態・ツール実行・トークン消費・権限リクエストをリアルタイム表示する。`docs/requirements.md` / `docs/tech-selection.md` / `docs/roadmap.md` に設計意図が集約されている。
 
-- 最小 macOS: 14.0 (Sonoma)
+- 最小 macOS: 26.0 (Tahoe) — `Package.swift` の `platforms` が真実。macOS 26 の API
+  （`glassEffect` / Liquid Glass など）を availability 分岐なしで使える
 - Swift tools: 6.0, SwiftUI + AppKit（NSPanel ベースの notch オーバーレイ）
 - サンドボックス **無効**（Unix socket / Accessibility API のため）
 - LSUIElement=YES（メニューバー常駐、Dock に出ない）
