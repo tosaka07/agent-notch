@@ -4,11 +4,13 @@ import Testing
 
 @Suite("TranscriptParser Tests")
 struct TranscriptParserTests {
+    /// usage は `message.usage` にネストしている（実データで確認済み。top-level `usage` は存在しない）。
+    /// 以前のテストは top-level を前提にしていたため、常に 0 を返すバグを検出できていなかった。
     @Test("Parses cumulative token usage from JSONL transcript")
     func parseCumulativeUsage() throws {
         let lines = [
-            #"{"type":"assistant","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":10,"cache_read_input_tokens":5}}"#,
-            #"{"type":"assistant","usage":{"input_tokens":200,"output_tokens":80,"cache_creation_input_tokens":0,"cache_read_input_tokens":20}}"#,
+            #"{"type":"assistant","requestId":"req_1","message":{"id":"msg_1","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":10,"cache_read_input_tokens":5}}}"#,
+            #"{"type":"assistant","requestId":"req_2","message":{"id":"msg_2","usage":{"input_tokens":200,"output_tokens":80,"cache_creation_input_tokens":0,"cache_read_input_tokens":20}}}"#,
         ]
         let content = lines.joined(separator: "\n")
         let tmpPath = NSTemporaryDirectory() + "test-transcript-\(UUID().uuidString).jsonl"
@@ -24,6 +26,25 @@ struct TranscriptParserTests {
         #expect(usage.cachedTokens == 35)
     }
 
+    /// 1 つの assistant メッセージが content block ごとに複数行へ分割される
+    /// （同じ `message.id` / `requestId` で thinking / text / tool_use が別行）。
+    /// 単純合算すると 2〜3 倍になるため、最後の行だけを採用する。
+    @Test("Deduplicates rows that share message.id and requestId, keeping the last")
+    func deduplicatesSplitRows() throws {
+        let lines = [
+            #"{"requestId":"req_1","message":{"id":"msg_1","usage":{"input_tokens":2,"output_tokens":6,"cache_read_input_tokens":46025}}}"#,
+            #"{"requestId":"req_1","message":{"id":"msg_1","usage":{"input_tokens":2,"output_tokens":4774,"cache_read_input_tokens":46025}}}"#,
+        ]
+        let content = lines.joined(separator: "\n")
+        let tmpPath = NSTemporaryDirectory() + "test-transcript-\(UUID().uuidString).jsonl"
+        try content.write(toFile: tmpPath, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: tmpPath) }
+
+        let usage = TranscriptParser.parseCumulativeUsage(at: tmpPath)
+        #expect(usage.outputTokens == 4774)
+        #expect(usage.cacheReadTokens == 46025)
+    }
+
     @Test("Returns empty usage for nonexistent file")
     func nonexistentFile() {
         let usage = TranscriptParser.parseCumulativeUsage(at: "/tmp/nonexistent-\(UUID().uuidString).jsonl")
@@ -36,7 +57,7 @@ struct TranscriptParserTests {
     func skipsNonUsageLines() throws {
         let lines = [
             #"{"type":"user","message":"hello"}"#,
-            #"{"type":"assistant","usage":{"input_tokens":50,"output_tokens":25}}"#,
+            #"{"type":"assistant","requestId":"req_1","message":{"id":"msg_1","usage":{"input_tokens":50,"output_tokens":25}}}"#,
             #"{"type":"tool_result","content":"ok"}"#,
         ]
         let content = lines.joined(separator: "\n")

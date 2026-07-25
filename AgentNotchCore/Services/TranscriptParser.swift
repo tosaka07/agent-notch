@@ -10,6 +10,16 @@ public struct TokenUsage: Sendable {
 }
 
 public enum TranscriptParser {
+    /// transcript の usage を累積する。
+    ///
+    /// usage は **`message.usage` にネストしている**（top-level `usage` は存在しない）。
+    /// 以前は `json["usage"]` を読んでいたため常に 0 が返り、セッション完了時の
+    /// トークン数・推定コストが全て 0 になっていた。
+    ///
+    /// 同一 assistant メッセージが content block ごとに複数行へ分割されて出るため
+    /// （thinking / text / tool_use が同じ `message.id` で 3 行）、単純合算すると
+    /// 2〜3 倍に膨らむ。`(message.id, requestId)` をキーに**最後の行を採用**する
+    /// （前の行はストリーミング中のプレースホルダで output_tokens が過小）。
     public static func parseCumulativeUsage(at path: String) -> TokenUsage {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let content = String(data: data, encoding: .utf8)
@@ -17,23 +27,44 @@ public enum TranscriptParser {
             return TokenUsage()
         }
 
-        var total = TokenUsage()
+        var latestByKey: [String: TokenUsage] = [:]
+        var keyOrder: [String] = []
 
         for line in content.components(separatedBy: .newlines) {
-            guard !line.isEmpty,
+            guard line.contains("\"usage\""),
                   let lineData = line.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
-                  let usage = json["usage"] as? [String: Any]
+                  let message = json["message"] as? [String: Any],
+                  let usage = message["usage"] as? [String: Any]
             else {
                 continue
             }
 
-            total.inputTokens += usage["input_tokens"] as? Int ?? 0
-            total.outputTokens += usage["output_tokens"] as? Int ?? 0
-            total.cacheCreationTokens += usage["cache_creation_input_tokens"] as? Int ?? 0
-            total.cacheReadTokens += usage["cache_read_input_tokens"] as? Int ?? 0
+            var entry = TokenUsage()
+            entry.inputTokens = usage["input_tokens"] as? Int ?? 0
+            entry.outputTokens = usage["output_tokens"] as? Int ?? 0
+            entry.cacheCreationTokens = usage["cache_creation_input_tokens"] as? Int ?? 0
+            entry.cacheReadTokens = usage["cache_read_input_tokens"] as? Int ?? 0
+
+            let messageId = message["id"] as? String ?? ""
+            let requestId = json["requestId"] as? String ?? ""
+            let key = messageId.isEmpty && requestId.isEmpty
+                ? UUID().uuidString  // キーが取れない行は重複判定できないのでそのまま数える
+                : "\(messageId):\(requestId)"
+
+            if latestByKey.updateValue(entry, forKey: key) == nil {
+                keyOrder.append(key)
+            }
         }
 
+        var total = TokenUsage()
+        for key in keyOrder {
+            guard let entry = latestByKey[key] else { continue }
+            total.inputTokens += entry.inputTokens
+            total.outputTokens += entry.outputTokens
+            total.cacheCreationTokens += entry.cacheCreationTokens
+            total.cacheReadTokens += entry.cacheReadTokens
+        }
         return total
     }
 
