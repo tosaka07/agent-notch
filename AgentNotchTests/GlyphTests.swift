@@ -124,6 +124,47 @@ struct GlyphTests {
         #expect(Glyph.ring(percent: 5, lit: .white, track: .gray).cell(row: 1, col: 6).color == .white)
     }
 
+    @Test("RING SPINNER は位相で弧が動き、環の形は RING と同一")
+    func ringSpinnerRotates() {
+        let atTop = Glyph.ringSpinner(phase: 0, lit: .white, track: .gray)
+        let quarter = Glyph.ringSpinner(phase: 0.25, lit: .white, track: .gray)
+
+        // 環に属するセルの集合は RING と一致する（ローディング → 値確定で形が飛ばない）。
+        let onCells: (GlyphBitmap) -> Set<Int> = { bitmap in
+            Set(
+                (0..<bitmap.rows).flatMap { row in
+                    (0..<bitmap.cols).compactMap { col in
+                        bitmap.cell(row: row, col: col).on ? row * bitmap.cols + col : nil
+                    }
+                }
+            )
+        }
+        #expect(onCells(atTop) == onCells(Glyph.ring(percent: 50, lit: .white, track: .gray)))
+        #expect(onCells(atTop) == onCells(quarter))
+
+        // 弧の先頭は位相 0 で 12 時、0.25 で 3 時にある（時計回り）。
+        #expect(atTop.cell(row: 1, col: 6).color != .gray)
+        #expect(quarter.cell(row: 6, col: 11).color != .gray)
+        // 位相が違えば図柄（色の分布）が変わる = 回って見える。
+        let colors: (GlyphBitmap) -> [String] = { bitmap in
+            (0..<bitmap.rows).flatMap { row in
+                (0..<bitmap.cols).map { "\(bitmap.cell(row: row, col: $0).color.map(String.init(describing:)) ?? "-")" }
+            }
+        }
+        #expect(colors(atTop) != colors(quarter))
+
+        // 弧は環の一部だけ（全周は光らない）。
+        let litCount: (GlyphBitmap) -> Int = { bitmap in
+            (0..<bitmap.rows).flatMap { row in (0..<bitmap.cols).map { bitmap.cell(row: row, col: $0) } }
+                .filter { $0.on && $0.color != .gray }.count
+        }
+        #expect(litCount(atTop) > 0)
+        #expect(litCount(atTop) < onCells(atTop).count)
+
+        // 位相が範囲外でも環状に丸まる（1.0 は 0.0 と同じ図柄）。
+        #expect(colors(Glyph.ringSpinner(phase: 1, lit: .white, track: .gray)) == colors(atTop))
+    }
+
     // MARK: - B / C / D
 
     @Test("TASK は輪郭 → 輪郭+芯 → 塗りで段階が読める")

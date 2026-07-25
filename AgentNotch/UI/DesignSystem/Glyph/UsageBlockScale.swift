@@ -40,50 +40,50 @@ struct UsageBlockScale: View {
     }
 }
 
-/// 日毎コストの棒グラフ（モック 3b）。
+/// 日毎コストのドットチャート（モック 3b）。
 ///
-/// 1 列 = 1 日。3×3 ブロックを**下から積み上げて**高さで量を表す。
-/// 値があれば最低 1 ブロックは点灯させるので、少額の日が「無い」ように見えない。
+/// 1 列 = 1 日。**1 ドット = 1 段**を下から積み上げて高さで量を表す。
+/// 値があれば最低 1 ドットは点灯させるので、少額の日が「無い」ように見えない。
 /// 最新の列だけ色を強めて「今日」が分かるようにする。
+///
+/// 列を 3×3 ブロックにすると 1 段が太く、列間も空くため間延びして読みにくかった。
+/// **チャート全体を 1 枚のドット格子として描く**ことで、ドットの間隔（`gap`）が
+/// そのまま列間になり、日の並びが密に読める。
 struct UsageBlockChart: View {
     /// 左から古い順の値。
     let values: [Double]
-    /// 1 列あたりの最大ブロック数。
-    var blocksPerColumn: Int = 6
+    /// 1 列あたりの段数（縦の解像度）。
+    var blocksPerColumn: Int = 7
     var color: Color = DSColors.ink.opacity(0.62)
     var latestColor: Color = DSColors.ink
-    var dot: CGFloat = 2
-    var gap: CGFloat = 1
-    var columnSpacing: CGFloat = 2
+    var dot: CGFloat = 5
+    var gap: CGFloat = 2
 
     private var maxValue: Double { max(values.max() ?? 0, .leastNonzeroMagnitude) }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 5) {
-            ForEach(Array(values.enumerated()), id: \.offset) { index, value in
-                column(value: value, isLatest: index == values.count - 1)
-                    .frame(maxWidth: .infinity)
-            }
-        }
+        // 未点灯マスを薄く残すと「格子のどこまで積まれているか」が背景として読める。
+        GlyphView(bitmap: bitmap, dot: dot, gap: gap, ghost: DSColors.inkGhost)
     }
 
-    private func column(value: Double, isLatest: Bool) -> some View {
-        let ratio = value / maxValue
-        // 値があるなら最低 1 ブロックは光らせる（微小な日が「無い」ように見えないように）。
-        let lit = value > 0 ? max(1, Int((ratio * Double(blocksPerColumn)).rounded())) : 0
-        return VStack(spacing: columnSpacing) {
-            // 上から描くので、点灯は下側（index が大きい方）に寄せる。
-            ForEach(0..<blocksPerColumn, id: \.self) { index in
-                GlyphView(
-                    bitmap: Glyph.usageBlock(
-                        filled: index >= blocksPerColumn - lit,
-                        color: isLatest ? latestColor : color
-                    ),
-                    dot: dot,
-                    gap: gap
-                )
+    /// テストから点灯の並びを検証できるよう internal に公開している。
+    var bitmap: GlyphBitmap {
+        let rows = max(1, blocksPerColumn)
+        let cols = max(1, values.count)
+        var cells = Array(repeating: Array(repeating: DotCell.off, count: cols), count: rows)
+
+        for (col, value) in values.enumerated() {
+            // 値があるなら最低 1 段は光らせる（微小な日が「無い」ように見えないように）。
+            let lit = value > 0
+                ? max(1, min(rows, Int(((value / maxValue) * Double(rows)).rounded())))
+                : 0
+            guard lit > 0 else { continue }
+            let dotColor = col == values.count - 1 ? latestColor : color
+            for row in (rows - lit)..<rows {
+                cells[row][col] = .on(color: dotColor)
             }
         }
+        return GlyphBitmap(rows: rows, cols: cols, cells: cells)
     }
 }
 

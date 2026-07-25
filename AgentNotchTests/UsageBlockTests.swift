@@ -55,17 +55,37 @@ struct UsageBlockTests {
     // MARK: - Daily cost chart
 
     /// `UsageBlockChart` と同じ判定式で 1 列の点灯数を数える。
-    private func litColumn(value: Double, maxValue: Double, blocks: Int = 6) -> Int {
+    private func litColumn(value: Double, maxValue: Double, blocks: Int = 7) -> Int {
         guard value > 0 else { return 0 }
-        return max(1, Int(((value / maxValue) * Double(blocks)).rounded()))
+        return max(1, min(blocks, Int(((value / maxValue) * Double(blocks)).rounded())))
     }
 
-    /// 値があるなら最低 1 ブロックは光らせる（少額の日が「無い」ように見えないため）。
-    @Test("値がある日は最低 1 ブロック点灯し、0 の日は点灯しない")
+    /// 値があるなら最低 1 ドットは光らせる（少額の日が「無い」ように見えないため）。
+    @Test("値がある日は最低 1 ドット点灯し、0 の日は点灯しない")
     func alwaysLightsAtLeastOneBlockForNonZero() {
         #expect(litColumn(value: 0, maxValue: 100) == 0)
         #expect(litColumn(value: 0.01, maxValue: 100) == 1)
-        #expect(litColumn(value: 100, maxValue: 100) == 6)
-        #expect(litColumn(value: 50, maxValue: 100) == 3)
+        #expect(litColumn(value: 100, maxValue: 100) == 7)
+        #expect(litColumn(value: 50, maxValue: 100) == 4)
+        // 最大値の列でも段数を超えない（丸めで溢れない）。
+        #expect(litColumn(value: 99.9, maxValue: 100) == 7)
+    }
+
+    /// チャートは 1 枚のドット格子として描く。列数 = 日数、行数 = 段数で、
+    /// 点灯は必ず下から積まれる（上に浮いた点があると量として読めない）。
+    @Test("チャートは日数×段数の格子で、点灯は下から積まれる")
+    func chartStacksDotsFromBottom() {
+        let chart = UsageBlockChart(values: [0, 1, 2], blocksPerColumn: 4)
+        let bitmap = chart.bitmap
+        #expect(bitmap.cols == 3)
+        #expect(bitmap.rows == 4)
+
+        // 値 0 の列は全消灯。
+        #expect((0..<4).allSatisfy { !bitmap.cell(row: $0, col: 0).on })
+        // 最大値の列は最上段まで点灯。
+        #expect((0..<4).allSatisfy { bitmap.cell(row: $0, col: 2).on })
+        // 中間の列は下からのみ点灯（最上段は消灯）。
+        #expect(bitmap.cell(row: 3, col: 1).on)
+        #expect(!bitmap.cell(row: 0, col: 1).on)
     }
 }
