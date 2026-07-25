@@ -71,21 +71,64 @@ struct UsageBlockTests {
         #expect(litColumn(value: 99.9, maxValue: 100) == 7)
     }
 
-    /// チャートは 1 枚のドット格子として描く。列数 = 日数、行数 = 段数で、
-    /// 点灯は必ず下から積まれる（上に浮いた点があると量として読めない）。
-    @Test("チャートは日数×段数の格子で、点灯は下から積まれる")
-    func chartStacksDotsFromBottom() {
-        let chart = UsageBlockChart(values: [0, 1, 2], blocksPerColumn: 4)
+    /// チャートは 1 枚のドット格子で、**1 段 = 3×3 ブロック**（間に 1 ドットの空き）。
+    /// 消費済みは塗り（中心も点灯）、残量は輪郭（中心は消灯）で区別する。
+    @Test("チャートは 3×3 ブロックの格子で、点灯は下から積まれる")
+    func chartStacksBlocksFromBottom() {
+        let rows = 4
+        let chart = UsageBlockChart(values: [0, 1, 2], blocksPerColumn: rows)
         let bitmap = chart.bitmap
-        #expect(bitmap.cols == 3)
-        #expect(bitmap.rows == 4)
+        // 3 列 × 4 段。ブロック 3 ドット + 空き 1 ドット。
+        #expect(bitmap.cols == 3 * 3 + 2)
+        #expect(bitmap.rows == rows * 3 + (rows - 1))
 
-        // 値 0 の列は全消灯。
-        #expect((0..<4).allSatisfy { !bitmap.cell(row: $0, col: 0).on })
-        // 最大値の列は最上段まで点灯。
-        #expect((0..<4).allSatisfy { bitmap.cell(row: $0, col: 2).on })
-        // 中間の列は下からのみ点灯（最上段は消灯）。
-        #expect(bitmap.cell(row: 3, col: 1).on)
-        #expect(!bitmap.cell(row: 0, col: 1).on)
+        /// 段 `row` / 列 `column` のブロックが塗り（= 消費済み）か。中心セルで判定する。
+        func isFilled(row: Int, column: Int) -> Bool {
+            bitmap.cell(row: row * 4 + 1, col: column * 4 + 1).on
+        }
+        /// ブロックの輪郭が描かれているか（残量の □ も格子として見える必要がある）。
+        func hasOutline(row: Int, column: Int) -> Bool {
+            bitmap.cell(row: row * 4, col: column * 4).on
+        }
+
+        // 値 0 の列はどの段も塗られない（輪郭だけ）。
+        #expect((0..<rows).allSatisfy { !isFilled(row: $0, column: 0) })
+        #expect((0..<rows).allSatisfy { hasOutline(row: $0, column: 0) })
+        // 最大値の列は最上段まで塗られる。
+        #expect((0..<rows).allSatisfy { isFilled(row: $0, column: 2) })
+        // 中間の列は下からのみ塗られる（最上段は輪郭のまま）。
+        #expect(isFilled(row: rows - 1, column: 1))
+        #expect(!isFilled(row: 0, column: 1))
+
+        // ブロックどうしの間は必ず空く（格子が地続きに見えないように）。
+        #expect(!bitmap.cell(row: 3, col: 1).on)
+    }
+
+    /// ローディングの波は「値」と見間違えないよう天井まで届かない。
+    /// また位相を送れば形が変わる（＝流れて見える）必要がある。
+    @Test("ローディングの波は天井に届かず、位相で形が変わる")
+    func loadingWaveStaysBelowCeiling() {
+        let rows = 7
+        let columns = 14
+
+        for phase in [0.0, 0.25, 0.5, 0.75] {
+            for column in 0..<columns {
+                let height = UsageBlockChart.waveHeight(
+                    column: column, columns: columns, rows: rows, phase: phase
+                )
+                #expect(height >= 0)
+                // 段数の半分弱まで（0.45 * 7 ≒ 3）。値のチャートと混ざらない高さに抑える。
+                #expect(height <= 3)
+            }
+        }
+
+        // 位相が違えば列ごとの高さの並びが変わる。
+        let atZero = (0..<columns).map {
+            UsageBlockChart.waveHeight(column: $0, columns: columns, rows: rows, phase: 0)
+        }
+        let atHalf = (0..<columns).map {
+            UsageBlockChart.waveHeight(column: $0, columns: columns, rows: rows, phase: 0.5)
+        }
+        #expect(atZero != atHalf)
     }
 }

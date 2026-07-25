@@ -28,6 +28,7 @@ struct UsagePageView: View {
     @ObservedObject var dailyCostCoordinator: DailyCostCoordinator
 
     @Default(.textSize) private var textSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// bar chart に出す日数。
     private let chartDayCount = 14
@@ -47,12 +48,6 @@ struct UsagePageView: View {
     private static let absoluteResetFormatter: DateFormatter = {
         let f = DateFormatter()
         f.setLocalizedDateFormatFromTemplate("Md HH:mm")
-        return f
-    }()
-
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("Md")
         return f
     }()
 
@@ -242,7 +237,10 @@ struct UsagePageView: View {
             )
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    // 正式表記のラベルには先頭にロゴを置く（どのサービスの枠か一目で分かる）。
+                    // サイズは隣のラベルに合わせ、重心も文字の大文字に揃える。
+                    AgentMark(agentType: agentType, size: s(8), alignedWithFontSize: s(8))
                     Text("\(agentType.displayName.uppercased()) · \(label)")
                         .font(DSTypography.mono(s(8), weight: .semibold))
                         .tracking(1.6)
@@ -368,87 +366,109 @@ struct UsagePageView: View {
         ]
         let available = reports.filter { $0.report?.days.isEmpty == false }
 
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .top, spacing: 9) {
-                ForEach(available, id: \.agentType) { entry in
-                    if let report = entry.report {
-                        // 幅・高さの引き伸ばしは costChart 側（背景を敷く前）で行う。
-                        costChart(agentType: entry.agentType, report: report)
+        // まだ 1 つも集計が返っていない = ローディング中。
+        let isAggregating = reports.allSatisfy { $0.report == nil }
+
+        VStack(alignment: .leading, spacing: 7) {
+            // 「COST」「推定」「期間」はどちらのカードにも共通なので、カードごとに
+            // 繰り返さずセクションの見出しに 1 度だけ出す。カードは「誰の・いくら」だけを言う。
+            // **集計中でも出す**（後から見出しが増えると版面が飛ぶ）。
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("DAILY COST")
+                    .font(DSTypography.mono(s(9), weight: .semibold))
+                    .tracking(1.6)
+                    .foregroundStyle(DSColors.inkDim)
+                Text("直近 \(chartDayCount) 日 · API 換算の推定")
+                    .font(DSTypography.mono(s(8)))
+                    .foregroundStyle(DSColors.inkMute)
+                Spacer(minLength: 0)
+            }
+            // カード内の文字（padding 12）と左端を揃える。
+            .padding(.leading, 12)
+
+            if isAggregating {
+                // 集計中も**エージェントごとに左右に分ける**。あとからカードが 2 枚に
+                // 割れると版面が組み替わるので、最初から同じ骨格を見せる。
+                HStack(alignment: .top, spacing: 9) {
+                    ForEach(reports, id: \.agentType) { entry in
+                        costPlaceholder(agentType: entry.agentType)
                     }
                 }
-            }
-
-            if available.isEmpty {
+            } else if available.isEmpty {
                 HStack {
-                    Text(
-                        reports.allSatisfy { $0.report == nil }
-                            ? "コストを集計中…"
-                            : "コストを算出できるログが見つかりませんでした"
-                    )
-                    .font(DSTypography.mono(s(9)))
-                    .foregroundStyle(DSColors.inkMute)
+                    Text("コストを算出できるログが見つかりませんでした")
+                        .font(DSTypography.mono(s(9)))
+                        .foregroundStyle(DSColors.inkMute)
                     Spacer(minLength: 0)
                 }
                 .padding(12)
                 .background(DSColors.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                HStack(alignment: .top, spacing: 9) {
+                    ForEach(available, id: \.agentType) { entry in
+                        if let report = entry.report {
+                            // 幅・高さの引き伸ばしはカード側（背景を敷く前）で行う。
+                            DailyCostCard(
+                                agentType: entry.agentType,
+                                report: report,
+                                dayCount: chartDayCount
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 
-    private func costChart(agentType: AgentType, report: DailyCostReport) -> some View {
-        let days = report.recentDaysFilled(count: chartDayCount)
-        let values = days.map(\.estimatedCostUSD)
-        let total = values.reduce(0, +)
+    /// 集計中の格子。波が左から右へ流れる（1 周 1.4 秒）。
+    /// Reduce Motion では動かさず、輪郭だけの静止した格子にする。
+    @ViewBuilder
+    private var loadingChart: some View {
+        let empty = Array(repeating: 0.0, count: chartDayCount)
+        if reduceMotion {
+            UsageBlockChart(
+                values: empty,
+                labelFont: DSTypography.mono(s(11)),
+                labelFontSize: s(11),
+                axisWidth: s(44)
+            )
+        } else {
+            // ドット単位で点灯が飛ぶ離散アニメーションなので TimelineView で位相を送る
+            // （`UsageGauge` のスピナーと同じ方式）。
+            TimelineView(.animation(minimumInterval: 1.4 / 24)) { context in
+                let elapsed = context.date.timeIntervalSinceReferenceDate
+                UsageBlockChart(
+                    values: empty,
+                    loadingPhase: elapsed.truncatingRemainder(dividingBy: 1.4) / 1.4,
+                    labelFont: DSTypography.mono(s(11)),
+                    labelFontSize: s(11),
+                    axisWidth: s(44)
+                )
+            }
+        }
+    }
 
-        return VStack(alignment: .leading, spacing: 9) {
-            // 横並びで幅が半分になるため、見出しは「エージェント名 · COST 期間」まで削る
-            // （「推定」の但し書きは下のラベル行に移した）。
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("\(agentType.displayName.uppercased()) · COST \(chartDayCount)D")
+    /// 集計中のカード。波が流れる格子を出して「ここにチャートが来る」ことを示す。
+    /// 何も出さないと版面が空いて壊れて見え、結果が入った瞬間に高さが飛ぶ。
+    private func costPlaceholder(agentType: AgentType) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                AgentMark(agentType: agentType, size: s(9), alignedWithFontSize: s(9))
+                Text(agentType.displayName.uppercased())
                     .font(DSTypography.mono(s(9), weight: .semibold))
                     .tracking(1.6)
                     .foregroundStyle(DSColors.inkDim)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
-                Text(CostCalculator.formatCost(total))
-                    .font(DSTypography.Native.callout(scale, weight: .semibold))
-                    .foregroundStyle(DSColors.ink)
-                    .lineLimit(1)
-            }
-
-            UsageBlockChart(values: values)
-                .accessibilityElement()
-                .accessibilityLabel("\(agentType.displayName) の日毎コスト")
-                .accessibilityValue("直近\(chartDayCount)日で \(CostCalculator.formatCost(total))")
-
-            // チャートは幅いっぱいには広げない（密に詰めた方が日毎の差が読める）ので、
-            // ラベルも両端揃えにせず 1 行に畳んで左に置く。
-            HStack(spacing: 5) {
-                Text("\(dayLabel(days.first?.day)) → \(dayLabel(days.last?.day))")
-                if let peak = values.max(), peak > 0 {
-                    Text("· PEAK \(CostCalculator.formatCost(peak))")
-                }
-                Text("· 推定")
-                Spacer(minLength: 0)
-            }
-            .font(DSTypography.mono(s(8)))
-            .tracking(1.0)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
-            .foregroundStyle(DSColors.inkMute)
-
-            if !report.unsupportedModels.isEmpty {
-                Text("単価未対応で除外: \(report.unsupportedModels.joined(separator: ", "))")
+                Text("集計中…")
                     .font(DSTypography.mono(s(8)))
                     .foregroundStyle(DSColors.inkMute)
-                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            loadingChart
         }
         .padding(12)
-        // 横並びのカードは高さを揃える（片方だけ注記があると背景の高さがずれて雑に見える）。
-        // 背景を敷く前に広げるので、カード自体が HStack の高さまで伸びる。
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(DSColors.surface)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -456,6 +476,9 @@ struct UsagePageView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(DSColors.lineDefault, lineWidth: 0.5)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(agentType.displayName) の日毎コスト")
+        .accessibilityValue("集計中")
     }
 
     // MARK: - Footer
@@ -497,11 +520,6 @@ struct UsagePageView: View {
         return amount >= 100
             ? String(format: "%@%.0f", symbol, amount)
             : String(format: "%@%.2f", symbol, amount)
-    }
-
-    private func dayLabel(_ day: Date?) -> String {
-        guard let day else { return "" }
-        return Self.dayFormatter.string(from: day)
     }
 
     // MARK: - Helpers
