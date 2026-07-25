@@ -217,6 +217,32 @@ codex_hooks = true
 ```
 HookInstaller が自動追記するが、既存の config.toml の内容は保持する。
 
+#### Claude 資格情報の読み取りと Keychain 認証ダイアログ（issue #35）
+
+Claude Code は OAuth トークンの Keychain item を `/usr/bin/security add-generic-password`
+をサブプロセス起動して作成している。そのため item の ACL が信頼するのは
+**`/usr/bin/security` のみ**で、Claude Code 本体も Agent Notch も ACL に含まれない。
+
+| アクセス方法 | 認証ダイアログ |
+| --- | --- |
+| `SecItemCopyMatching` でデータ取得（`kSecReturnData: true`） | **出る**（ACL 不一致） |
+| `SecItemCopyMatching` で属性のみ取得 | 出ない（ACL を参照しない） |
+| `/usr/bin/security find-generic-password -w` をサブプロセス起動 | 出ない（ACL が信頼済み） |
+
+「常に許可」を選んでも許可はバイナリの署名で識別されるため、`swift build` ごとに
+ad-hoc 署名が変わる開発ビルドでは grant が無効化され、繰り返し聞かれる。
+
+したがって `ClaudeCredentialsStore` は
+`~/.claude/.credentials.json` → `/usr/bin/security` サブプロセス
+の順で読み、**`SecItemCopyMatching` でのデータ読み出しは行わない**。
+新たに Keychain を読むコードを足す場合も同じ方針に従うこと。
+
+**残る限界**: 署名済み .app として配布した場合でも、ACL は Claude Code が作った
+ものなので Agent Notch は含まれない。`SecItemCopyMatching` 経路に戻すと
+Developer ID 署名があっても初回ダイアログは出る（安定した署名なら「常に許可」が
+効き続ける点だけが改善される）。ダイアログを 0 回にできるのは上記の
+サブプロセス経路のみ。
+
 ---
 
 ## Phase 3: Gemini CLI + プラグイン + カスタマイズ
