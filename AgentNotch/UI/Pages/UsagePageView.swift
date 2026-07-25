@@ -2,21 +2,26 @@ import AgentNotchCore
 import Defaults
 import SwiftUI
 
-/// `usage` モードの UI。使用量（USAGE）の全内訳ページ。
+/// `usage` モードの UI。使用量（USAGE）の全内訳ページ（Claude Design モック 3b / 2b）。
 ///
 /// 一覧トップバー左翼の `UsageGauge` をクリックして開く。左翼のゲージが「今どれくらいか」の
-/// 一点情報しか見せないのに対し、こちらは取得できている情報を全て出す:
-/// - Claude Code: current session（5h 枠）/ current week (all models) / モデル別の週次枠（全件）
-/// - Codex: 5h window / weekly window / プラン種別
-/// - 各ウィンドウの使用率・残り時間・リセット時刻、スナップショットの取得時刻
+/// 一点情報しか見せないのに対し、こちらは取得できている情報を全て出す。
 ///
-/// # 表現
-/// notch の翼と同じ「独自言語」側の画面として、使用率は `PixelBar`（幅いっぱいに敷き詰めた
-/// ドットの帯）で描く。各ウィンドウの見出し左には `UsageGauge`（ピクセルのリング/数字）を置き、
-/// 一覧トップバーで見ていた形がここでも出てくるようにしている。
+/// # 構造（モック 3b）
+/// ```
+/// ┌─ CLAUDE ─────────────────────────────────────────────┐
+/// │ ◯  CLAUDE · 現在のセッション    あと 2 時間 10 分      │
+/// │    48%（5×7 グリフ）            今日 23:14 リセット    │
+/// ├──────────────────────────────────────────────────────┤
+/// │ SESSION  NOW  ■■■■■□□□□□  48%  あと2時間  23:14      │
+/// │ WEEKLY        ■■■■■■□□□□  62%  あと2日    7/28 09:00 │
+/// └──────────────────────────────────────────────────────┘
+/// ```
+/// **プロバイダ単位でセクションを分け**、SESSION / WEEKLY / モデル別が Claude 固有で
+/// あることを構造で示す。目盛りはグリフ辞書の D（3×3 ブロック 10 個 = 100%）。
 ///
-/// 初回ポーリングが返る前は「何も表示されない」と壊れて見えるため、ウィンドウ枠の
-/// プレースホルダ（輪郭だけのゲージ + 空のバー）を出す。
+/// 初回ポーリングが返る前は「何も表示されない」と壊れて見えるため、
+/// プレースホルダ（輪郭だけのゲージ + 空の目盛り）を出す。
 struct UsagePageView: View {
     let viewModel: NotchViewModel
     @ObservedObject var usageCoordinator: UsageCoordinator
@@ -26,18 +31,11 @@ struct UsagePageView: View {
 
     /// bar chart に出す日数。
     private let chartDayCount = 14
-
-    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
-
     /// 内容の左右余白。notch パネルの角丸に食われないよう十分に取る。
     private let contentPadding: CGFloat = 20
 
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .none
-        f.timeStyle = .short
-        return f
-    }()
+    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    private var scale: CGFloat { textSize.scale }
 
     private static let dateTimeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -46,9 +44,15 @@ struct UsagePageView: View {
         return f
     }()
 
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .short
+    private static let absoluteResetFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("Md HH:mm")
+        return f
+    }()
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("Md")
         return f
     }()
 
@@ -64,22 +68,22 @@ struct UsagePageView: View {
     private var claudeRows: [Row] {
         guard let claude = snapshot?.claude else {
             return [
-                Row(id: "session", label: "CURRENT SESSION", window: nil),
-                Row(id: "week", label: "CURRENT WEEK (ALL MODELS)", window: nil),
+                Row(id: "session", label: "SESSION", window: nil),
+                Row(id: "week", label: "WEEKLY", window: nil),
             ]
         }
         var rows: [Row] = []
         if let session = claude.session {
-            rows.append(Row(id: "session", label: "CURRENT SESSION", window: session))
+            rows.append(Row(id: "session", label: "SESSION", window: session))
         }
         if let week = claude.weekAllModels {
-            rows.append(Row(id: "week", label: "CURRENT WEEK (ALL MODELS)", window: week))
+            rows.append(Row(id: "week", label: "WEEKLY", window: week))
         }
         for model in claude.weekModels {
             rows.append(
                 Row(
                     id: "week-\(model.modelLabel)",
-                    label: "CURRENT WEEK (\(model.modelLabel.uppercased()))",
+                    label: "\(model.modelLabel.uppercased()) WEEKLY",
                     window: model.window
                 )
             )
@@ -94,7 +98,7 @@ struct UsagePageView: View {
             rows.append(Row(id: "codex-5h", label: "5H WINDOW", window: primary))
         }
         if let secondary = codex.secondary {
-            rows.append(Row(id: "codex-week", label: "WEEKLY WINDOW", window: secondary))
+            rows.append(Row(id: "codex-week", label: "WEEKLY", window: secondary))
         }
         return rows
     }
@@ -104,19 +108,21 @@ struct UsagePageView: View {
             topBar
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    agentSection(
+                VStack(alignment: .leading, spacing: 9) {
+                    providerSection(
                         agentType: .claudeCode,
+                        headlineLabel: "現在のセッション",
                         rows: claudeRows,
                         trailingLabel: nil,
-                        emptyNote: snapshot?.claude == nil && snapshot != nil
+                        emptyNote: snapshot != nil && snapshot?.claude == nil
                             ? "使用量を取得できませんでした"
                             : nil
                     )
 
                     if let codex = snapshot?.codex {
-                        agentSection(
+                        providerSection(
                             agentType: .codex,
+                            headlineLabel: "現在の 5 時間枠",
                             rows: codexRows,
                             trailingLabel: codex.planType?.uppercased(),
                             emptyNote: codexRows.isEmpty ? "従量課金プランのため rate limit なし" : nil
@@ -159,242 +165,215 @@ struct UsagePageView: View {
 
             Text("USAGE")
                 .font(DSTypography.mono(s(9), weight: .semibold))
-                .tracking(0.8)
-                .foregroundStyle(DSColors.inkDim)
+                .tracking(1.6)
+                .foregroundStyle(DSColors.ink.opacity(0.85))
                 .padding(.trailing, contentPadding)
         }
         .frame(height: viewModel.physicalNotchHeight + 4)
     }
 
-    // MARK: - Sections
+    // MARK: - Provider section
 
-    /// セクションの外枠。見出しが並ぶだけでは切れ目が読めないので、
-    /// 背景（`DSColors.surface`）+ 枠線 + 左端のアクセントバーで塊として見せる。
-    private func sectionCard<Content: View>(
-        accent: Color,
-        title: String,
-        titleColor: Color,
-        trailingLabel: String?,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            // 左端のアクセントバー。どのセクションかを色で一目で分かるようにする。
-            Rectangle()
-                .fill(accent.opacity(0.55))
-                .frame(width: 2)
-
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Text(title)
-                        .font(DSTypography.mono(s(10), weight: .semibold))
-                        .tracking(0.6)
-                        .foregroundStyle(titleColor)
-
-                    if let trailingLabel {
-                        Text(trailingLabel)
-                            .font(DSTypography.mono(s(8)))
-                            .tracking(0.4)
-                            .foregroundStyle(DSColors.inkMute)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(DSColors.surfaceStrong)
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
-                    }
-                    Spacer(minLength: 0)
-                }
-
-                content()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .background(DSColors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(DSColors.lineDefault, lineWidth: 1)
-        )
-    }
-
-    @ViewBuilder
-    private func agentSection(
+    /// プロバイダ 1 つ分のカード。見出し（リング + 大きい数字 + リセット）+ ウィンドウ行。
+    private func providerSection(
         agentType: AgentType,
+        headlineLabel: String,
         rows: [Row],
         trailingLabel: String?,
         emptyNote: String?
     ) -> some View {
-        sectionCard(
-            accent: agentType.color,
-            title: agentType.displayName.uppercased(),
-            titleColor: agentType.color,
-            trailingLabel: trailingLabel
-        ) {
+        VStack(spacing: 0) {
+            sectionHeadline(
+                agentType: agentType,
+                label: headlineLabel,
+                trailingLabel: trailingLabel,
+                window: rows.first?.window
+            )
+
             if let emptyNote {
-                Text(emptyNote)
-                    .font(DSTypography.mono(s(8)))
-                    .foregroundStyle(DSColors.inkMute)
+                HStack {
+                    Text(emptyNote)
+                        .font(DSTypography.mono(s(9)))
+                        .foregroundStyle(DSColors.inkMute)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 13)
+                .padding(.bottom, 11)
             }
 
             ForEach(rows) { row in
-                windowRow(agentType: agentType, label: row.label, window: row.window)
-            }
-
-            if agentType == .claudeCode, let extra = snapshot?.claude?.extraUsage, extra.hasContent {
                 Divider().overlay(DSColors.lineFaint)
-                extraUsageRow(extra)
+                windowRow(label: row.label, window: row.window)
             }
         }
+        .background(DSColors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(sectionBorder(rows: rows), lineWidth: 0.5)
+        )
     }
 
-    /// 追加クレジット（従量課金の上乗せ枠）。サブスクのみの環境では非表示になる。
-    private func extraUsageRow(_ extra: ExtraUsageInfo) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
-                Text("EXTRA CREDITS")
-                    .font(DSTypography.mono(s(8)))
-                    .tracking(0.4)
-                    .foregroundStyle(DSColors.inkDim)
-                Spacer(minLength: 0)
-                if let used = extra.usedAmount {
-                    Text(amountText(used, currency: extra.currency))
-                        .font(DSTypography.mono(s(10), weight: .semibold))
-                        .foregroundStyle(DSColors.ink)
-                        .fixedSize()
-                }
-            }
-
-            if let percent = extra.usedPercent, extra.limitAmount != nil {
-                PixelBar(usedPercent: percent, color: barColor(for: percent), trackColor: DSColors.inkGhost)
-            }
-
-            HStack(spacing: 6) {
-                if let limit = extra.limitAmount {
-                    Text("LIMIT \(amountText(limit, currency: extra.currency))")
-                }
-                if let balance = extra.balanceAmount {
-                    Text("BALANCE \(amountText(balance, currency: extra.currency))")
-                }
-                if !extra.isEnabled, let reason = extra.disabledReason {
-                    Text("DISABLED (\(reason.replacingOccurrences(of: "_", with: " ")))")
-                }
-                Spacer(minLength: 0)
-            }
-            .font(DSTypography.mono(s(8)))
-            .foregroundStyle(DSColors.inkMute)
-        }
+    /// 危険域の枠だけ縁取りを強める（モック 3b の Codex カードが赤枠になっているのと同じ意図）。
+    private func sectionBorder(rows: [Row]) -> Color {
+        let severities = rows.compactMap(\.window).map { severity(for: $0) }
+        if severities.contains(.critical) { return DSColors.signalError.opacity(0.3) }
+        if severities.contains(.warning) { return DSColors.signalAlert.opacity(0.25) }
+        return DSColors.lineDefault
     }
 
-    private func amountText(_ amount: Double, currency: String?) -> String {
-        let symbol = (currency ?? "USD") == "USD" ? "$" : "\(currency ?? "") "
-        return amount >= 100
-            ? String(format: "%@%.0f", symbol, amount)
-            : String(format: "%@%.2f", symbol, amount)
-    }
+    /// セクション見出し。左にリング、中央にラベル + 5×7 の大きい数字、右にリセット情報。
+    private func sectionHeadline(
+        agentType: AgentType,
+        label: String,
+        trailingLabel: String?,
+        window: UsageWindow?
+    ) -> some View {
+        HStack(alignment: .center, spacing: 13) {
+            UsageGauge(usedPercent: window?.usedPercent, agentType: agentType, size: s(26))
 
-    /// 1 ウィンドウ分。ゲージ + ラベル + 幅いっぱいのドットバー + 使用率 + リセット情報。
-    /// `window` が nil のときはプレースホルダ（取得中）として描く。
-    private func windowRow(agentType: AgentType, label: String, window: UsageWindow?) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            UsageGauge(
-                usedPercent: window?.usedPercent,
-                agentType: agentType,
-                size: s(26)
-            )
-
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(label)
-                        .font(DSTypography.mono(s(8)))
-                        .tracking(0.4)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text("\(agentType.displayName.uppercased()) · \(label)")
+                        .font(DSTypography.mono(s(8), weight: .semibold))
+                        .tracking(1.6)
                         .foregroundStyle(DSColors.inkDim)
-                        .lineLimit(1)
-
-                    // API が「今この枠が効いている」と言っている枠を明示する
-                    // （session より先にモデル別週次枠が上限に当たっているケースがあるため）。
-                    if window?.isActive == true {
-                        Text("ACTIVE")
-                            .font(DSTypography.mono(s(7), weight: .semibold))
-                            .tracking(0.4)
-                            .foregroundStyle(DSColors.signalAlert)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 2)
-                                    .stroke(DSColors.signalAlert.opacity(0.5), lineWidth: 1)
-                            )
-                            .fixedSize()
+                    if let trailingLabel {
+                        Text(trailingLabel)
+                            .font(DSTypography.mono(s(8)))
+                            .tracking(0.6)
+                            .foregroundStyle(DSColors.inkMute)
                     }
+                }
 
-                    Spacer(minLength: 0)
-
+                // 大きい数字は 5×7 グリフ（数値グリフは 5×7 に一本化）。
+                HStack(alignment: .bottom, spacing: 4) {
                     if let window {
-                        Text("\(Int(window.usedPercent.rounded()))%")
-                            .font(DSTypography.mono(s(11), weight: .semibold))
-                            .foregroundStyle(barColor(for: window.usedPercent, severity: window.severity))
-                            .fixedSize()
+                        GlyphView(
+                            bitmap: Glyph.number(
+                                String(Int(window.usedPercent.rounded())),
+                                color: color(for: window)
+                            )
+                        )
                     } else {
                         Text("--")
                             .font(DSTypography.mono(s(11), weight: .semibold))
                             .foregroundStyle(DSColors.inkMute)
-                            .fixedSize()
                     }
-                }
-
-                PixelBar(
-                    usedPercent: window?.usedPercent ?? 0,
-                    color: barColor(for: window?.usedPercent ?? 0, severity: window?.severity),
-                    trackColor: DSColors.inkGhost
-                )
-
-                if let resetsAt = window?.resetsAt {
-                    Text(resetsCaption(resetsAt))
-                        .font(DSTypography.mono(s(8)))
-                        .foregroundStyle(DSColors.inkMute)
-                } else if window == nil {
-                    Text("取得中…")
-                        .font(DSTypography.mono(s(8)))
-                        .foregroundStyle(DSColors.inkMute)
+                    Text("%")
+                        .font(DSTypography.mono(s(9), weight: .semibold))
+                        .foregroundStyle(DSColors.inkDim)
                 }
             }
+
+            Spacer(minLength: 0)
+
+            if let resetsAt = window?.resetsAt {
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(remainingText(resetsAt))
+                        .font(DSTypography.Native.callout(scale, weight: .semibold))
+                        .foregroundStyle(DSColors.ink.opacity(0.85))
+                    Text("\(Self.absoluteResetFormatter.string(from: resetsAt)) リセット")
+                        .font(DSTypography.mono(s(9)))
+                        .foregroundStyle(DSColors.inkMute)
+                }
+            } else if window == nil {
+                Text("取得中…")
+                    .font(DSTypography.mono(s(9)))
+                    .foregroundStyle(DSColors.inkMute)
+            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(label)
-        .accessibilityValue(
-            window.map { "\(Int($0.usedPercent.rounded()))パーセント" } ?? "取得中"
-        )
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
     }
 
-    // MARK: - Daily cost chart
+    // MARK: - Window row
 
-    /// 日毎の推定コスト（API 換算）。Claude / Codex を別チャートで縦に並べる。
+    /// 1 ウィンドウ分の行: ラベル + NOW バッジ + ブロック目盛り + % + 残り + 絶対時刻。
+    private func windowRow(label: String, window: UsageWindow?) -> some View {
+        HStack(spacing: 9) {
+            HStack(spacing: 5) {
+                Text(label)
+                    .font(DSTypography.mono(s(9), weight: .semibold))
+                    .tracking(1.0)
+                    .foregroundStyle(DSColors.ink.opacity(0.7))
+                    .lineLimit(1)
+                // 「今この枠が効いている」ことを反転バッジで示す（API の is_active）。
+                if window?.isActive == true {
+                    Text("NOW")
+                        .font(DSTypography.mono(s(7), weight: .semibold))
+                        .tracking(1.0)
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 2)
+                        .background(DSColors.ink)
+                }
+            }
+            .frame(width: s(108), alignment: .leading)
+
+            UsageBlockScale(
+                usedPercent: window?.usedPercent ?? 0,
+                color: window.map { color(for: $0) } ?? DSColors.inkMute
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(window.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--")
+                .font(DSTypography.mono(s(10), weight: .semibold))
+                .foregroundStyle(window.map { color(for: $0) } ?? DSColors.inkMute)
+                .monospacedDigit()
+                .frame(width: s(32), alignment: .trailing)
+
+            Text(window?.resetsAt.map { remainingText($0) } ?? "")
+                .font(DSTypography.Native.caption(scale))
+                .foregroundStyle(DSColors.inkDim)
+                .lineLimit(1)
+                .frame(width: s(84), alignment: .trailing)
+
+            Text(window?.resetsAt.map { Self.absoluteResetFormatter.string(from: $0) } ?? "")
+                .font(DSTypography.mono(s(9)))
+                .foregroundStyle(DSColors.inkMute)
+                .lineLimit(1)
+                .frame(width: s(70), alignment: .trailing)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 7)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(label)
+        .accessibilityValue(window.map { "\(Int($0.usedPercent.rounded()))パーセント" } ?? "取得中")
+    }
+
+    // MARK: - Daily cost
+
+    /// 日毎の推定コスト（API 換算）。エージェント別に 3×3 ブロックの棒グラフで出す。
     @ViewBuilder
     private var costSection: some View {
         let reports: [(agentType: AgentType, report: DailyCostReport?)] = [
             (.claudeCode, dailyCostCoordinator.claude),
             (.codex, dailyCostCoordinator.codex),
         ]
+        let available = reports.filter { $0.report?.days.isEmpty == false }
 
-        sectionCard(
-            accent: DSColors.signalDone,
-            title: "DAILY COST",
-            titleColor: DSColors.inkDim,
-            trailingLabel: "API 換算推定"
-        ) {
-            ForEach(reports.filter { ($0.report?.days.isEmpty == false) }, id: \.agentType) { entry in
+        VStack(alignment: .leading, spacing: 9) {
+            ForEach(available, id: \.agentType) { entry in
                 if let report = entry.report {
                     costChart(agentType: entry.agentType, report: report)
                 }
             }
 
-            if reports.allSatisfy({ $0.report == nil }) {
-                Text("集計中…")
-                    .font(DSTypography.mono(s(8)))
+            if available.isEmpty {
+                HStack {
+                    Text(
+                        reports.allSatisfy { $0.report == nil }
+                            ? "コストを集計中…"
+                            : "コストを算出できるログが見つかりませんでした"
+                    )
+                    .font(DSTypography.mono(s(9)))
                     .foregroundStyle(DSColors.inkMute)
-            } else if reports.allSatisfy({ $0.report?.days.isEmpty ?? true }) {
-                Text("コストを算出できるログが見つかりませんでした")
-                    .font(DSTypography.mono(s(8)))
-                    .foregroundStyle(DSColors.inkMute)
+                    Spacer(minLength: 0)
+                }
+                .padding(12)
+                .background(DSColors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
     }
@@ -402,49 +381,39 @@ struct UsagePageView: View {
     private func costChart(agentType: AgentType, report: DailyCostReport) -> some View {
         let days = report.recentDaysFilled(count: chartDayCount)
         let values = days.map(\.estimatedCostUSD)
-        let peak = values.max() ?? 0
+        let total = values.reduce(0, +)
 
-        return VStack(alignment: .leading, spacing: 5) {
+        return VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(agentType.displayName.uppercased())
-                    .font(DSTypography.mono(s(8), weight: .medium))
-                    .tracking(0.4)
-                    .foregroundStyle(agentType.color)
-                Text("直近\(chartDayCount)日")
-                    .font(DSTypography.mono(s(8)))
-                    .foregroundStyle(DSColors.inkMute)
+                Text("\(agentType.displayName.uppercased()) · DAILY COST · \(chartDayCount)D")
+                    .font(DSTypography.mono(s(9), weight: .semibold))
+                    .tracking(1.6)
+                    .foregroundStyle(DSColors.inkDim)
                 Spacer(minLength: 0)
-                Text(CostCalculator.formatCost(values.reduce(0, +)))
-                    .font(DSTypography.mono(s(11), weight: .semibold))
+                Text(CostCalculator.formatCost(total))
+                    .font(DSTypography.Native.callout(scale, weight: .semibold))
                     .foregroundStyle(DSColors.ink)
-                    .fixedSize()
+                Text("推定")
+                    .font(DSTypography.mono(s(9)))
+                    .foregroundStyle(DSColors.inkMute)
             }
 
-            PixelBarChart(
-                values: values,
-                barColors: values.map { value in
-                    // 最大値に近い日を強調して「どこが重かったか」が一目で分かるようにする。
-                    guard peak > 0 else { return DSColors.inkGhost }
-                    let ratio = value / peak
-                    return ratio >= 0.9
-                        ? DSColors.signalAlert
-                        : (ratio >= 0.5 ? DSColors.ink : DSColors.inkDim)
-                }
-            )
-            .accessibilityElement()
-            .accessibilityLabel("\(agentType.displayName) の日毎コスト")
-            .accessibilityValue("直近\(chartDayCount)日で \(CostCalculator.formatCost(values.reduce(0, +)))")
+            UsageBlockChart(values: values)
+                .accessibilityElement()
+                .accessibilityLabel("\(agentType.displayName) の日毎コスト")
+                .accessibilityValue("直近\(chartDayCount)日で \(CostCalculator.formatCost(total))")
 
-            HStack(spacing: 0) {
+            HStack {
                 Text(dayLabel(days.first?.day))
                 Spacer(minLength: 0)
-                if peak > 0 {
+                if let peak = values.max(), peak > 0 {
                     Text("PEAK \(CostCalculator.formatCost(peak))")
                 }
                 Spacer(minLength: 0)
                 Text(dayLabel(days.last?.day))
             }
             .font(DSTypography.mono(s(8)))
+            .tracking(1.0)
             .foregroundStyle(DSColors.inkMute)
 
             if !report.unsupportedModels.isEmpty {
@@ -454,6 +423,54 @@ struct UsagePageView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .padding(12)
+        .background(DSColors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(DSColors.lineDefault, lineWidth: 0.5)
+        )
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            if let extra = snapshot?.claude?.extraUsage, extra.hasContent {
+                Text(extraUsageText(extra))
+            }
+            Spacer(minLength: 0)
+            if let fetchedAt = snapshot?.fetchedAt, fetchedAt != .distantPast {
+                Text("UPDATED \(Self.dateTimeFormatter.string(from: fetchedAt))")
+            } else {
+                Text("FETCHING…")
+            }
+        }
+        .font(DSTypography.mono(s(8)))
+        .tracking(0.8)
+        .foregroundStyle(DSColors.inkMute)
+    }
+
+    /// 追加クレジット（従量課金の上乗せ枠）。サブスクのみの環境では出ない。
+    private func extraUsageText(_ extra: ExtraUsageInfo) -> String {
+        var parts: [String] = []
+        if let used = extra.usedAmount {
+            parts.append("EXTRA \(amountText(used, currency: extra.currency))")
+        }
+        if let limit = extra.limitAmount {
+            parts.append("/ \(amountText(limit, currency: extra.currency))")
+        }
+        if !extra.isEnabled, let reason = extra.disabledReason {
+            parts.append("(\(reason.replacingOccurrences(of: "_", with: " ")))")
+        }
+        return parts.joined(separator: " ")
+    }
+
+    private func amountText(_ amount: Double, currency: String?) -> String {
+        let symbol = (currency ?? "USD") == "USD" ? "$" : "\(currency ?? "") "
+        return amount >= 100
+            ? String(format: "%@%.0f", symbol, amount)
+            : String(format: "%@%.2f", symbol, amount)
     }
 
     private func dayLabel(_ day: Date?) -> String {
@@ -461,53 +478,35 @@ struct UsagePageView: View {
         return Self.dayFormatter.string(from: day)
     }
 
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.setLocalizedDateFormatFromTemplate("Md")
-        return f
-    }()
+    // MARK: - Helpers
 
-    private var footer: some View {
-        HStack(spacing: 8) {
-            if let fetchedAt = snapshot?.fetchedAt, fetchedAt != .distantPast {
-                Text("UPDATED \(Self.dateTimeFormatter.string(from: fetchedAt))")
-                    .font(DSTypography.mono(s(8)))
-                    .tracking(0.4)
-                    .foregroundStyle(DSColors.inkMute)
-            } else {
-                Text("FETCHING…")
-                    .font(DSTypography.mono(s(8)))
-                    .tracking(0.4)
-                    .foregroundStyle(DSColors.inkMute)
-            }
-            Spacer(minLength: 0)
+    /// 「あと 2 時間 10 分」。残り時間の方が猶予を掴みやすいので相対を主にし、絶対時刻は隣に出す。
+    private func remainingText(_ resetsAt: Date) -> String {
+        let seconds = resetsAt.timeIntervalSinceNow
+        guard seconds > 0 else { return "リセット済み" }
+        let days = Int(seconds) / 86400
+        let hours = (Int(seconds) % 86400) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+        if days > 0 { return "あと \(days) 日 \(hours) 時間" }
+        if hours > 0 { return "あと \(hours) 時間 \(String(format: "%02d", minutes)) 分" }
+        return "あと \(minutes) 分"
+    }
+
+    /// API が `severity` を返していればそれを使い、無ければ使用率のしきい値で判断する。
+    private func severity(for window: UsageWindow) -> UsageSeverity {
+        if let severity = window.severity { return severity }
+        switch window.usedPercent {
+        case 90...: return .critical
+        case 70..<90: return .warning
+        default: return .normal
         }
     }
 
-    // MARK: - Helpers
-
-    /// 「あと 2 時間でリセット（14:00）」のようなキャプション。
-    /// 残り時間の方が「今どれだけ猶予があるか」を掴みやすいので、相対表現を先に出す。
-    private func resetsCaption(_ resetsAt: Date) -> String {
-        let absolute = Self.timeFormatter.string(from: resetsAt)
-        guard resetsAt > .now else { return "RESETS \(absolute)" }
-        let relative = Self.relativeFormatter.localizedString(for: resetsAt, relativeTo: .now)
-        return "RESETS \(relative)（\(absolute)）"
-    }
-
-    /// バー・数字の色。API が `severity` を返している場合はそちらを優先し、
-    /// 無ければ使用率のしきい値（70%/90%）で判断する。
-    private func barColor(for percent: Double, severity: UsageSeverity? = nil) -> Color {
-        switch severity {
-        case .critical: return DSColors.signalError
-        case .warning: return DSColors.signalAlert
-        case .normal: return DSColors.ink
-        case nil:
-            switch percent {
-            case 90...: return DSColors.signalError
-            case 70..<90: return DSColors.signalAlert
-            default: return DSColors.ink
-            }
+    private func color(for window: UsageWindow) -> Color {
+        switch severity(for: window) {
+        case .critical: DSColors.signalError
+        case .warning: DSColors.signalAlert
+        case .normal: DSColors.ink.opacity(0.8)
         }
     }
 }
