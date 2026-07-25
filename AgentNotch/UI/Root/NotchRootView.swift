@@ -5,11 +5,16 @@ import SwiftUI
 /// - state 保持: `NotchViewModel`（navigation）, `NotchNotificationManager`（通知キュー）,
 ///   `CompletionGlowController`（glow 演出）, `NotificationFocusController`（キーボードフォーカス）
 /// - mode に応じた Page を表示し、外殻は `NotchShell`、副作用は `NotchEventRouter` に委譲。
+///
+/// `UsageCoordinator` はここで一つだけ保持し、`expanded` / `sessionDetail` の
+/// 両方に同じインスタンスを渡す。Page 側でそれぞれ生成すると 180 秒の
+/// 再取得ガードがモード遷移のたびにリセットされてしまうため（`UsageCoordinator` 参照）。
 struct NotchRootView: View {
     @State var viewModel: NotchViewModel
     @State private var notificationManager = NotchNotificationManager()
     @State private var glow = CompletionGlowController()
     @State private var focusController = NotificationFocusController()
+    @State private var usageCoordinator = UsageCoordinator()
     @ObservedObject var sessionManager: SessionManager
     private let permissionActions: PermissionActions
 
@@ -40,7 +45,8 @@ struct NotchRootView: View {
                 SessionDetailPage(
                     sessionId: sessionId,
                     viewModel: viewModel,
-                    sessionManager: sessionManager
+                    sessionManager: sessionManager,
+                    usageCoordinator: usageCoordinator
                 )
             }
         }
@@ -53,5 +59,19 @@ struct NotchRootView: View {
             sessionManager: sessionManager
         )
         .environment(\.permissionActions, permissionActions)
+        .onAppear { syncUsageCoordinator(for: viewModel.mode) }
+        .onChange(of: viewModel.mode) { _, mode in
+            syncUsageCoordinator(for: mode)
+        }
+    }
+
+    /// 使用量取得が必要な画面（`expanded` / `sessionDetail`）が見えている間だけポーリングする。
+    private func syncUsageCoordinator(for mode: NotchMode) {
+        switch mode {
+        case .expanded, .sessionDetail:
+            usageCoordinator.start()
+        case .compact, .notification:
+            usageCoordinator.stop()
+        }
     }
 }

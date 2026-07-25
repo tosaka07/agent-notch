@@ -68,4 +68,20 @@ public struct UsageSnapshot: Sendable, Equatable {
     }
 
     public static let empty = UsageSnapshot(claude: nil, codex: nil, fetchedAt: .distantPast)
+
+    /// 常時表示ゲージ用に「そのセッションが最も気にすべき使用率」を 1 つ選ぶ。
+    ///
+    /// - Claude Code: session（5 時間枠）を優先し、無ければ週次(全モデル)にフォールバック。
+    /// - Codex: primary（5 時間相当）を優先し、無ければ secondary（週次相当）にフォールバック。
+    /// - Gemini CLI / Custom: 使用量取得手段が無いため常に `nil`（呼び出し側はゲージを非表示にする）。
+    public func primaryUsedPercent(for agentType: AgentType) -> Double? {
+        switch agentType {
+        case .claudeCode:
+            claude?.session?.usedPercent ?? claude?.weekAllModels?.usedPercent
+        case .codex:
+            codex?.primary?.usedPercent ?? codex?.secondary?.usedPercent
+        case .geminiCLI, .custom:
+            nil
+        }
+    }
 }

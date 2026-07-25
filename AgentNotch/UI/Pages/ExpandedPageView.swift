@@ -17,7 +17,6 @@ struct ExpandedPageView: View {
     @Default(.collapsedGroupIDs) private var collapsedGroupIDs
 
     @State private var showSortMenu = false
-    @StateObject private var usageCoordinator = UsageCoordinator()
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
@@ -47,14 +46,7 @@ struct ExpandedPageView: View {
                     .padding(.bottom, 4)
                 }
             }
-
-            Divider().padding(.horizontal, 20)
-            UsageSectionView(snapshot: usageCoordinator.snapshot)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
         }
-        .onAppear { usageCoordinator.start() }
-        .onDisappear { usageCoordinator.stop() }
     }
 
     // MARK: - Notch top bar (replaces header)
