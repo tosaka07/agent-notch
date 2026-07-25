@@ -184,4 +184,7 @@ extension Defaults.Keys {
 
     /// セッションカードの目的行に表示するメッセージ。
     static let cardPromptSource = Key<CardPromptSource>("cardPromptSource", default: .firstUserMessage)
+
+    /// ExpandedPageView 下部の USAGE セクションが折りたたまれているか。
+    static let usageSectionCollapsed = Key<Bool>("usageSectionCollapsed", default: false)
 }
