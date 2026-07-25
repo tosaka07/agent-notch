@@ -1,3 +1,4 @@
+import AgentNotchCore
 import Defaults
 import KeyboardShortcuts
 import SwiftUI
@@ -16,6 +17,8 @@ struct SettingsView: View {
     @Default(.cardPromptSource) var cardPromptSource
     @Default(.usageEnabled) var usageEnabled
     @Default(.usageGaugeStyle) var usageGaugeStyle
+    @Default(.usageGaugeMetric) var usageGaugeMetric
+    @Default(.panelSurfaceStyle) var panelSurfaceStyle
     var onClose: (() -> Void)? = nil
 
     var body: some View {
@@ -34,6 +37,16 @@ struct SettingsView: View {
                     Text("Aa テスト Preview 123")
                         .font(.system(size: 11 * textSize.scale))
                 }
+
+                Picker("パネルの背景", selection: $panelSurfaceStyle) {
+                    ForEach(PanelSurfaceStyle.allCases, id: \.self) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("「ガラス」は展開パネルの上端を黒のまま残し、下端に向かって背景が透けます。\n上端は物理 notch と地続きにするため常に不透明です。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Picker("ディスプレイ", selection: $displayMode) {
                     ForEach(DisplayModePreference.allCases, id: \.self) { mode in
@@ -95,6 +108,15 @@ struct SettingsView: View {
                             Text(style.label).tag(style)
                         }
                     }
+
+                    Picker("ゲージに出す枠", selection: $usageGaugeMetric) {
+                        ForEach(UsageGaugeMetric.allCases, id: \.self) { metric in
+                            Text(metric.label).tag(metric)
+                        }
+                    }
+                    Text("エージェントごとに 1 つだけ表示します。\n選んだ枠が無いエージェント（Codex にはモデル別枠が無い等）は自動になります。\n全内訳は使用量ページで確認できます。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -116,7 +138,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 360, height: soundEnabled ? 700 : 600)
+        .frame(width: 360, height: soundEnabled ? 820 : 720)
         .onAppear {
             // Auto-select first display if none set
             if displayMode == .specificDisplay, specificDisplayUUID.isEmpty,
