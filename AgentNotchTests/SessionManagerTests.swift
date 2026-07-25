@@ -208,4 +208,166 @@ struct SessionManagerTests {
         let result = manager.teamSessions(name: "alpha-team").map(\.id).sorted()
         #expect(result == ["leader", "member"])
     }
+
+    // MARK: - #23: reconcileSessionStart (pid ベースのセッション統合)
+
+    @Test(
+        "reconcileSessionStart merges an old session with the same pid+cwd for resume/clear/compact sources",
+        arguments: ["resume", "clear", "compact"]
+    )
+    func reconcileSessionStartMergesSamePidForContinuationSources(source: String) {
+        let manager = SessionManager()
+        let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
+        old.pid = 4242
+        old.cwd = "/Users/dev/project"
+        old.status = .thinking
+
+        let merged = manager.reconcileSessionStart(
+            newId: "new-session", pid: 4242, cwd: "/Users/dev/project", source: source
+        )
+
+        #expect(merged)
+        #expect(manager.session(for: "old-session") == nil)
+        #expect(manager.allSessions.count == 0) // 新しい方はまだ getOrCreateSession されていない
+    }
+
+    @Test("reconcileSessionStart does NOT merge when source is startup (e.g. teammate launching in the same process)")
+    func reconcileSessionStartSkipsStartupSource() {
+        let manager = SessionManager()
+        let leader = manager.getOrCreateSession(id: "leader-session", agentType: .claudeCode)
+        leader.pid = 4242
+        leader.cwd = "/Users/dev/project"
+        leader.status = .thinking
+
+        // teammate が同一プロセス内で新規セッションとして起動するケースを模する。
+        // pid は親と同じでも source=startup なので、リーダーセッションを誤って消してはいけない。
+        let merged = manager.reconcileSessionStart(
+            newId: "teammate-session", pid: 4242, cwd: "/Users/dev/project", source: "startup"
+        )
+
+        #expect(merged == false)
+        #expect(manager.session(for: "leader-session") != nil)
+    }
+
+    @Test("reconcileSessionStart does NOT merge when source is nil or unknown")
+    func reconcileSessionStartSkipsUnknownSource() {
+        let manager = SessionManager()
+        let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
+        old.pid = 4242
+        old.cwd = "/Users/dev/project"
+
+        #expect(
+            manager.reconcileSessionStart(newId: "new-session", pid: 4242, cwd: "/Users/dev/project", source: nil)
+                == false
+        )
+        #expect(
+            manager.reconcileSessionStart(
+                newId: "new-session", pid: 4242, cwd: "/Users/dev/project", source: "something-else"
+            ) == false
+        )
+        #expect(manager.session(for: "old-session") != nil)
+    }
+
+    @Test("reconcileSessionStart does NOT merge when cwd differs (pid alone is not trusted — security)")
+    func reconcileSessionStartSkipsMismatchedCwd() {
+        let manager = SessionManager()
+        let victim = manager.getOrCreateSession(id: "victim-session", agentType: .claudeCode)
+        victim.pid = 4242
+        victim.cwd = "/Users/victim/secret-project"
+        victim.status = .thinking
+
+        // 攻撃者が victim の pid（`ps` 等で観測可能）を詐称した SessionStart を送っても、
+        // cwd を知らない・異なる限り victim のセッションを統合（削除）できてはいけない。
+        let merged = manager.reconcileSessionStart(
+            newId: "attacker-session", pid: 4242, cwd: "/tmp/attacker", source: "compact"
+        )
+
+        #expect(merged == false)
+        #expect(manager.session(for: "victim-session") != nil)
+    }
+
+    @Test("reconcileSessionStart does NOT merge when cwd is unknown on either side")
+    func reconcileSessionStartSkipsUnknownCwd() {
+        let manager = SessionManager()
+        let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
+        old.pid = 4242
+        old.cwd = nil
+
+        #expect(manager.reconcileSessionStart(newId: "new-session", pid: 4242, cwd: nil, source: "compact") == false)
+        #expect(
+            manager.reconcileSessionStart(
+                newId: "new-session", pid: 4242, cwd: "/Users/dev/project", source: "compact"
+            ) == false
+        )
+        #expect(manager.session(for: "old-session") != nil)
+    }
+
+    @Test("reconcileSessionStart carries pin/mute state over to the new session id")
+    func reconcileSessionStartCarriesUserState() {
+        let manager = SessionManager()
+        let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
+        old.pid = 99
+        old.cwd = "/Users/dev/project"
+        manager.setPinned("old-session", true)
+
+        _ = manager.reconcileSessionStart(newId: "new-session", pid: 99, cwd: "/Users/dev/project", source: "compact")
+        _ = manager.getOrCreateSession(id: "new-session", agentType: .claudeCode)
+
+        #expect(manager.userState(for: "new-session").pinned)
+        #expect(manager.userState(for: "old-session") == .empty)
+    }
+
+    @Test("reconcileSessionStart is a no-op when pid is nil or no session shares the pid")
+    func reconcileSessionStartNoOp() {
+        let manager = SessionManager()
+        _ = manager.getOrCreateSession(id: "s1", agentType: .claudeCode)
+
+        #expect(manager.reconcileSessionStart(newId: "s2", pid: nil, cwd: "/tmp", source: "resume") == false)
+        #expect(manager.reconcileSessionStart(newId: "s2", pid: 12345, cwd: "/tmp", source: "resume") == false)
+        #expect(manager.allSessions.count == 1)
+    }
+
+    // MARK: - #23: sweepStale + プロセス生死チェック
+
+    @Test("sweepStale removes a running-looking session whose pid is already dead")
+    func sweepStaleRemovesDeadZombieSession() {
+        let manager = SessionManager()
+        let zombie = manager.getOrCreateSession(id: "zombie", agentType: .claudeCode)
+        zombie.pid = 1
+        zombie.status = .toolRunning // /compact 等で新 session_id に移った後、凍結されたまま残る想定
+        zombie.cwd = "/tmp"
+
+        let swept = manager.sweepStale(timeoutSeconds: 0, isProcessAlive: { _ in false })
+
+        #expect(swept.count == 1)
+        #expect(swept.first?.reason == .processDead)
+        #expect(manager.session(for: "zombie") == nil)
+    }
+
+    @Test("sweepStale keeps a running session whose pid is still alive")
+    func sweepStaleKeepsAliveRunningSession() {
+        let manager = SessionManager()
+        let running = manager.getOrCreateSession(id: "running", agentType: .claudeCode)
+        running.pid = 1
+        running.status = .toolRunning
+        running.cwd = "/tmp"
+
+        let swept = manager.sweepStale(timeoutSeconds: 0, isProcessAlive: { _ in true })
+
+        #expect(swept.isEmpty)
+        #expect(manager.session(for: "running") != nil)
+    }
+
+    @Test("sweepStale without a known pid falls back to previous behavior (does not sweep isRunning)")
+    func sweepStaleUnknownPidKeepsRunningSession() {
+        let manager = SessionManager()
+        let running = manager.getOrCreateSession(id: "running", agentType: .claudeCode)
+        running.status = .toolRunning
+        running.cwd = "/tmp"
+
+        let swept = manager.sweepStale(timeoutSeconds: 0)
+
+        #expect(swept.isEmpty)
+        #expect(manager.session(for: "running") != nil)
+    }
 }

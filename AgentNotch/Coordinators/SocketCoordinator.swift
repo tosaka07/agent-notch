@@ -37,6 +37,7 @@ final class SocketCoordinator {
                 let pid = (message["_pid"] as? NSNumber)?.int32Value
                 let tty = message["_tty"] as? String
                 let permissionMode = parsed.permissionMode
+                let sessionStartSource = message["source"] as? String
 
                 // `PermissionRequest` hook 経由のときだけ deferred にする（tool_response を注入できる唯一の経路）。
                 // `PreToolUse` 経由の AskUserQuestion は即時応答しないと agent がブロックされる上、
@@ -82,6 +83,18 @@ final class SocketCoordinator {
                 }
 
                 Task { @MainActor in
+                    // 同一プロセス（pid）が resume/compact/clear で新しい session_id を発行した場合、
+                    // 古いセッションを新しい方へ統合する（#23: 一覧の分裂対策）。source が
+                    // startup（teammate の新規セッション起動等も含む）の場合は統合しない。
+                    // pid だけでなく cwd も一致条件に含めることで、_pid を偽装した SessionStart
+                    // 送信による他セッションの乗っ取りの難易度を上げている（レビュー指摘 / issue #24 で恒久対策）。
+                    // SessionStart は deferred ではないため pendingRegistered は常に true だが、
+                    // reconcile 自体は apply より前・pendingRegistered ガードの外で行ってよい。
+                    if hookEvent == "SessionStart" {
+                        manager.reconcileSessionStart(
+                            newId: parsed.sessionId, pid: pid, cwd: cwd, source: sessionStartSource
+                        )
+                    }
                     if pendingRegistered {
                         EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
                     }
@@ -156,7 +169,9 @@ final class SocketCoordinator {
         socketServer?.respondToAskQuestion(toolUseId: toolUseId, answers: flatAnswers)
         if let session = sessionManager.session(for: sessionId) {
             session.pendingQuestion = nil
-            session.status = .thinking
+            // #19: 他にまだ pending な承認/質問があれば permissionWaiting を維持し、
+            // 無ければ subagent 実行中かどうかで復帰先を決める（thinking に決め打ちしない）。
+            session.status = session.statusAfterPermissionResolved()
             sessionManager.notifyChange()
         }
     }
@@ -164,7 +179,9 @@ final class SocketCoordinator {
     private func clearPendingPermission(sessionId: String, toolUseId: String) {
         guard let session = sessionManager.session(for: sessionId) else { return }
         session.pendingPermissions.removeAll { $0.toolUseId == toolUseId }
-        session.status = .thinking
+        // #19: 他にまだ pending な承認/質問があれば permissionWaiting を維持し、
+        // 無ければ subagent 実行中かどうかで復帰先を決める（thinking に決め打ちしない）。
+        session.status = session.statusAfterPermissionResolved()
         sessionManager.notifyChange()
     }
 }

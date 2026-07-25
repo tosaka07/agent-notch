@@ -1,5 +1,10 @@
 import Combine
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 @MainActor
 public final class SessionManager: ObservableObject {
@@ -220,6 +225,42 @@ public final class SessionManager: ObservableObject {
         sessions[id]
     }
 
+    /// 同一 pid かつ同一 cwd を持つ既存セッションを探す（`excludedId` 自身は除く）。
+    /// cwd も一致条件に含めるのは、socket が同一ユーザーの任意プロセスから書き込める前提上、
+    /// `_pid`（`ps` で列挙可能な値）を偽装した SessionStart 送信だけで他人の稼働中セッションを
+    /// 統合・削除できてしまうリスクを下げるため（pid 一致だけでは、攻撃者が正しい cwd を知らない
+    /// 限り無関係なセッションを消せない）。どちらの cwd も未知（nil）の場合は一致とみなさない。
+    /// 恒久対策（peer credential 検証等）は issue #24 に委ねる。
+    public func session(withPid pid: Int32, cwd: String?, excluding excludedId: String) -> UnifiedSession? {
+        guard let cwd, !cwd.isEmpty else { return nil }
+        return sessions.values.first { $0.pid == pid && $0.cwd == cwd && $0.id != excludedId }
+    }
+
+    /// `reconcileSessionStart` が古いセッションの統合を行ってよい `SessionInfo.source` の集合。
+    /// 「同一プロセス内での会話の継続」を意味する source のみ許可する。
+    /// `startup` は含めない: agent teams の teammate が同一プロセス内で新規セッションとして
+    /// 起動する場合も pid は親と同じになり得るため、`startup` まで対象にするとリーダー
+    /// セッションを誤って削除してしまう（レビュー指摘）。
+    private static let reconcilableSources: Set<String> = ["resume", "clear", "compact"]
+
+    /// `/compact` `/clear` `resume` 等で Claude Code が同一プロセス上で新しい session_id を
+    /// 発行した場合に、古い session_id のセッションを新しい方へ統合する（#23: 一覧の分裂対策）。
+    /// 同一 pid かつ同一 cwd の既存セッションが見つかれば、その pin/mute 状態を新しい id に
+    /// 引き継いだ上で削除する。`source` が `resume`/`clear`/`compact` のいずれでもない場合
+    /// （`startup` を含む）は、別プロセス・別会話の可能性があるため何もしない。
+    /// プロセスごと死んだ旧セッションは `sweepStale` の pid 生死チェックが別途回収する。
+    @discardableResult
+    public func reconcileSessionStart(newId: String, pid: Int32?, cwd: String?, source: String?) -> Bool {
+        guard let source, Self.reconcilableSources.contains(source) else { return false }
+        guard let pid, let old = session(withPid: pid, cwd: cwd, excluding: newId) else { return false }
+
+        if let state = userStates[old.id], !state.isDefault {
+            userStates[newId] = state
+        }
+        removeSession(id: old.id)
+        return true
+    }
+
     /// 指定 teamName に所属する（active/completed 問わない）全セッション。team ボードの読み取りに使う。
     public func teamSessions(name: String) -> [UnifiedSession] {
         sessions.values.filter { $0.teamName == name }
@@ -251,24 +292,52 @@ public final class SessionManager: ObservableObject {
         public let reason: SweptReason
     }
 
-    public enum SweptReason: Sendable {
+    public enum SweptReason: Sendable, Equatable {
         case directoryDeleted
         case timeout
+        /// pid が既に終了しているのに isRunning / permissionWaiting のまま固まっていた（死にセッション）。
+        case processDead
+    }
+
+    /// 指定 pid のプロセスがまだ生きているかを判定する関数の型。テストで差し替え可能にしている。
+    public typealias ProcessAliveCheck = @Sendable (Int32) -> Bool
+
+    /// `kill(pid, 0)` でシグナルを送らずに存在確認だけ行うデフォルト実装。
+    /// ESRCH（該当プロセス無し）のときのみ false。権限エラー（EPERM）等は「存在はする」とみなし true。
+    public static let defaultIsProcessAlive: ProcessAliveCheck = { pid in
+        guard pid > 0 else { return true }
+        if kill(pid, 0) == 0 { return true }
+        return errno != ESRCH
     }
 
     /// Remove sessions that are stale. Returns info about removed sessions.
+    ///
+    /// `isRunning` / `permissionWaiting` なセッションも、紐づく pid が既に終了していれば
+    /// 「死にセッション」とみなして掃除する（#23: resume/compact 等で新しい session_id に
+    /// 切り替わった後、古いセッションが実行中状態のまま凍結され続けるのを防ぐ）。
     @discardableResult
-    public func sweepStale(timeoutSeconds: Int) -> [SweptSession] {
+    public func sweepStale(
+        timeoutSeconds: Int,
+        isProcessAlive: ProcessAliveCheck = SessionManager.defaultIsProcessAlive
+    ) -> [SweptSession] {
         let now = Date()
         var swept: [SweptSession] = []
 
         for (id, session) in sessions {
-            if session.status.isRunning || session.status == .permissionWaiting {
+            let processAlive = session.pid.map(isProcessAlive) ?? true
+
+            if (session.status.isRunning || session.status == .permissionWaiting), processAlive {
                 continue
             }
 
             let name = session.originRepoName
                 ?? (session.cwd as NSString?)?.lastPathComponent ?? "Session"
+
+            if !processAlive {
+                swept.append(SweptSession(id: id, projectName: name, reason: .processDead))
+                sessions.removeValue(forKey: id)
+                continue
+            }
 
             if let cwd = session.cwd, !FileManager.default.fileExists(atPath: cwd) {
                 swept.append(SweptSession(id: id, projectName: name, reason: .directoryDeleted))
