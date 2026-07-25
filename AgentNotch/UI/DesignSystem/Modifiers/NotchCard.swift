@@ -12,9 +12,15 @@ import SwiftUI
 /// パネルより薄い暗幕にすることで一段明るい面になり、明度差だけで階層ができる
 /// （色味や明るさでは主張させない）。
 struct NotchCard: ViewModifier {
-    /// 縁に使う意味色（承認待ち = amber、失効 = red）。面には塗らず縁だけ。
+    /// 縁に使う意味色（承認待ち = amber、失効 = red）。
     var accent: Color
     var cornerRadius: CGFloat = 16
+    /// 面もわずかに `accent` に寄せる。
+    ///
+    /// 「signal 色は面積に使わない」原則の例外。承認は**押すまで agent が止まっている**
+    /// 唯一の状態なので、縁だけでなく面で気づけるようにする。同時に複数出ることは
+    /// ないので、画面が意味色で溢れる心配もない。
+    var tintsSurface: Bool = false
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -36,18 +42,26 @@ struct NotchCard: ViewModifier {
     private var surface: some View {
         if reduceTransparency {
             // 透過を切る設定では背後を透かさない。明度差は surface で作る。
-            DSColors.surfaceStrong.background(DSColors.canvas)
+            DSColors.surfaceStrong
+                .background(DSColors.canvas)
+                .overlay(tintsSurface ? accent.opacity(0.12) : .clear)
         } else {
             Rectangle().fill(.regularMaterial)
                 .overlay(DSColors.canvas.opacity(DSColors.cardScrimOpacity))
                 .overlay(DSColors.surface)
+                .overlay(tintsSurface ? accent.opacity(0.12) : .clear)
         }
     }
 }
 
 extension View {
     /// notch パネルの中に置く暗い半透明のカード面（余白・角丸・意味色の縁・影を一括で適用）。
-    func notchCard(accent: Color, cornerRadius: CGFloat = 16) -> some View {
-        modifier(NotchCard(accent: accent, cornerRadius: cornerRadius))
+    /// `tintsSurface` を立てると面もわずかに `accent` に寄る（承認のように面で気づかせたいとき）。
+    func notchCard(
+        accent: Color,
+        cornerRadius: CGFloat = 16,
+        tintsSurface: Bool = false
+    ) -> some View {
+        modifier(NotchCard(accent: accent, cornerRadius: cornerRadius, tintsSurface: tintsSurface))
     }
 }

@@ -79,8 +79,15 @@ struct SettingsView: View {
             Section("ショートカット") {
                 KeyboardShortcuts.Recorder("通知にジャンプ", name: .jumpToNotification)
                 KeyboardShortcuts.Recorder("ターミナルにジャンプ", name: .jumpToTerminal)
+                KeyboardShortcuts.Recorder("権限を承認", name: .approvePermission)
+                KeyboardShortcuts.Recorder("権限を拒否", name: .denyPermission)
+                Text("承認・拒否はアプリが非アクティブでも効きます。\nnotch のパネルはクリックするまでキーボード入力を受け取れないため、\nバナーの ⏎ / esc はパネルをクリックしたあとだけ有効です。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Button("デフォルトに戻す") {
-                    KeyboardShortcuts.reset(.jumpToNotification, .jumpToTerminal)
+                    KeyboardShortcuts.reset(
+                        .jumpToNotification, .jumpToTerminal, .approvePermission, .denyPermission
+                    )
                 }
                 .font(.caption)
             }
@@ -138,7 +145,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 360, height: soundEnabled ? 820 : 720)
+        .frame(width: 360, height: soundEnabled ? 880 : 780)
         .onAppear {
             // Auto-select first display if none set
             if displayMode == .specificDisplay, specificDisplayUUID.isEmpty,

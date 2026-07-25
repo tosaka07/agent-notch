@@ -39,6 +39,8 @@ struct QuestionBanner: View {
 
     @Default(.textSize) private var textSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// パネルがキーウィンドウか（`PermissionBanner.showsKeyHint` と同じ理由でヒントを出し分ける）。
+    @Environment(\.controlActiveState) private var controlActiveState
 
     private var scale: CGFloat { textSize.scale }
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
@@ -102,7 +104,11 @@ struct QuestionBanner: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                GlyphButton(label: "DISMISS", shortcut: "⏎", isProminent: true) { onDismiss() }
+                GlyphButton(
+                    label: "DISMISS",
+                    shortcut: controlActiveState == .key ? "⏎" : nil,
+                    isProminent: true
+                ) { onDismiss() }
                     .keyboardShortcut(.defaultAction)
                     .accessibilityHint("この失効バナーを閉じます")
             }
