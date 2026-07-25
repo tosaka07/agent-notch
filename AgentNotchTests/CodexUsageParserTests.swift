@@ -58,4 +58,120 @@ struct CodexUsageParserTests {
         )
         #expect(snapshot.primary?.usedPercent == 90.0)
     }
+
+    // MARK: - tailContent
+
+    @Test("tailContent reads only the tail and drops a possibly-incomplete first line")
+    func tailContentReadsTail() throws {
+        let lines = (0..<100).map { "line-\($0)-padding-padding-padding" }
+        let content = lines.joined(separator: "\n") + "\n"
+        let tmpPath = NSTemporaryDirectory() + "test-tail-\(UUID().uuidString).jsonl"
+        try content.write(toFile: tmpPath, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: tmpPath) }
+
+        let tail = try #require(CodexUsageParser.tailContent(ofFileAt: tmpPath, maxBytes: 200))
+        #expect(tail.contains("line-99-padding"))
+        #expect(!tail.contains("line-0-padding-padding-padding\n"))
+    }
+
+    @Test("tailContent reads the full file when maxBytes exceeds file size")
+    func tailContentReadsFullFileWhenSmall() throws {
+        let content = "a\nb\nc\n"
+        let tmpPath = NSTemporaryDirectory() + "test-tail-small-\(UUID().uuidString).jsonl"
+        try content.write(toFile: tmpPath, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: tmpPath) }
+
+        let tail = try #require(CodexUsageParser.tailContent(ofFileAt: tmpPath, maxBytes: 1024))
+        #expect(tail == content)
+    }
+
+    @Test("tailContent returns nil for a nonexistent file")
+    func tailContentNilForMissingFile() {
+        #expect(
+            CodexUsageParser.tailContent(
+                ofFileAt: "/tmp/nonexistent-\(UUID().uuidString).jsonl", maxBytes: 100
+            ) == nil
+        )
+    }
+
+    // MARK: - latestRolloutFile (YYYY/MM/DD 探索)
+
+    @Test("latestRolloutFile walks year/month/day directories in descending order")
+    func latestRolloutFileFindsNewestByDateDirectory() throws {
+        let root = NSTemporaryDirectory() + "codex-sessions-\(UUID().uuidString)"
+        let fm = FileManager.default
+        defer { try? fm.removeItem(atPath: root) }
+
+        let oldDir = root + "/2025/06/01"
+        try fm.createDirectory(atPath: oldDir, withIntermediateDirectories: true)
+        try "old".write(
+            toFile: oldDir + "/rollout-2025-06-01T00-00-00-aaa.jsonl", atomically: true, encoding: .utf8
+        )
+
+        let newDir = root + "/2026/07/25"
+        try fm.createDirectory(atPath: newDir, withIntermediateDirectories: true)
+        try "newer".write(
+            toFile: newDir + "/rollout-2026-07-25T02-00-00-bbb.jsonl", atomically: true, encoding: .utf8
+        )
+        try "newest".write(
+            toFile: newDir + "/rollout-2026-07-25T03-00-00-ccc.jsonl", atomically: true, encoding: .utf8
+        )
+
+        let path = try #require(CodexUsageParser.latestRolloutFile(in: root))
+        #expect(path.hasSuffix("rollout-2026-07-25T03-00-00-ccc.jsonl"))
+    }
+
+    @Test("latestRolloutFile returns nil when the sessions directory does not exist")
+    func latestRolloutFileNilForMissingDirectory() {
+        #expect(
+            CodexUsageParser.latestRolloutFile(in: "/tmp/nonexistent-sessions-\(UUID().uuidString)") == nil
+        )
+    }
+
+    // MARK: - latestSnapshot (tail read フォールバック挙動)
+
+    @Test("latestSnapshot returns nil when token_count falls outside the tail chunk")
+    func latestSnapshotFallsBackToNilWhenTokenCountOutsideTailChunk() throws {
+        let root = NSTemporaryDirectory() + "codex-sessions-\(UUID().uuidString)"
+        let fm = FileManager.default
+        defer { try? fm.removeItem(atPath: root) }
+        let dayDir = root + "/2026/07/25"
+        try fm.createDirectory(atPath: dayDir, withIntermediateDirectories: true)
+
+        let tokenCountLine = """
+        {"type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"primary":{"used_percent":50.0,"window_duration_mins":300,"resets_at":1},"secondary":null,"plan_type":"plus"}}}
+        """
+        let paddingLine = String(repeating: "x", count: 2000)
+        // token_count は先頭に置き、その後に大量の padding 行を積んで tail チャンクの外に追い出す。
+        let content = tokenCountLine + "\n"
+            + Array(repeating: paddingLine, count: 50).joined(separator: "\n") + "\n"
+        let path = dayDir + "/rollout-2026-07-25T00-00-00-zzz.jsonl"
+        try content.write(toFile: path, atomically: true, encoding: .utf8)
+
+        let snapshot = CodexUsageParser.latestSnapshot(sessionsDirectory: root, tailBytes: 500)
+        #expect(snapshot == nil)
+    }
+
+    @Test("latestSnapshot finds a token_count event within the tail chunk")
+    func latestSnapshotFindsTokenCountWithinTailChunk() throws {
+        let root = NSTemporaryDirectory() + "codex-sessions-\(UUID().uuidString)"
+        let fm = FileManager.default
+        defer { try? fm.removeItem(atPath: root) }
+        let dayDir = root + "/2026/07/25"
+        try fm.createDirectory(atPath: dayDir, withIntermediateDirectories: true)
+
+        let paddingLine = String(repeating: "x", count: 100)
+        let tokenCountLine = """
+        {"type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"primary":{"used_percent":50.0,"window_duration_mins":300,"resets_at":1},"secondary":null,"plan_type":"plus"}}}
+        """
+        let content = Array(repeating: paddingLine, count: 5).joined(separator: "\n")
+            + "\n" + tokenCountLine + "\n"
+        let path = dayDir + "/rollout-2026-07-25T00-00-00-zzz.jsonl"
+        try content.write(toFile: path, atomically: true, encoding: .utf8)
+
+        let snapshot = try #require(
+            CodexUsageParser.latestSnapshot(sessionsDirectory: root, tailBytes: 100_000)
+        )
+        #expect(snapshot.primary?.usedPercent == 50.0)
+    }
 }
