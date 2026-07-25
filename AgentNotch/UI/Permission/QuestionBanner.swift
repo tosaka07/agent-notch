@@ -2,10 +2,12 @@ import AgentNotchCore
 import Defaults
 import SwiftUI
 
-/// `AskUserQuestion` 用の回答 UI。1-4 問の質問を縦に並べ、各質問は
-/// - options（label + description のタップ可能行。multiSelect はチェック式、single はラジオ式）
-/// - Other (自由入力 TextField) を末尾に自動追加
-/// すべての質問に回答（option 選択 or Other 入力のどちらか）したら Send が有効化する。
+/// `AskUserQuestion` 用の回答 UI。1-4 問の質問を **Tab 方式** で 1 問ずつ表示する。
+/// - 表示領域は常に 1 質問分。高さは質問の内容（選択肢数・テキスト長）に応じて動的に変わる
+/// - single-select はオプションをタップすると即座に確定し、左右スライドアニメーションで次の質問へ
+/// - multiSelect はオプションをトグルし、下部の確定ボタンで次へ進む
+/// - Other（自由入力 TextField）は 1 質問分の領域内で機能し、Return または確定ボタンで次へ進む
+/// - 全ての質問に回答し終えた時点でまとめて `onAnswer` を呼ぶ（既存の一括送信仕様は変えない）
 struct QuestionBanner: View {
     let questions: [AskQuestionInfo.Question]
     var onAnswer: ([String: [String]]) -> Void
@@ -14,36 +16,79 @@ struct QuestionBanner: View {
     @State private var selections: [String: Set<String>] = [:]
     /// 質問 ID → Other の自由入力テキスト
     @State private var otherInputs: [String: String] = [:]
+    /// 現在表示中の質問インデックス
+    @State private var currentIndex: Int = 0
+    /// true: 次へ（右→左スライド）, false: 前へ（左→右スライド）
+    @State private var slideForward = true
 
     @Default(.textSize) private var textSize
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
+    private var currentQuestion: AskQuestionInfo.Question { questions[currentIndex] }
+    private var isLastQuestion: Bool { currentIndex == questions.count - 1 }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            header
+            progressHeader
 
-            ForEach(questions) { q in
-                questionSection(q)
+            ZStack {
+                questionSection(currentQuestion)
+                    .id(currentQuestion.id)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: slideForward ? .trailing : .leading).combined(with: .opacity),
+                            removal: .move(edge: slideForward ? .leading : .trailing).combined(with: .opacity)
+                        )
+                    )
             }
+            .clipped()
 
-            sendButton
+            navigationFooter
         }
         .padding(12)
         .background(Color.blue.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.3), lineWidth: 1))
+        // banner 表示直後のマウス位置による誤タップ防止（Approve/Deny と同様の意図）。
+        .armedAfter()
     }
 
     // MARK: - Sub views
 
-    private var header: some View {
+    private var progressHeader: some View {
         HStack(spacing: 6) {
+            if questions.count > 1 {
+                Button {
+                    goToPrevious()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: s(10), weight: .bold))
+                        .foregroundStyle(currentIndex > 0 ? .white.opacity(0.7) : .white.opacity(0.15))
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(currentIndex == 0)
+            }
+
             Image(systemName: "questionmark.circle.fill")
                 .foregroundStyle(.blue)
                 .font(.system(size: s(14)))
-            Text(questions.count > 1 ? "Claude is asking (\(questions.count))" : "Claude is asking")
+
+            Text("Claude is asking")
                 .font(.system(size: s(12), weight: .semibold))
                 .foregroundStyle(.white)
+
+            Spacer(minLength: 0)
+
+            if questions.count > 1 {
+                Text("\(currentIndex + 1)/\(questions.count)")
+                    .font(DSTypography.mono(s(10), weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
         }
     }
 
@@ -87,7 +132,14 @@ struct QuestionBanner: View {
     private func optionRow(questionId: String, option: AskQuestionInfo.Option, multiSelect: Bool) -> some View {
         let isSelected = (selections[questionId] ?? []).contains(option.label)
         Button {
-            toggleSelection(questionId: questionId, label: option.label, multiSelect: multiSelect)
+            if multiSelect {
+                toggleSelection(questionId: questionId, label: option.label)
+            } else {
+                // single-select: タップで即確定し、次の質問へスライド遷移。
+                selections[questionId] = [option.label]
+                otherInputs[questionId] = ""
+                advanceOrSend()
+            }
         } label: {
             HStack(alignment: .top, spacing: 7) {
                 Image(systemName: selectionIcon(multiSelect: multiSelect, selected: isSelected))
@@ -130,29 +182,37 @@ struct QuestionBanner: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: s(10)))
                 .foregroundStyle(.white)
+                .onSubmit {
+                    advanceOrSend()
+                }
         }
         .padding(.horizontal, 8).padding(.vertical, 5)
         .background(hasText ? Color.blue.opacity(0.22) : Color.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
-    private var sendButton: some View {
+    private var navigationFooter: some View {
         HStack {
             Spacer()
             Button {
-                onAnswer(collectedAnswers())
+                advanceOrSend()
             } label: {
-                Text("Send")
-                    .font(.system(size: s(10), weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 6)
-                    .background(canSend ? Color.blue.opacity(0.7) : Color.blue.opacity(0.25))
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                HStack(spacing: 4) {
+                    Text(isLastQuestion ? "Send" : "Next")
+                        .font(.system(size: s(10), weight: .semibold))
+                    if !isLastQuestion {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: s(9), weight: .semibold))
+                    }
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14).padding(.vertical, 6)
+                .background(canSend(currentQuestion) ? Color.blue.opacity(0.7) : Color.blue.opacity(0.25))
+                .clipShape(RoundedRectangle(cornerRadius: 5))
             }
             .buttonStyle(.plain)
-            .disabled(!canSend)
+            .disabled(!canSend(currentQuestion))
         }
-        .armedAfter()
     }
 
     // MARK: - State management
@@ -165,34 +225,42 @@ struct QuestionBanner: View {
         }
     }
 
-    private func toggleSelection(questionId: String, label: String, multiSelect: Bool) {
+    private func toggleSelection(questionId: String, label: String) {
         var current = selections[questionId] ?? []
-        if multiSelect {
-            if current.contains(label) {
-                current.remove(label)
-            } else {
-                current.insert(label)
-            }
+        if current.contains(label) {
+            current.remove(label)
         } else {
-            // single-select: クリックすると Other の入力はクリアして排他に
-            if current.contains(label) {
-                current.removeAll()
-            } else {
-                current = [label]
-                otherInputs[questionId] = ""
-            }
+            current.insert(label)
         }
         selections[questionId] = current
     }
 
-    /// 全ての質問で「いずれかの option が選択済み」OR「Other が入力済み」を満たしているか。
-    private var canSend: Bool {
-        for q in questions {
-            let selected = selections[q.id] ?? []
-            let other = otherInputs[q.id] ?? ""
-            if selected.isEmpty && other.isEmpty { return false }
+    /// 指定の質問が「いずれかの option が選択済み」OR「Other が入力済み」を満たしているか。
+    private func canSend(_ q: AskQuestionInfo.Question) -> Bool {
+        let selected = selections[q.id] ?? []
+        let other = (otherInputs[q.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return !selected.isEmpty || !other.isEmpty
+    }
+
+    /// 次の質問へ進む。最終問なら回答をまとめて送信する。
+    private func advanceOrSend() {
+        guard canSend(currentQuestion) else { return }
+        if isLastQuestion {
+            onAnswer(collectedAnswers())
+        } else {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                slideForward = true
+                currentIndex += 1
+            }
         }
-        return true
+    }
+
+    private func goToPrevious() {
+        guard currentIndex > 0 else { return }
+        withAnimation(.easeInOut(duration: 0.22)) {
+            slideForward = false
+            currentIndex -= 1
+        }
     }
 
     /// 送信用の answers map を構築。Other は選択肢として配列末尾に追加する。
