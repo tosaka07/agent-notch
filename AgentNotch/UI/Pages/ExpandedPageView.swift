@@ -9,7 +9,7 @@ import SwiftUI
 ///   notch 左翼に配置し、カードを即座に表示してスクロール量を最小化する。
 ///   使用量ゲージは Claude / Codex を横並びで出し（取得できた方だけ）、クリックすると
 ///   notch 全体が使用量詳細ページ（`UsagePageView`）に切り替わる。ゲージの表示形式
-///   （リング / 数字 / リング+数字）は設定から選ぶ（issue #36）。
+///   （リング / 数字）は設定から選ぶ（issue #36）。
 struct ExpandedPageView: View {
     let viewModel: NotchViewModel
     @ObservedObject var sessionManager: SessionManager
@@ -20,6 +20,8 @@ struct ExpandedPageView: View {
     @Default(.sessionGrouping) private var grouping
     @Default(.collapsedGroupIDs) private var collapsedGroupIDs
     @Default(.usageEnabled) private var usageEnabled
+    @Environment(\.permissionActions) private var permissionActions
+    @Default(.usageGaugeStyle) private var usageGaugeStyle
 
     @State private var showSortMenu = false
 
@@ -72,19 +74,19 @@ struct ExpandedPageView: View {
     // MARK: - Notch top bar (replaces header)
 
     /// 物理 notch の高さ分のスペースを取りつつ、左翼に使用量ゲージ、右翼にソート・設定
-    /// アイコンを配置する。compact モードの「左翼 = DotMatrix / 右翼 = PixelCounter」という
+    /// アイコンを配置する。compact モードの「左翼 = 状態グリフ / 右翼 = PixelCounter」という
     /// 対称構造を、展開時のトップバーでも踏襲する。
     private func notchTopBar(totalCount: Int) -> some View {
         HStack(spacing: 0) {
             // 左翼: 使用量ゲージ。Claude / Codex を横並びにし、クリックで使用量詳細ページへ。
-            // 表示形式（リング / 数字 / リング+数字）は設定で選ぶ（`Defaults[.usageGaugeStyle]`）。
+            // 表示形式（リング / 数字）は設定で選ぶ（`Defaults[.usageGaugeStyle]`）。
             if !headerUsages.isEmpty {
                 Button {
                     viewModel.showUsage()
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 14) {
                         ForEach(headerUsages, id: \.agentType) { usage in
-                            UsageGauge(usedPercent: usage.percent, agentType: usage.agentType)
+                            usageBadge(agentType: usage.agentType, percent: usage.percent)
                         }
                     }
                     .contentShape(Rectangle())
@@ -114,6 +116,28 @@ struct ExpandedPageView: View {
             .padding(.trailing, 16)
         }
         .frame(height: viewModel.physicalNotchHeight + 4)
+    }
+
+    /// 使用量バッジ。グリフ + エージェント名（+ %）を組む（モック 1b）。
+    ///
+    /// リング表示のときは形が残量を、テキストが値を語る役割分担なので % を併記する。
+    /// **数字表示のときはグリフ自体が値なので % テキストは出さない**（二重表示になる）。
+    private func usageBadge(agentType: AgentType, percent: Double?) -> some View {
+        HStack(spacing: 7) {
+            UsageGauge(usedPercent: percent, agentType: agentType)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(agentType.displayName.uppercased())
+                    .font(DSTypography.mono(s(8), weight: .semibold))
+                    .tracking(1.1)
+                    .foregroundStyle(DSColors.inkDim)
+                if usageGaugeStyle == .ring {
+                    Text(percent.map { "\(Int($0.rounded()))%" } ?? "--")
+                        .font(DSTypography.mono(s(11), weight: .semibold))
+                        .foregroundStyle(DSColors.ink.opacity(0.85))
+                        .monospacedDigit()
+                }
+            }
+        }
     }
 
     private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
@@ -287,6 +311,13 @@ struct ExpandedPageView: View {
                     } else {
                         sessionManager.markDone(session.id)
                     }
+                },
+                // 一覧から直接承認/拒否する（誤タップガードはカード側の armedAfter）。
+                approve: { toolUseId in
+                    permissionActions.approve(session.id, toolUseId)
+                },
+                deny: { toolUseId in
+                    permissionActions.deny(session.id, toolUseId, "Denied via Agent Notch")
                 }
             )
         )

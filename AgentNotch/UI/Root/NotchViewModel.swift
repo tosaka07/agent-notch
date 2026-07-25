@@ -22,11 +22,22 @@ final class NotchViewModel {
     var physicalNotchWidth: CGFloat
     var physicalNotchHeight: CGFloat
     var hasActivity: Bool = false
+    /// この画面に物理 notch があるか。
+    ///
+    /// 物理 notch がある画面では、パネル中央（notch 実寸の幅）は**物理的に隠れて見えない**。
+    /// そこに何かを描いても無駄なので、compact の中央 ticker は notch なし
+    /// （フローティングバー表示）のときだけ出す。
+    var hasPhysicalNotch: Bool
 
-    init(notchSize: CGSize = CGSize(width: 224, height: 38), initialMode: NotchMode = .compact) {
+    init(
+        notchSize: CGSize = CGSize(width: 224, height: 38),
+        initialMode: NotchMode = .compact,
+        hasPhysicalNotch: Bool = true
+    ) {
         self.physicalNotchWidth = notchSize.width
         self.physicalNotchHeight = notchSize.height
         self.mode = initialMode
+        self.hasPhysicalNotch = hasPhysicalNotch
     }
 
     private let notchCornerMargin: CGFloat = 6
