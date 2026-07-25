@@ -129,12 +129,18 @@ struct CompactPageView: View {
     /// 突然置き換わって見える（#12）。完了通知が表示されている間は swarm 表示を維持し、
     /// 通知が消えたタイミングで通常の完了表示に戻す。
     private func leftWingPattern(_ primary: UnifiedSession) -> DotPattern {
-        if primary.status == .done,
-           primary.subagentCountAtCompletion > 0,
-           notificationManager.items.contains(where: { $0.id == primary.id }) {
-            return .swarm(active: primary.subagentCountAtCompletion)
+        // 完了通知バナーは enqueue と同時に mode を `.notification` に切り替えるため
+        // （NotchEventRouter.handleSessionCompleted/handleSessionSwept）、mode を先に
+        // ガードすることで compact モードの body 再評価が notificationManager.items の
+        // 変化に巻き込まれないようにする。
+        guard viewModel.mode == .notification,
+              primary.status == .done,
+              primary.subagentCountAtCompletion > 0,
+              notificationManager.items.contains(where: { $0.id == primary.id })
+        else {
+            return primary.dotPattern
         }
-        return primary.dotPattern
+        return .swarm(active: primary.subagentCountAtCompletion)
     }
 
     private func activeToolName(_ sessions: [UnifiedSession]) -> String? {

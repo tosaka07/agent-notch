@@ -240,6 +240,12 @@ struct SessionCardView: View {
     /// task/subagent 各チップの subject/name に許容する最大幅。
     /// 幅不足時に HStack 全体が潰れて隣接チップと連結して見える(#11)のを防ぐため、
     /// 可変長パートだけをここで切り詰め、他のパートは fixedSize で保護する。
+    ///
+    /// Issue #27: `.layoutPriority` ベースの段階的縮退への置き換えを検討したが、
+    /// layoutPriority は縮小の優先順位を決めるだけで「縮めない」保証はなく、
+    /// 固定長パーツ（グリフ/+N/経過時間）を確実に保護しつつ可変長パーツだけを
+    /// 決まった幅で truncate する現状の二層構成より視覚的な再現性が弱まる。
+    /// 見た目の悪化リスクの方が大きいため現状維持とした。
     private let chipLabelMaxWidth: CGFloat = 70
 
     @ViewBuilder
