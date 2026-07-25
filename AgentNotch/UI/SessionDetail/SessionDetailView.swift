@@ -5,6 +5,7 @@ import SwiftUI
 struct SessionDetailView: View {
     let session: UnifiedSession
     @ObservedObject var sessionManager: SessionManager
+    @ObservedObject var usageCoordinator: UsageCoordinator
     var onBack: () -> Void
     /// TEAM セクションの行タップで別セッションの detail へ遷移するためのコールバック。
     var onShowSession: (String) -> Void = { _ in }
@@ -14,8 +15,10 @@ struct SessionDetailView: View {
     @State private var isAtBottom = true
     @State private var isSubagentsExpanded: Bool
     @State private var isTeamExpanded: Bool
+    @State private var isUsageExpanded = false
     @Default(.textSize) private var textSize
     @Environment(\.permissionActions) private var permissionActions
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
     private var scale: CGFloat { textSize.scale }
@@ -23,11 +26,13 @@ struct SessionDetailView: View {
     init(
         session: UnifiedSession,
         sessionManager: SessionManager,
+        usageCoordinator: UsageCoordinator,
         onBack: @escaping () -> Void,
         onShowSession: @escaping (String) -> Void = { _ in }
     ) {
         self.session = session
         self.sessionManager = sessionManager
+        self.usageCoordinator = usageCoordinator
         self.onBack = onBack
         self.onShowSession = onShowSession
         // デフォルトは実行中がある場合のみ展開する。
@@ -38,6 +43,12 @@ struct SessionDetailView: View {
         } else {
             _isTeamExpanded = State(initialValue: false)
         }
+    }
+
+    /// 右下の常時ゲージに出す「今どれくらいか」の一点情報。
+    /// Gemini CLI / Custom や、未取得（nil snapshot）の間は表示しない。
+    private var primaryUsagePercent: Double? {
+        usageCoordinator.snapshot?.primaryUsedPercent(for: session.agentType)
     }
 
     var body: some View {
@@ -96,6 +107,17 @@ struct SessionDetailView: View {
             }
 
             chatTabContent
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if let percent = primaryUsagePercent {
+                UsageGauge(usedPercent: percent, size: s(24))
+                    .padding(6)
+                    .background(
+                        reduceTransparency ? AnyShapeStyle(.thickMaterial) : AnyShapeStyle(.regularMaterial),
+                        in: Circle()
+                    )
+                    .padding(10)
+            }
         }
         .onAppear { loadChatAsync() }
     }
@@ -269,7 +291,7 @@ struct SessionDetailView: View {
 
     @ViewBuilder
     private var collapsibleSections: some View {
-        if !session.subagents.isEmpty || session.teamName != nil {
+        if !session.subagents.isEmpty || session.teamName != nil || primaryUsagePercent != nil {
             VStack(alignment: .leading, spacing: 4) {
                 if !session.subagents.isEmpty {
                     collapsibleSection(
@@ -295,9 +317,38 @@ struct SessionDetailView: View {
                         )
                     }
                 }
+                // 右下の UsageGauge は「今どれくらいか」の一点情報のみ。
+                // 週次・モデル別などの内訳はここを開いたときだけ見せる。
+                if primaryUsagePercent != nil {
+                    collapsibleSection(
+                        title: "USAGE",
+                        count: usageWindowCount,
+                        isExpanded: $isUsageExpanded
+                    ) {
+                        UsageDetailSection(
+                            agentType: session.agentType,
+                            snapshot: usageCoordinator.snapshot,
+                            scale: scale
+                        )
+                    }
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 6)
+        }
+    }
+
+    /// USAGE セクションの件数バッジ（表示するウィンドウの数）。
+    private var usageWindowCount: Int {
+        switch session.agentType {
+        case .claudeCode:
+            guard let claude = usageCoordinator.snapshot?.claude else { return 0 }
+            return [claude.session, claude.weekAllModels, claude.weekModel].compactMap { $0 }.count
+        case .codex:
+            guard let codex = usageCoordinator.snapshot?.codex else { return 0 }
+            return [codex.primary, codex.secondary].compactMap { $0 }.count
+        case .geminiCLI, .custom:
+            return 0
         }
     }
 

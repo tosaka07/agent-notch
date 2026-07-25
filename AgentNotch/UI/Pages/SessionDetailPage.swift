@@ -7,12 +7,14 @@ struct SessionDetailPage: View {
     let sessionId: String
     let viewModel: NotchViewModel
     @ObservedObject var sessionManager: SessionManager
+    @ObservedObject var usageCoordinator: UsageCoordinator
 
     var body: some View {
         if let session = sessionManager.session(for: sessionId) {
             SessionDetailView(
                 session: session,
                 sessionManager: sessionManager,
+                usageCoordinator: usageCoordinator,
                 onBack: { viewModel.backToList() },
                 onShowSession: { id in viewModel.showSession(id) }
             )
