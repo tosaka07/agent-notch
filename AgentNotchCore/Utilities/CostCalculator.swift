@@ -170,15 +170,19 @@ public enum CostCalculator {
         ) ?? 0
     }
 
+    /// 金額の表示形式。
+    ///
+    /// 桁区切りは標準の `FormatStyle.currency` に任せる（自前の `String(format:)` では
+    /// カンマが入らない）。**ロケールは en_US に固定する**: 単価テーブルが USD 建てなので、
+    /// 実行環境のロケールによって "US$" と表示されたり小数の扱いが変わるのを避ける。
+    ///
+    /// 3 桁以上は小数を落として桁を稼ぐ（notch の狭い幅で読めるように）。
     public static func formatCost(_ cost: Double) -> String {
-        if cost == 0 {
-            return "$0.00"
-        } else if cost < 0.01 {
-            return "<$0.01"
-        } else if cost >= 100 {
-            return String(format: "$%.0f", cost)
-        } else {
-            return String(format: "$%.2f", cost)
-        }
+        if cost > 0, cost < 0.01 { return "<$0.01" }
+        return cost.formatted(
+            .currency(code: "USD")
+                .precision(.fractionLength(cost >= 100 ? 0 : 2))
+                .locale(Locale(identifier: "en_US"))
+        )
     }
 }
