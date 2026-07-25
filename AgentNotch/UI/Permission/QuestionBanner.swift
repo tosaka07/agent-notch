@@ -10,7 +10,13 @@ import SwiftUI
 /// - 全ての質問に回答し終えた時点でまとめて `onAnswer` を呼ぶ（既存の一括送信仕様は変えない）
 struct QuestionBanner: View {
     let questions: [AskQuestionInfo.Question]
+    /// hook 側の応答待ちが切れる予測時刻。残り時間表示と、ローカルでの失効判定に使う。
+    var expiresAt: Date = .distantFuture
+    /// 応答経路の失効が確定した（socket 側で pending 破棄済み）。
+    var isExpired: Bool = false
     var onAnswer: ([String: [String]]) -> Void
+    /// 失効バナーを閉じる。
+    var onDismiss: () -> Void = {}
 
     /// 質問 ID (= question text) → 選択済み label のセット（multiSelect は複数、single は 0 or 1）
     @State private var selections: [String: Set<String>] = [:]
@@ -28,34 +34,78 @@ struct QuestionBanner: View {
     private var isLastQuestion: Bool { currentIndex == questions.count - 1 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            progressHeader
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let expired = isExpired || context.date >= expiresAt
+            VStack(alignment: .leading, spacing: 10) {
+                if expired {
+                    expiredSection
+                } else {
+                    progressHeader(now: context.date)
 
-            ZStack {
-                questionSection(currentQuestion)
-                    .id(currentQuestion.id)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: slideForward ? .trailing : .leading).combined(with: .opacity),
-                            removal: .move(edge: slideForward ? .leading : .trailing).combined(with: .opacity)
-                        )
-                    )
+                    ZStack {
+                        questionSection(currentQuestion)
+                            .id(currentQuestion.id)
+                            .transition(
+                                .asymmetric(
+                                    insertion: .move(edge: slideForward ? .trailing : .leading).combined(with: .opacity),
+                                    removal: .move(edge: slideForward ? .leading : .trailing).combined(with: .opacity)
+                                )
+                            )
+                    }
+                    .clipped()
+
+                    navigationFooter
+                }
             }
-            .clipped()
-
-            navigationFooter
+            .padding(12)
+            .background(expired ? Color.orange.opacity(0.08) : Color.blue.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(expired ? Color.orange.opacity(0.3) : Color.blue.opacity(0.3), lineWidth: 1)
+            )
         }
-        .padding(12)
-        .background(Color.blue.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.blue.opacity(0.3), lineWidth: 1))
         // banner 表示直後のマウス位置による誤タップ防止（Approve/Deny と同様の意図）。
         .armedAfter()
     }
 
+    /// 応答経路が失効した後の表示。回答はもう届かないため、選択肢の代わりに
+    /// ターミナルでの回答を促す（issue #28: 無言失敗の可視化）。
+    private var expiredSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.badge.exclamationmark.fill")
+                    .foregroundStyle(.orange)
+                    .font(.system(size: s(14)))
+                Text("Response window expired")
+                    .font(.system(size: s(12), weight: .semibold))
+                    .foregroundStyle(.white)
+                Spacer(minLength: 0)
+            }
+            Text("This answer can no longer be delivered. Reply directly in the terminal.")
+                .font(.system(size: s(10)))
+                .foregroundStyle(.white.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button {
+                    onDismiss()
+                } label: {
+                    Text("Dismiss")
+                        .font(.system(size: s(10), weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 6)
+                        .background(Color.white.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
     // MARK: - Sub views
 
-    private var progressHeader: some View {
+    private func progressHeader(now: Date) -> some View {
         HStack(spacing: 6) {
             if questions.count > 1 {
                 Button {
@@ -80,6 +130,17 @@ struct QuestionBanner: View {
                 .foregroundStyle(.white)
 
             Spacer(minLength: 0)
+
+            // 応答期限が近づいたら残り秒数を出す（hook が pass-through に倒れるまでの時間）。
+            let remaining = expiresAt.timeIntervalSince(now)
+            if remaining < 30, remaining > 0 {
+                Text("\(Int(remaining))s")
+                    .font(DSTypography.mono(s(10), weight: .semibold))
+                    .foregroundStyle(.orange.opacity(0.9))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
 
             if questions.count > 1 {
                 Text("\(currentIndex + 1)/\(questions.count)")

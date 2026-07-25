@@ -64,21 +64,36 @@ struct SessionDetailView: View {
                     permission: perm,
                     onApprove: {
                         permissionActions.approve(session.id, perm.toolUseId)
-                        navigateAfterResolving()
+                        navigateAfterResolvingIfCleared()
                     },
                     onDeny: {
                         permissionActions.deny(session.id, perm.toolUseId, "Denied via Agent Notch")
-                        navigateAfterResolving()
+                        navigateAfterResolvingIfCleared()
+                    },
+                    onDismiss: {
+                        permissionActions.dismissExpired(session.id, perm.toolUseId)
+                        navigateAfterResolvingIfCleared()
                     }
                 )
                 .padding(.horizontal, 14).padding(.top, 8)
             }
 
             if let q = session.pendingQuestion {
-                QuestionBanner(questions: q.questions) { answers in
-                    permissionActions.answerQuestion(session.id, q.toolUseId, answers)
-                    navigateAfterResolving()
-                }
+                QuestionBanner(
+                    questions: q.questions,
+                    expiresAt: q.expiresAt,
+                    isExpired: q.isExpired,
+                    onAnswer: { answers in
+                        permissionActions.answerQuestion(session.id, q.toolUseId, answers)
+                        // 応答経路が失効していた場合は pendingQuestion が失効表示のまま残る。
+                        // その場合はこの画面に留まり、失効バナーをユーザーに見せる（issue #28）。
+                        navigateAfterResolvingIfCleared()
+                    },
+                    onDismiss: {
+                        permissionActions.dismissExpired(session.id, q.toolUseId)
+                        navigateAfterResolvingIfCleared()
+                    }
+                )
                 // toolUseId で View identity を切る。同一セッションで pendingQuestion が
                 // 別の質問セットに差し替わったとき、currentIndex 等の @State を
                 // 引き継いでしまうと questions[currentIndex] が index out of range に
@@ -406,6 +421,14 @@ struct SessionDetailView: View {
     }
 
     // MARK: - Navigation
+
+    /// 応答/dismiss の結果、このセッションの pending が実際に解消された場合のみ遷移する。
+    /// 応答が届けられず失効表示に切り替わった場合はこの画面に留まる（issue #28）。
+    private func navigateAfterResolvingIfCleared() {
+        let stillPending = session.pendingQuestion != nil || !session.pendingPermissions.isEmpty
+        guard !stillPending else { return }
+        navigateAfterResolving()
+    }
 
     /// permission / question に応答した直後の遷移。
     /// 他セッションに未回答の question / permission が残っていれば連続でそこへ遷移し、

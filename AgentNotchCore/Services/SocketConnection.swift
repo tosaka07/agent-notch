@@ -61,16 +61,26 @@ public final class SocketConnection: Sendable {
         connection.cancel()
     }
 
-    private func receiveMessage() {
-        connection.receive(minimumIncompleteLength: 4, maximumLength: 65536) {
+    private func receiveMessage(buffer: Data = Data()) {
+        // 1 メッセージが 1 回の receive で届くとは限らない（大きな tool_input — 例えば
+        // Write の全文や plan を含む PermissionRequest — は 64KB を超え、複数チャンクに
+        // 分かれて届く）。decode が「まだ足りない」（nil）を返す間はバッファに積み増して
+        // receive を繰り返す。以前はここでリトライせず、分割されたメッセージが黙って
+        // 破棄されて hook が recv timeout まで待ちぼうけになっていた。
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) {
             [weak self] content, _, isComplete, error in
-            guard let self, let data = content else {
-                self?.connection.cancel()
+            guard let self else { return }
+
+            var accumulated = buffer
+            if let content { accumulated.append(content) }
+
+            guard error == nil else {
+                self.connection.cancel()
                 return
             }
 
             do {
-                if let result = try SocketProtocol.decode(data) {
+                if let result = try SocketProtocol.decode(accumulated) {
                     let response = self.onMessage(result.message, self.connection)
                     if let response {
                         // Immediate response — send and close
@@ -83,6 +93,11 @@ public final class SocketConnection: Sendable {
                         )
                     }
                     // nil response = deferred (connection stays open for later response)
+                } else if isComplete {
+                    // 相手が閉じたのにメッセージが完結していない — 不完全な送信として破棄。
+                    self.connection.cancel()
+                } else {
+                    receiveMessage(buffer: accumulated)
                 }
             } catch {
                 self.connection.cancel()
