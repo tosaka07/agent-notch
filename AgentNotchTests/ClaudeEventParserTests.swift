@@ -115,6 +115,24 @@ struct ClaudeEventParserTests {
         #expect(first.toolUseId != second.toolUseId)
     }
 
+    @Test("PermissionRequest with an empty tool_use_id also falls back to a unique id (issue #28)")
+    func permissionRequestEmptyToolUseIdFallsBack() {
+        // tool_use_id が「空文字で存在する」ケースも欠落と同様に扱う。
+        // 空文字を pending の単一キーとして使うと全リクエストが衝突するため。
+        let json: [String: Any] = [
+            "hook_event_name": "PermissionRequest",
+            "session_id": "sess-002",
+            "tool_name": "Bash",
+            "tool_use_id": "",
+            "tool_input": ["command": "ls"],
+        ]
+        guard case let .permissionRequested(info) = ClaudeEventParser.parse(json) else {
+            Issue.record("Expected permissionRequested")
+            return
+        }
+        #expect(!info.toolUseId.isEmpty)
+    }
+
     @Test("PermissionRequest AskUserQuestion without tool_use_id generates a non-empty id")
     func askQuestionViaPermissionRequestGeneratesToolUseId() {
         let json: [String: Any] = [
