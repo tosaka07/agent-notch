@@ -23,7 +23,11 @@ struct PixelCounter: View {
     }
 
     static func cells(value: Int, total: Int, valueColor: Color, totalColor: Color) -> [[DotCell]] {
-        var cells = DotBitmap.emptyCellGrid()
+        // 旧 DotBitmap（グリフ言語への移行で削除）に依存しないよう自前で空グリッドを作る。
+        var cells = Array(
+            repeating: Array(repeating: DotCell.off, count: PixelGrid.dimension),
+            count: PixelGrid.dimension
+        )
         drawTwoDigit(max(0, min(99, value)), rowOffset: 1, color: valueColor, into: &cells)
         drawTwoDigit(max(0, min(99, total)), rowOffset: 7, color: totalColor, into: &cells)
         return cells

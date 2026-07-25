@@ -83,6 +83,7 @@ final class DisplayCoordinator {
         let contentView = NotchRootView(
             sessionManager: sessionManager,
             notchSize: screen.notchSize,
+            hasPhysicalNotch: screen.hasPhysicalNotch,
             permissionActions: permissionActions
         )
         controller.show(contentView: contentView)

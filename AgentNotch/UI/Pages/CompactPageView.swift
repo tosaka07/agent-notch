@@ -3,15 +3,15 @@ import SwiftUI
 
 /// `compact` / `notification` モードの UI。
 ///
-/// # 情報の居場所（Design System Phase 1）
-/// - Left wing: `DotMatrix` — 最優先セッションの状態を 5×7 bitmap で表現
-/// - Center: 現在のツール名 ticker（SF Mono）
+/// # 情報の居場所
+/// - Left wing: `StateGlyphView` — 最優先セッションの状態を 13×13 のドットグリフで表現
+/// - Center: **物理 notch がある画面では隠れて見えない**ので何も置かない。
+///   notch なし（フローティングバー表示）のときだけツール名 ticker を出す
 /// - Right wing: `PixelCounter` — running / total
 ///
 /// # 設計原則
-/// - 色が消えても形で状態が読める（DotPattern の違い）
-/// - 通知スタック表示中は DotMatrix を白単色 (`useSignalColor = false`) に落とし、
-///   通知側の色（amber / green 等）を主役にする
+/// - 翼に置けるのはグリフだけ（テキストは置かない）
+/// - 色が消えても形で状態が読める（グリフの図柄の違い）
 struct CompactPageView: View {
     let viewModel: NotchViewModel
     let notificationManager: NotchNotificationManager
@@ -33,19 +33,21 @@ struct CompactPageView: View {
             HStack(spacing: 0) {
                 Color.clear.frame(width: edgeMargin)
 
-                // Left wing: DotMatrix
+                // Left wing: 状態グリフ
                 ZStack {
                     if let primary {
-                        DotMatrix(
-                            pattern: leftWingPattern(primary),
+                        StateGlyphView(
+                            state: leftWingState(primary),
+                            size: min(wingInner, notchHeight - 12),
                             animationStartTime: primary.doneAt
                         )
                     }
                 }
                 .frame(width: wingInner, height: notchHeight)
 
-                // Center: tool name / subagent ticker
+                // Center: 物理 notch と重なる領域。notch がある画面では見えないので出さない。
                 ZStack {
+                    if !viewModel.hasPhysicalNotch {
                     // status は tool イベントで頻繁に切り替わるため、subagent の実行有無で判定する
                     if let primary, primary.runningSubagentCount > 0 {
                         TimelineView(.periodic(from: .now, by: 2.5)) { context in
@@ -63,6 +65,7 @@ struct CompactPageView: View {
                             font: DSTypography.mono(10, weight: .medium),
                             color: DSColors.inkDim
                         )
+                    }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: notchHeight)
@@ -121,14 +124,14 @@ struct CompactPageView: View {
         }
     }
 
-    /// 左翼 DotMatrix に表示するパターン。
+    /// 左翼に表示する状態グリフ。
     ///
     /// subagent 実行中のセッションが完了すると `dotPattern` は即座に `.complete`（チェックマーク）を
     /// 返すが、完了直後は完了通知バナーがまさに表示されるタイミングであり、
     /// 直前まで表示していた swarm（subagent 並行実行）表示が完了チェックマークに
     /// 突然置き換わって見える（#12）。完了通知が表示されている間は swarm 表示を維持し、
     /// 通知が消えたタイミングで通常の完了表示に戻す。
-    private func leftWingPattern(_ primary: UnifiedSession) -> DotPattern {
+    private func leftWingState(_ primary: UnifiedSession) -> Glyph.State {
         // 完了通知バナーは enqueue と同時に mode を `.notification` に切り替えるため
         // （NotchEventRouter.handleSessionCompleted/handleSessionSwept）、mode を先に
         // ガードすることで compact モードの body 再評価が notificationManager.items の
@@ -138,7 +141,7 @@ struct CompactPageView: View {
               primary.subagentCountAtCompletion > 0,
               notificationManager.items.contains(where: { $0.id == primary.id })
         else {
-            return primary.dotPattern
+            return primary.glyphState
         }
         return .swarm(active: primary.subagentCountAtCompletion)
     }

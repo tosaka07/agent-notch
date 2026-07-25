@@ -25,10 +25,15 @@ struct NotchRootView: View {
     init(
         sessionManager: SessionManager,
         notchSize: CGSize = CGSize(width: 224, height: 38),
+        hasPhysicalNotch: Bool = true,
         initialMode: NotchMode = .compact,
         permissionActions: PermissionActions = PermissionActions()
     ) {
-        self._viewModel = State(initialValue: NotchViewModel(notchSize: notchSize, initialMode: initialMode))
+        self._viewModel = State(initialValue: NotchViewModel(
+            notchSize: notchSize,
+            initialMode: initialMode,
+            hasPhysicalNotch: hasPhysicalNotch
+        ))
         self.sessionManager = sessionManager
         self.permissionActions = permissionActions
     }

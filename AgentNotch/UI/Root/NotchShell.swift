@@ -6,6 +6,8 @@ struct NotchShell: ViewModifier {
     let viewModel: NotchViewModel
     let glow: CompletionGlowController
 
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
     private var currentShape: NotchShape {
         NotchShape(
             topCornerRadius: viewModel.topCornerRadius,
@@ -13,12 +15,27 @@ struct NotchShell: ViewModifier {
         )
     }
 
+    /// パネルの背景。
+    ///
+    /// compact / notification は notch の延長なので**不透明な黒**（物理 notch と地続きに見せる）。
+    /// 展開パネルは Apple の material を借りて半透明 + ブラーにする（モック 1b/1d の
+    /// `rgba(20,20,22,.94)` + `backdrop-filter: blur(34px) saturate(160%)` に相当）。
+    /// ドットの視認性を保つため黒を強めに重ね、Reduce Transparency 時は不透明に落とす。
+    @ViewBuilder
+    private func panelBackground(isExpanded: Bool) -> some View {
+        if isExpanded, !reduceTransparency {
+            Color.black.opacity(0.82).background(.ultraThinMaterial)
+        } else {
+            Color.black
+        }
+    }
+
     func body(content: Content) -> some View {
         let isExpanded = viewModel.mode.isFullPanel
 
         content
             .frame(width: viewModel.notchWidth, height: viewModel.notchHeight)
-            .background(.black)
+            .background(panelBackground(isExpanded: isExpanded))
             .clipShape(currentShape)
             .overlay(
                 CompletionFlare(

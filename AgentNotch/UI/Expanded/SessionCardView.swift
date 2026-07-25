@@ -2,29 +2,36 @@ import AgentNotchCore
 import Defaults
 import SwiftUI
 
-/// SessionCardView の 5 種のコールバックを集約。初期値は全て no-op。
+/// SessionCardView のコールバックを集約。初期値は全て no-op。
 struct SessionCardActions {
     var tap: () -> Void = {}
     var remove: () -> Void = {}
     var togglePin: () -> Void = {}
     var toggleMute: () -> Void = {}
     var toggleDone: () -> Void = {}
+    /// 承認待ちを一覧から直接承認する。
+    var approve: (String) -> Void = { _ in }
+    /// 承認待ちを一覧から直接拒否する。
+    var deny: (String) -> Void = { _ in }
 }
 
-/// セッション一覧の 1 行。
+/// セッション一覧の 1 行（Claude Design モック 1b）。
 ///
-/// # レイアウト（3 行 + task）
+/// # レイアウト
 /// ```
-/// [dot] repo · branch                    2m [app] [⋯]
-///       > fixing auth bug in login flow
-///       Edit src/auth.swift ── summary
-///       □ Add validation  ■ Fix endpoint  ▪ Write tests
+/// ┌──────────────────────────────────────────────────────┐
+/// │ [glyph] tapple-web  feat/ios-onboarding  [PLAN]   92s │
+/// │   C     承認待ち — Bash rm -rf .next/cache   [承認][拒否]│
+/// │         ◧◧◧◨ 2/4 TASKS · 18.2K TOK · $0.42            │
+/// └──────────────────────────────────────────────────────┘
 /// ```
+/// - 左列: 状態グリフ（13×13）+ エージェント 1 文字。**状態を持つのは左列のドットだけ**
+/// - 中列: repo/branch/バッジ → 活動テキスト → グリフ列 + メタ値
+/// - 右列: 残り時間 or 相対時刻 + オプションメニュー、承認待ちなら承認/拒否ボタン
 ///
-/// - 行 1: identity (repo · branch) + time + jump icon + menu
-/// - 行 2: 目的 (firstUserPrompt、fallback: sessionTitle)
-/// - 行 3: 現在の activity (tool + summary、状態に応じて変化)
-/// - 行 4: task 一覧 (0 件なら非表示)
+/// # 書体の使い分け
+/// 構造を語るテキスト（repo 名・活動）は native、機械が出す値（branch・トークン・時刻）は
+/// mono。モックがこの使い分けをしているので踏襲する。
 struct SessionCardView: View {
     let session: UnifiedSession
     var userState: SessionUserState = .empty
@@ -35,73 +42,91 @@ struct SessionCardView: View {
     @Default(.cardPromptSource) private var promptSource
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
-    /// 左カラムの DotMatrix サイズ。一覧の縦密度を上げるため 48px から圧縮。
-    private let dotMatrixSize: CGFloat = 36
+    /// 左列の状態グリフのサイズ。
+    private let glyphSize: CGFloat = 26
+
+    /// 承認待ちで、かつ一覧から応答できる状態か。
+    private var pendingPermission: PermissionRequest? {
+        session.pendingPermissions.first { $0.canRespond }
+    }
+
+    private var isAlert: Bool {
+        session.status == .permissionWaiting || session.pendingQuestion != nil
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            // Left: DotMatrix + meta labels
-            VStack(spacing: 2) {
-                DotMatrix(
-                    pattern: session.dotPattern,
-                    cellSize: 3.2 * dotMatrixSize / 48,
-                    dotFillRatio: 0.5,
-                    animationStartTime: session.doneAt
-                )
-                .frame(width: dotMatrixSize, height: dotMatrixSize)
-
-                if let model = session.model {
-                    Text(shortModel(model))
-                        .font(DSTypography.mono(s(7)))
-                        .foregroundStyle(DSColors.inkMute)
-                        .lineLimit(1)
-                }
-
-                Text(session.agentType.displayName.uppercased())
-                    .font(DSTypography.mono(s(6), weight: .medium))
-                    .tracking(0.3)
-                    .foregroundStyle(session.agentType.color.opacity(0.5))
-
-                if session.permissionMode == .plan {
-                    Text("PLAN")
-                        .font(DSTypography.mono(s(6), weight: .semibold))
-                        .tracking(0.3)
-                        .foregroundStyle(DSColors.signalPlan.opacity(0.85))
-                }
-            }
-            .frame(width: dotMatrixSize)
-
-            // Middle: info rows
-            VStack(alignment: .leading, spacing: 2) {
-                identityRow
-                purposeRow
-                activityRow
-                subagentRow
-                taskRow
-            }
-
-            // Right: action column (menu + app icon)
-            actionColumn
+        HStack(alignment: .top, spacing: 12) {
+            leftColumn
+            middleColumn
+            rightColumn
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color(red: 0x0C / 255.0, green: 0x13 / 255.0, blue: 0x12 / 255.0))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .opacity(isUserDone ? 0.5 : 1.0)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(cardBorder, lineWidth: 0.5)
+        )
+        .opacity(isUserDone ? 0.72 : 1.0)
         .contentShape(Rectangle())
         .onTapGesture { actions.tap() }
     }
 
-    // MARK: - Row 1: Identity
+    /// 割り込み中は少し明るく、完了・ユーザー既読は沈める（モックの .055 / .035 / .02）。
+    private var cardBackground: Color {
+        if isAlert { return DSColors.ink.opacity(0.055) }
+        if isUserDone || session.status == .done { return DSColors.ink.opacity(0.02) }
+        return DSColors.ink.opacity(0.035)
+    }
 
-    private let metaFont: CGFloat = 9
+    private var cardBorder: Color {
+        guard isAlert else { return .clear }
+        return session.pendingPermissions.first?.isPlanReview == true
+            ? DSColors.signalPlan.opacity(0.28)
+            : DSColors.signalAlert.opacity(0.28)
+    }
+
+    // MARK: - Left column
+
+    private var leftColumn: some View {
+        VStack(spacing: 6) {
+            StateGlyphView(
+                state: session.glyphState,
+                size: glyphSize,
+                animationStartTime: session.doneAt
+            )
+            Text(session.agentType.glyphLetter)
+                .font(DSTypography.mono(s(7), weight: .semibold))
+                .tracking(0.7)
+                .foregroundStyle(agentLetterColor)
+        }
+        .frame(width: glyphSize)
+    }
+
+    private var agentLetterColor: Color {
+        if isAlert { return DSColors.signalAlert }
+        if session.status == .done || isUserDone { return DSColors.inkMute }
+        return DSColors.inkDim
+    }
+
+    // MARK: - Middle column
+
+    private var middleColumn: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            identityRow
+            activityRow
+            metaRow
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     private var identityRow: some View {
-        HStack(alignment: .lastTextBaseline, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
             if userState.pinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: s(7)))
-                    .foregroundStyle(.yellow.opacity(0.7))
+                    .foregroundStyle(DSColors.signalAlert.opacity(0.7))
                     .rotationEffect(.degrees(45))
             }
             if userState.muted {
@@ -110,256 +135,318 @@ struct SessionCardView: View {
                     .foregroundStyle(DSColors.inkMute)
             }
 
-            if session.teamName != nil {
-                Text((session.teammateName ?? "LEAD").uppercased())
-                    .font(DSTypography.mono(s(metaFont), weight: .semibold))
-                    .foregroundStyle(DSColors.signalThinking.opacity(0.8))
-                Text("·")
-                    .font(DSTypography.mono(s(metaFont)))
-                    .foregroundStyle(DSColors.inkMute)
-            }
-
             Text(repoDisplayName)
-                .font(DSTypography.mono(s(10), weight: .medium))
-                .foregroundStyle(DSColors.ink)
+                .font(DSTypography.Native.callout(textSize.scale, weight: .semibold))
+                .foregroundStyle(session.status == .done || isUserDone ? DSColors.ink.opacity(0.75) : DSColors.ink)
                 .lineLimit(1)
 
             if let branch = session.gitBranch {
-                let isWorktree = session.worktreeName != nil
-                Text("·")
-                    .font(DSTypography.mono(s(metaFont)))
-                    .foregroundStyle(DSColors.inkMute)
                 Text(branch)
-                    .font(DSTypography.mono(s(metaFont)))
-                    .foregroundStyle(isWorktree ? .cyan.opacity(0.5) : DSColors.inkDim)
+                    .font(DSTypography.mono(s(10)))
+                    .foregroundStyle(session.worktreeName != nil ? DSColors.signalThinking.opacity(0.5) : DSColors.inkDim)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
 
-            Spacer()
+            badges
 
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(RelativeTimeFormatter.format(since: session.lastActivityAt, relativeTo: context.date))
-                    .font(DSTypography.mono(s(metaFont)))
-                    .foregroundStyle(DSColors.inkMute)
-            }
+            Spacer(minLength: 0)
         }
     }
 
-    // MARK: - Row 2: Purpose
-
+    /// PLAN / TEAM / PIN のバッジ。枠線 or 塗りの小さなチップで出す。
     @ViewBuilder
-    private var purposeRow: some View {
-        let prompt: String? = switch promptSource {
+    private var badges: some View {
+        if session.permissionMode == .plan {
+            badge("PLAN", color: DSColors.signalPlan, bordered: true)
+        }
+        if let team = session.teamName {
+            badge("TEAM · \(shortTeamName(team))", color: DSColors.inkDim, bordered: false)
+        }
+        if userState.pinned {
+            badge("PIN", color: DSColors.inkMute, bordered: false)
+        }
+    }
+
+    private func badge(_ text: String, color: Color, bordered: Bool) -> some View {
+        Text(text)
+            .font(DSTypography.mono(s(8), weight: .semibold))
+            .tracking(0.7)
+            .foregroundStyle(color)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(bordered ? Color.clear : DSColors.ink.opacity(0.09))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(bordered ? color.opacity(0.5) : .clear, lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .fixedSize()
+    }
+
+    /// いま何をしているか。1 行で言い切る（モックは native フォントの 1 行）。
+    private var activityRow: some View {
+        Text(activityText)
+            .font(DSTypography.Native.subheadline(textSize.scale))
+            .foregroundStyle(activityColor)
+            .lineLimit(1)
+            .truncationMode(.tail)
+    }
+
+    private var activityText: String {
+        if let perm = session.pendingPermissions.first {
+            let value = perm.toolInput.values.first ?? ""
+            let prefix = perm.isPlanReview ? "plan の承認待ち" : "承認待ち"
+            return value.isEmpty ? "\(prefix) — \(perm.toolName)" : "\(prefix) — \(perm.toolName) \(value)"
+        }
+        if session.pendingQuestion != nil { return "質問に回答待ち" }
+        if session.status == .error { return "エラー — 応答が中断されました" }
+        if session.runningSubagentCount > 0 {
+            let names = session.subagents.filter { $0.status == .running }.map(\.agentType)
+            return "subagent ×\(session.runningSubagentCount) 実行中 — \(names.prefix(3).joined(separator: ", "))"
+        }
+        if let tool = session.currentTool, tool.status == .running {
+            return tool.summary.isEmpty ? tool.name : "\(tool.name) — \(tool.summary)"
+        }
+        if session.status == .done {
+            if let msg = session.lastAssistantMessage, !msg.isEmpty {
+                return flatten(msg)
+            }
+            return "完了"
+        }
+        if let prompt = promptText, !prompt.isEmpty { return flatten(prompt) }
+        return session.status.label
+    }
+
+    private var activityColor: Color {
+        if isAlert { return DSColors.ink.opacity(0.75) }
+        if session.status == .error { return DSColors.signalError.opacity(0.85) }
+        if session.status == .done || isUserDone { return DSColors.inkDim }
+        return DSColors.ink.opacity(0.55)
+    }
+
+    private var promptText: String? {
+        switch promptSource {
         case .firstUserMessage: session.firstUserPrompt ?? session.sessionTitle
         case .lastUserMessage: session.lastUserPrompt ?? session.firstUserPrompt ?? session.sessionTitle
         }
-        if let prompt, !prompt.isEmpty {
-            let flat = prompt.replacingOccurrences(of: "\n", with: " ")
-                .replacingOccurrences(of: "\r", with: " ")
-                .replacingOccurrences(of: "  ", with: " ")
-            HStack(spacing: 4) {
-                Text(">")
-                    .foregroundStyle(DSColors.inkMute)
-                Text(flat)
-                    .foregroundStyle(DSColors.inkDim)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .font(DSTypography.mono(s(9)))
-        }
     }
 
-    // MARK: - Row 3: Activity
-
-    @ViewBuilder
-    private var activityRow: some View {
-        HStack(spacing: 4) {
-            if let tool = session.currentTool, tool.status == .running {
-                Text(tool.name)
-                    .font(DSTypography.mono(s(9), weight: .medium))
-                    .foregroundStyle(session.status.dotPattern.signalColor.opacity(0.9))
-                Text(tool.summary)
-                    .font(DSTypography.mono(s(9)))
-                    .foregroundStyle(DSColors.inkDim)
-                    .lineLimit(1)
-            } else if session.status == .permissionWaiting {
-                if let perm = session.pendingPermissions.first, perm.isPlanReview {
-                    Text("PLAN REVIEW")
-                        .font(DSTypography.mono(s(8), weight: .medium))
-                        .tracking(0.5)
-                        .foregroundStyle(DSColors.signalPlan.opacity(0.9))
-                } else if let perm = session.pendingPermissions.first {
-                    Text("APPROVE:")
-                        .font(DSTypography.mono(s(8), weight: .medium))
-                        .tracking(0.5)
-                        .foregroundStyle(DSColors.signalAlert.opacity(0.9))
-                    Text("\(perm.toolName) \(perm.toolInput.values.first ?? "")")
-                        .font(DSTypography.mono(s(9)))
-                        .foregroundStyle(DSColors.inkDim)
-                        .lineLimit(1)
-                } else if session.pendingQuestion != nil {
-                    Text("QUESTION")
-                        .font(DSTypography.mono(s(8), weight: .medium))
-                        .tracking(0.5)
-                        .foregroundStyle(DSColors.signalAlert.opacity(0.9))
-                }
-            } else if session.status == .error {
-                Text("ERROR")
-                    .font(DSTypography.mono(s(8), weight: .medium))
-                    .tracking(0.5)
-                    .foregroundStyle(DSColors.signalError.opacity(0.9))
-            } else if session.status == .done, let msg = session.lastAssistantMessage, !msg.isEmpty {
-                Text(msg)
-                    .font(DSTypography.mono(s(9)))
-                    .foregroundStyle(DSColors.inkDim)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            } else if session.status != .starting {
-                Text(session.status.label.uppercased())
-                    .font(DSTypography.mono(s(8), weight: .medium))
-                    .tracking(0.5)
-                    .foregroundStyle(DSColors.inkMute)
-            }
-
-            Spacer()
-        }
-    }
-
-    // MARK: - Row 3.5: Subagents
-
-    @ViewBuilder
-    private var subagentRow: some View {
-        if !session.subagents.isEmpty {
-            SubagentChipsRow(subagents: session.subagents, fontSize: s(8))
-        }
-    }
-
-    // MARK: - Row 4: Tasks
-
-    /// task/subagent 各チップの subject/name に許容する最大幅。
-    /// 幅不足時に HStack 全体が潰れて隣接チップと連結して見える(#11)のを防ぐため、
-    /// 可変長パートだけをここで切り詰め、他のパートは fixedSize で保護する。
+    /// グリフ列 + 機械値のメタ行。
     ///
-    /// Issue #27: `.layoutPriority` ベースの段階的縮退への置き換えを検討したが、
-    /// layoutPriority は縮小の優先順位を決めるだけで「縮めない」保証はなく、
-    /// 固定長パーツ（グリフ/+N/経過時間）を確実に保護しつつ可変長パーツだけを
-    /// 決まった幅で truncate する現状の二層構成より視覚的な再現性が弱まる。
-    /// 見た目の悪化リスクの方が大きいため現状維持とした。
-    private let chipLabelMaxWidth: CGFloat = 70
-
+    /// グリフは「subagent が動いていれば subagent、そうでなければ task」を出す。
+    /// タスク名のテキストは出さない（一覧はスキャンする場所なので、名前は詳細で見る）。
     @ViewBuilder
-    private var taskRow: some View {
-        let tasks = session.tasks
-        if !tasks.isEmpty {
+    private var metaRow: some View {
+        let hasGlyphs = session.runningSubagentCount > 0 || !session.subagents.isEmpty || !session.tasks.isEmpty
+        if hasGlyphs || !metaText.isEmpty {
             HStack(spacing: 8) {
-                ForEach(tasks.prefix(4)) { task in
-                    HStack(spacing: 3) {
-                        Text(task.status.glyph)
-                            .foregroundStyle(task.status.color)
-                            .fixedSize()
-                        Text(task.subject)
-                            .foregroundStyle(task.status == .completed ? DSColors.inkMute : DSColors.inkDim)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(width: chipLabelMaxWidth, alignment: .leading)
-                        if task.status == .inProgress, let assignee = task.assignee {
-                            Text("@\(assignee)")
-                                .foregroundStyle(DSColors.inkMute)
-                                .lineLimit(1)
-                                .fixedSize()
-                        }
-                    }
+                if session.runningSubagentCount > 0 || !session.subagents.isEmpty {
+                    subagentGlyphs
+                } else if !session.tasks.isEmpty {
+                    taskGlyphs
                 }
-                if tasks.count > 4 {
-                    Text("+\(tasks.count - 4)")
+                if !metaText.isEmpty {
+                    Text(metaText)
+                        .font(DSTypography.mono(s(9)))
+                        .tracking(0.5)
                         .foregroundStyle(DSColors.inkMute)
-                        .fixedSize()
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 Spacer(minLength: 0)
             }
-            .font(DSTypography.mono(s(8)))
         }
     }
 
-    // MARK: - Right action column
-
-    /// 右端に縦積みで ⊙ menu + app icon を配置。
-    private var actionColumn: some View {
-        VStack(spacing: 2) {
-            // ⊙ Menu (ellipsis.circle)
-            SessionActionMenu(
-                userState: userState,
-                isUserDone: isUserDone,
-                showTerminalJump: session.pid != nil || session.tty != nil,
-                onTogglePin: actions.togglePin,
-                onToggleMute: actions.toggleMute,
-                onToggleDone: actions.toggleDone,
-                onJumpToTerminal: { TerminalJumper.jump(pid: session.pid, tty: session.tty) },
-                onRemove: actions.remove,
-                labelSize: 13,
-                labelFrame: CGSize(width: 24, height: 24),
-                symbolName: "ellipsis.circle"
-            )
-
-            // App icon (jump target)
-            if session.pid != nil || session.tty != nil {
-                Button {
-                    TerminalJumper.jump(pid: session.pid, tty: session.tty)
-                } label: {
-                    if let icon = session.terminalAppIcon as? NSImage {
-                        Image(nsImage: icon)
-                            .resizable()
-                            .frame(width: 18, height: 18)
-                    } else {
-                        Image(systemName: "arrow.up.right.square")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(DSColors.inkMute)
-                    }
-                }
-                .buttonStyle(.plain)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
+    /// 実行中の subagent は塗りの菱形、空き枠は輪郭。最大 6 個 + `+N`。
+    private var subagentGlyphs: some View {
+        let running = session.subagents.filter { $0.status == .running }.count
+        let total = min(6, max(running, min(session.subagents.count, 6)))
+        return HStack(spacing: 4) {
+            ForEach(0..<total, id: \.self) { index in
+                GlyphView(
+                    bitmap: index < running
+                        ? Glyph.subagentRunning()
+                        : Glyph.subagentIdle()
+                )
+            }
+            if running > 6 {
+                Text("+\(running - 6)")
+                    .font(DSTypography.mono(s(8)))
+                    .foregroundStyle(DSColors.inkMute)
+                    .fixedSize()
             }
         }
+    }
+
+    /// タスクは未着手 / 進行中 / 完了の 3 段。最大 6 個 + `+N`。
+    private var taskGlyphs: some View {
+        HStack(spacing: 4) {
+            ForEach(session.tasks.prefix(6)) { task in
+                GlyphView(bitmap: Glyph.task(task.glyph, color: task.glyphColor))
+            }
+            if session.tasks.count > 6 {
+                Text("+\(session.tasks.count - 6)")
+                    .font(DSTypography.mono(s(8)))
+                    .foregroundStyle(DSColors.inkMute)
+                    .fixedSize()
+            }
+        }
+    }
+
+    /// `2/4 TASKS · 18.2K TOK · $0.42` のような機械値の列。
+    private var metaText: String {
+        var parts: [String] = []
+        if !session.tasks.isEmpty {
+            let done = session.tasks.filter { $0.status == .completed }.count
+            parts.append("\(done)/\(session.tasks.count) TASKS")
+        }
+        if let model = session.model {
+            parts.append(shortModel(model).uppercased())
+        }
+        let tokens = session.totalInputTokens + session.totalOutputTokens
+        if tokens > 0 {
+            parts.append("\(TokenFormatter.format(tokens)) TOK")
+        }
+        if session.estimatedCost > 0 {
+            parts.append(CostCalculator.formatCost(session.estimatedCost))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    // MARK: - Right column
+
+    private var rightColumn: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            HStack(spacing: 4) {
+                trailingStatusText
+                SessionActionMenu(
+                    userState: userState,
+                    isUserDone: isUserDone,
+                    showTerminalJump: session.pid != nil || session.tty != nil,
+                    onTogglePin: actions.togglePin,
+                    onToggleMute: actions.toggleMute,
+                    onToggleDone: actions.toggleDone,
+                    onJumpToTerminal: { TerminalJumper.jump(pid: session.pid, tty: session.tty) },
+                    onRemove: actions.remove,
+                    labelSize: 12,
+                    labelFrame: CGSize(width: 20, height: 20),
+                    symbolName: "ellipsis.circle"
+                )
+            }
+
+            if let perm = pendingPermission {
+                approvalButtons(for: perm)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    /// 承認待ちなら失効までの残り秒、それ以外は最終活動からの相対時刻。
+    @ViewBuilder
+    private var trailingStatusText: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            if let perm = pendingPermission {
+                // 失効時刻は hook の recv timeout（120s）から算出する。
+                // PermissionRequest 自体は expiresAt を持たない（`canRespond` で失効を表す）。
+                let expiresAt = perm.timestamp.addingTimeInterval(TimeInterval(HookHandler.recvTimeoutSeconds))
+                let remaining = max(0, Int(expiresAt.timeIntervalSince(context.date)))
+                Text("\(remaining)s")
+                    .font(DSTypography.mono(s(10), weight: .semibold))
+                    .foregroundStyle(remaining <= 30 ? DSColors.signalAlert : DSColors.inkDim)
+                    .monospacedDigit()
+            } else {
+                Text(RelativeTimeFormatter.format(since: session.lastActivityAt, relativeTo: context.date))
+                    .font(DSTypography.mono(s(10)))
+                    .foregroundStyle(DSColors.inkMute)
+            }
+        }
+    }
+
+    /// 一覧から直接承認/拒否する。詳細画面と同じ誤タップガード（`armedAfter`）を掛ける。
+    private func approvalButtons(for perm: PermissionRequest) -> some View {
+        HStack(spacing: 5) {
+            Button {
+                actions.approve(perm.toolUseId)
+            } label: {
+                Text("承認")
+                    .font(DSTypography.Native.caption(textSize.scale, weight: .semibold))
+                    .padding(.horizontal, 11)
+                    .frame(height: 24)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(DSColors.signalAlert)
+            .foregroundStyle(Color.black.opacity(0.85))
+
+            Button {
+                actions.deny(perm.toolUseId)
+            } label: {
+                Text("拒否")
+                    .font(DSTypography.Native.caption(textSize.scale, weight: .semibold))
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+            }
+            .buttonStyle(.bordered)
+        }
+        .controlSize(.small)
+        .armedAfter()
     }
 
     // MARK: - Helpers
 
-    private func shortModel(_ model: String) -> String {
-        // "claude-sonnet-4-20250514" → "sonnet-4"
-        let parts = model.split(separator: "-")
-        if parts.count >= 3, parts.first == "claude" {
-            return "\(parts[1])-\(parts[2])"
-        }
-        return model
-    }
-
     private var repoDisplayName: String {
-        session.originRepoName ?? projectName(session.cwd)
+        session.originRepoName
+            ?? session.worktreeName
+            ?? (session.cwd as NSString?)?.lastPathComponent
+            ?? "Session"
     }
 
-    private func projectName(_ path: String?) -> String {
-        guard let path else { return "—" }
-        let name = (path as NSString).lastPathComponent
-        return name.isEmpty ? "—" : name
+    private func shortTeamName(_ team: String) -> String {
+        // team 名はリーダーの session_id 由来で長いことがあるので頭だけ見せる。
+        team.count > 10 ? String(team.prefix(8)) : team
+    }
+
+    private func shortModel(_ model: String) -> String {
+        model
+            .replacingOccurrences(of: "claude-", with: "")
+            .replacingOccurrences(of: "-20250929", with: "")
+            .replacingOccurrences(of: "-latest", with: "")
+    }
+
+    private func flatten(_ text: String) -> String {
+        text.replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "  ", with: " ")
     }
 }
 
-// MARK: - AgentTask.Status display
+// MARK: - Model → Glyph
 
-extension AgentTask.Status {
-    /// 工業パネル風グリフ: □ pending / ▪ in_progress / ■ completed
-    var glyph: String {
+extension AgentType {
+    /// カード左列に出す 1 文字。翼と同じ「置けるのはグリフだけ」の思想で、
+    /// エージェント名は 1 文字に圧縮する（Claude = C / Codex = X）。
+    var glyphLetter: String {
         switch self {
-        case .pending: "□"
-        case .inProgress: "▪"
-        case .completed: "■"
+        case .claudeCode: "C"
+        case .codex: "X"
+        case .geminiCLI: "G"
+        case .custom: "?"
+        }
+    }
+}
+
+extension AgentTask {
+    var glyph: Glyph.TaskGlyph {
+        switch status {
+        case .pending: .todo
+        case .inProgress: .active
+        case .completed: .done
         }
     }
 
-    var color: Color {
-        switch self {
+    var glyphColor: Color {
+        switch status {
         case .pending: DSColors.inkMute
         case .inProgress: DSColors.signalThinking
         case .completed: DSColors.inkDim

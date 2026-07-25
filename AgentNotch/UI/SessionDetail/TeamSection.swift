@@ -63,9 +63,9 @@ struct TeamSection: View {
     }
 
     private func taskRow(_ task: AgentTask) -> some View {
-        HStack(spacing: 4) {
-            Text(task.status.glyph)
-                .foregroundStyle(task.status.color)
+        HStack(spacing: 6) {
+            // フォント文字（□▪■）ではなくドットグリフで描く。
+            GlyphView(bitmap: Glyph.task(task.glyph, color: task.glyphColor))
             Text(task.subject)
                 .foregroundStyle(task.status == .completed ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary))
                 .lineLimit(1)

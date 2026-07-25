@@ -20,6 +20,7 @@ struct ExpandedPageView: View {
     @Default(.sessionGrouping) private var grouping
     @Default(.collapsedGroupIDs) private var collapsedGroupIDs
     @Default(.usageEnabled) private var usageEnabled
+    @Environment(\.permissionActions) private var permissionActions
 
     @State private var showSortMenu = false
 
@@ -82,9 +83,9 @@ struct ExpandedPageView: View {
                 Button {
                     viewModel.showUsage()
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 14) {
                         ForEach(headerUsages, id: \.agentType) { usage in
-                            UsageGauge(usedPercent: usage.percent, agentType: usage.agentType)
+                            usageBadge(agentType: usage.agentType, percent: usage.percent)
                         }
                     }
                     .contentShape(Rectangle())
@@ -114,6 +115,26 @@ struct ExpandedPageView: View {
             .padding(.trailing, 16)
         }
         .frame(height: viewModel.physicalNotchHeight + 4)
+    }
+
+    /// 使用量バッジ。リング（グリフ）+ エージェント名 + % を縦に組む（モック 1b）。
+    ///
+    /// ゲージだけだと「どのエージェントの何%か」が読めないため、モックは % をテキストで
+    /// 併記している。リングは形（残量）、テキストは値、という役割分担。
+    private func usageBadge(agentType: AgentType, percent: Double?) -> some View {
+        HStack(spacing: 7) {
+            UsageGauge(usedPercent: percent, agentType: agentType)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(agentType.displayName.uppercased())
+                    .font(DSTypography.mono(s(8), weight: .semibold))
+                    .tracking(1.1)
+                    .foregroundStyle(DSColors.inkDim)
+                Text(percent.map { "\(Int($0.rounded()))%" } ?? "--")
+                    .font(DSTypography.mono(s(11), weight: .semibold))
+                    .foregroundStyle(DSColors.ink.opacity(0.85))
+                    .monospacedDigit()
+            }
+        }
     }
 
     private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
@@ -287,6 +308,13 @@ struct ExpandedPageView: View {
                     } else {
                         sessionManager.markDone(session.id)
                     }
+                },
+                // 一覧から直接承認/拒否する（誤タップガードはカード側の armedAfter）。
+                approve: { toolUseId in
+                    permissionActions.approve(session.id, toolUseId)
+                },
+                deny: { toolUseId in
+                    permissionActions.deny(session.id, toolUseId, "Denied via Agent Notch")
                 }
             )
         )
