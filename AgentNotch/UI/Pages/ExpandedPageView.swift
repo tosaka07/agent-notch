@@ -15,6 +15,7 @@ struct ExpandedPageView: View {
     @Default(.sessionSortOrder) private var sortOrder
     @Default(.sessionGrouping) private var grouping
     @Default(.collapsedGroupIDs) private var collapsedGroupIDs
+    @Default(.usageEnabled) private var usageEnabled
 
     @State private var showSortMenu = false
     @StateObject private var usageCoordinator = UsageCoordinator()
@@ -48,13 +49,24 @@ struct ExpandedPageView: View {
                 }
             }
 
-            Divider().padding(.horizontal, 20)
-            UsageSectionView(snapshot: usageCoordinator.snapshot)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
+            if usageEnabled {
+                Divider().padding(.horizontal, 20)
+                UsageSectionView(snapshot: usageCoordinator.snapshot)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+            }
         }
-        .onAppear { usageCoordinator.start() }
+        .onAppear { if usageEnabled { usageCoordinator.start() } }
         .onDisappear { usageCoordinator.stop() }
+        .onChange(of: usageEnabled) { _, enabled in
+            if enabled {
+                // 明示的な ON は「もう一度試してよい」という意思表示。
+                Task { await ClaudeCredentialsProvider.shared.reset() }
+                usageCoordinator.start()
+            } else {
+                usageCoordinator.stop()
+            }
+        }
     }
 
     // MARK: - Notch top bar (replaces header)

@@ -187,4 +187,12 @@ extension Defaults.Keys {
 
     /// ExpandedPageView 下部の USAGE セクションが折りたたまれているか。
     static let usageSectionCollapsed = Key<Bool>("usageSectionCollapsed", default: false)
+
+    /// 使用量（USAGE）セクションを表示するか。
+    ///
+    /// OFF にすると Claude の資格情報にも undocumented API にも一切触らなくなる。
+    /// issue #35 の認証ダイアログは `ClaudeCredentialsStore` 側で根本対処済みのため
+    /// デフォルトは ON（PR #34 で出荷した表示を黙って無効化しないため）。
+    /// ダイアログが出る環境ではユーザーがここを OFF にすれば完全に止められる。
+    static let usageEnabled = Key<Bool>("usageEnabled", default: true)
 }
