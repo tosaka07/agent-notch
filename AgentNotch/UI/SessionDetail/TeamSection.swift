@@ -5,7 +5,8 @@ import SwiftUI
 struct TeamSection: View {
     let currentSessionId: String
     let members: [UnifiedSession]
-    var fontSize: CGFloat = 9
+    /// `Defaults[.textSize].scale`。DSTypography.Native の基準スケールとして使う。
+    var fontScale: CGFloat = 1
     var onShowSession: (String) -> Void = { _ in }
 
     /// リーダー（teammateName == nil）を先頭に、それ以降は開始順。
@@ -48,16 +49,17 @@ struct TeamSection: View {
             onShowSession(member.id)
         } label: {
             HStack(spacing: 6) {
-                StatusIndicator(status: member.status, size: fontSize * 0.8)
+                StatusIndicator(status: member.status, size: 7 * fontScale)
                 Text((member.teammateName ?? "LEAD").uppercased())
-                    .font(DSTypography.mono(fontSize, weight: member.id == currentSessionId ? .semibold : .regular))
-                    .foregroundStyle(member.id == currentSessionId ? DSColors.ink : DSColors.inkDim)
+                    .font(DSTypography.Native.monoFootnote(fontScale, weight: member.id == currentSessionId ? .semibold : .regular))
+                    .foregroundStyle(member.id == currentSessionId ? Color.primary : Color.secondary)
                 Spacer()
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(member.id == currentSessionId)
+        .accessibilityLabel((member.teammateName ?? "LEAD") + (member.id == currentSessionId ? " (現在のセッション)" : ""))
     }
 
     private func taskRow(_ task: AgentTask) -> some View {
@@ -65,14 +67,29 @@ struct TeamSection: View {
             Text(task.status.glyph)
                 .foregroundStyle(task.status.color)
             Text(task.subject)
-                .foregroundStyle(task.status == .completed ? DSColors.inkMute : DSColors.inkDim)
+                .foregroundStyle(task.status == .completed ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
             if let assignee = task.assignee {
                 Text("@\(assignee)")
-                    .foregroundStyle(DSColors.inkMute)
+                    .foregroundStyle(.tertiary)
             }
             Spacer()
         }
-        .font(DSTypography.mono(fontSize))
+        .font(DSTypography.Native.monoFootnote(fontScale))
+        .accessibilityElement(children: .combine)
     }
+}
+
+#Preview("Team Section") {
+    let lead = UnifiedSession(id: "lead", agentType: .claudeCode, status: .toolRunning)
+    let member = UnifiedSession(id: "wt-a", agentType: .claudeCode, status: .idle)
+    member.teammateName = "wt-answer"
+
+    return TeamSection(
+        currentSessionId: "lead",
+        members: [lead, member]
+    )
+    .padding(16)
+    .frame(width: 280)
+    .background(Color.black)
 }

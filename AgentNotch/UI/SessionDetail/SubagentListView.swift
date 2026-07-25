@@ -5,7 +5,8 @@ import SwiftUI
 /// 完了 5 件超は折りたたむ。
 struct SubagentListView: View {
     let subagents: [SubagentRun]
-    var fontSize: CGFloat = 9
+    /// `Defaults[.textSize].scale`。DSTypography.Native の基準スケールとして使う。
+    var fontScale: CGFloat = 1
 
     private var running: [SubagentRun] {
         subagents.filter { $0.status == .running }.sorted { $0.startedAt < $1.startedAt }
@@ -37,8 +38,8 @@ struct SubagentListView: View {
                 }
                 if completed.count > 5 {
                     Text("+\(completed.count - 5) more")
-                        .font(DSTypography.mono(fontSize))
-                        .foregroundStyle(DSColors.inkMute)
+                        .font(DSTypography.Native.monoFootnote(fontScale))
+                        .foregroundStyle(.tertiary)
                 }
             }
         }
@@ -49,13 +50,15 @@ struct SubagentListView: View {
             Text(glyph)
                 .foregroundStyle(color)
             Text(agentType)
-                .foregroundStyle(DSColors.inkDim)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
             Text(detail)
-                .foregroundStyle(DSColors.inkMute)
+                .foregroundStyle(.tertiary)
         }
-        .font(DSTypography.mono(fontSize))
+        .font(DSTypography.Native.monoFootnote(fontScale))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(agentType), \(detail)")
     }
 
     private func elapsed(_ start: Date, at date: Date) -> String {
@@ -70,4 +73,14 @@ struct SubagentListView: View {
         if seconds < 60 { return "\(seconds)s" }
         return "\(seconds / 60)m\(seconds % 60)s"
     }
+}
+
+#Preview("Subagent List") {
+    SubagentListView(subagents: [
+        SubagentRun(id: "1", agentType: "Explore", startedAt: .now.addingTimeInterval(-12), hasExplicitId: true),
+        SubagentRun(id: "2", agentType: "code-reviewer", startedAt: .now.addingTimeInterval(-90), endedAt: .now.addingTimeInterval(-30), status: .completed, hasExplicitId: true),
+    ])
+    .padding(16)
+    .frame(width: 280)
+    .background(Color.black)
 }
