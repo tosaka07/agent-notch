@@ -200,4 +200,17 @@ extension Defaults.Keys {
 
     /// SessionDetailView 右下の常時表示ゲージ（リング / 数字）の表示形式。
     static let usageGaugeStyle = Key<UsageGaugeStyle>("usageGaugeStyle", default: .ring)
+
+    /// ExpandedPageView 下部の USAGE セクションが折りたたまれているか。
+    /// 旧横長バー（#39 で SessionDetailView のゲージに統合され削除）の名残。
+    /// 参照箇所は無いが、既存ユーザーの Defaults を無用に破棄しないため定義のみ残す。
+    static let usageSectionCollapsed = Key<Bool>("usageSectionCollapsed", default: false)
+
+    /// 使用量（USAGE）表示を行うか。
+    ///
+    /// OFF にすると Claude の資格情報にも undocumented API にも一切触らなくなる。
+    /// issue #35 の認証ダイアログは `ClaudeCredentialsStore` 側で根本対処済みのため
+    /// デフォルトは ON（PR #34 で出荷した表示を黙って無効化しないため）。
+    /// ダイアログが出る環境ではユーザーがここを OFF にすれば完全に止められる。
+    static let usageEnabled = Key<Bool>("usageEnabled", default: true)
 }

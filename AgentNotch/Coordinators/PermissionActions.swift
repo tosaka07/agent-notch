@@ -14,6 +14,8 @@ struct PermissionActions: Sendable {
     /// AskUserQuestion への応答。`answers` は `{question: [選ばれたラベル]}` の map。
     /// multiSelect でも single でも配列で渡し、single は要素 1 の配列にする。
     var answerQuestion: @MainActor (_ sessionId: String, _ toolUseId: String, _ answers: [String: [String]]) -> Void = { _, _, _ in }
+    /// 失効した質問/権限バナーをユーザー操作で閉じる（応答は送らない）。
+    var dismissExpired: @MainActor (_ sessionId: String, _ toolUseId: String) -> Void = { _, _ in }
 }
 
 extension EnvironmentValues {

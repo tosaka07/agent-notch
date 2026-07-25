@@ -14,6 +14,7 @@ struct SettingsView: View {
     @Default(.soundPermission) var soundPermission
     @Default(.soundError) var soundError
     @Default(.cardPromptSource) var cardPromptSource
+    @Default(.usageEnabled) var usageEnabled
     var onClose: (() -> Void)? = nil
 
     var body: some View {
@@ -81,6 +82,13 @@ struct SettingsView: View {
                 }
             }
 
+            Section("使用量") {
+                Toggle("使用量を表示する", isOn: $usageEnabled)
+                Text("Claude / Codex のレート制限の消費状況を展開表示の下部に出します。\nOFF にすると資格情報の読み取りも API 呼び出しも行いません。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("セッション") {
                 Picker("プロンプト表示", selection: $cardPromptSource) {
                     ForEach(CardPromptSource.allCases, id: \.self) { source in
@@ -99,7 +107,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 360, height: soundEnabled ? 620 : 520)
+        .frame(width: 360, height: soundEnabled ? 700 : 600)
         .onAppear {
             // Auto-select first display if none set
             if displayMode == .specificDisplay, specificDisplayUUID.isEmpty,

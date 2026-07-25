@@ -4,10 +4,23 @@ public struct PendingQuestion: Sendable {
     public let toolUseId: String
     /// AskUserQuestion は 1-4 問まとめて送られる。
     public let questions: [AskQuestionInfo.Question]
+    /// hook 側の応答待ちが切れる予測時刻（受信時刻 + `HookHandler.recvTimeoutSeconds`）。
+    /// UI の残り時間表示に使う。
+    public let expiresAt: Date
+    /// 応答経路が失効した（hook が recv timeout で pass-through 済み / pending 破棄済み）。
+    /// true のとき回答は届かないため、UI は失効表示に切り替えてターミナルでの回答を促す。
+    public var isExpired: Bool
 
-    public init(toolUseId: String, questions: [AskQuestionInfo.Question]) {
+    public init(
+        toolUseId: String,
+        questions: [AskQuestionInfo.Question],
+        expiresAt: Date = Date().addingTimeInterval(TimeInterval(HookHandler.recvTimeoutSeconds)),
+        isExpired: Bool = false
+    ) {
         self.toolUseId = toolUseId
         self.questions = questions
+        self.expiresAt = expiresAt
+        self.isExpired = isExpired
     }
 }
 

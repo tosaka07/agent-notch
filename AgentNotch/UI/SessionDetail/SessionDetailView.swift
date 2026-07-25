@@ -17,6 +17,7 @@ struct SessionDetailView: View {
     @State private var isTeamExpanded: Bool
     @State private var isUsageExpanded = false
     @Default(.textSize) private var textSize
+    @Default(.usageEnabled) private var usageEnabled
     @Environment(\.permissionActions) private var permissionActions
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -47,8 +48,11 @@ struct SessionDetailView: View {
 
     /// 右下の常時ゲージに出す「今どれくらいか」の一点情報。
     /// Gemini CLI / Custom や、未取得（nil snapshot）の間は表示しない。
+    /// `usageEnabled` OFF の間は、コーディネータが停止済みでも古い snapshot を
+    /// 表示に使わない（#38 の「表示しない」という意図を display 層でも担保する）。
     private var primaryUsagePercent: Double? {
-        usageCoordinator.snapshot?.primaryUsedPercent(for: session.agentType)
+        guard usageEnabled else { return nil }
+        return usageCoordinator.snapshot?.primaryUsedPercent(for: session.agentType)
     }
 
     var body: some View {
@@ -74,21 +78,36 @@ struct SessionDetailView: View {
                     permission: perm,
                     onApprove: {
                         permissionActions.approve(session.id, perm.toolUseId)
-                        navigateAfterResolving()
+                        navigateAfterResolvingIfCleared()
                     },
                     onDeny: {
                         permissionActions.deny(session.id, perm.toolUseId, "Denied via Agent Notch")
-                        navigateAfterResolving()
+                        navigateAfterResolvingIfCleared()
+                    },
+                    onDismiss: {
+                        permissionActions.dismissExpired(session.id, perm.toolUseId)
+                        navigateAfterResolvingIfCleared()
                     }
                 )
                 .padding(.horizontal, 14).padding(.top, 8)
             }
 
             if let q = session.pendingQuestion {
-                QuestionBanner(questions: q.questions) { answers in
-                    permissionActions.answerQuestion(session.id, q.toolUseId, answers)
-                    navigateAfterResolving()
-                }
+                QuestionBanner(
+                    questions: q.questions,
+                    expiresAt: q.expiresAt,
+                    isExpired: q.isExpired,
+                    onAnswer: { answers in
+                        permissionActions.answerQuestion(session.id, q.toolUseId, answers)
+                        // 応答経路が失効していた場合は pendingQuestion が失効表示のまま残る。
+                        // その場合はこの画面に留まり、失効バナーをユーザーに見せる（issue #28）。
+                        navigateAfterResolvingIfCleared()
+                    },
+                    onDismiss: {
+                        permissionActions.dismissExpired(session.id, q.toolUseId)
+                        navigateAfterResolvingIfCleared()
+                    }
+                )
                 // toolUseId で View identity を切る。同一セッションで pendingQuestion が
                 // 別の質問セットに差し替わったとき、currentIndex 等の @State を
                 // 引き継いでしまうと questions[currentIndex] が index out of range に
@@ -460,6 +479,14 @@ struct SessionDetailView: View {
     }
 
     // MARK: - Navigation
+
+    /// 応答/dismiss の結果、このセッションの pending が実際に解消された場合のみ遷移する。
+    /// 応答が届けられず失効表示に切り替わった場合はこの画面に留まる（issue #28）。
+    private func navigateAfterResolvingIfCleared() {
+        let stillPending = session.pendingQuestion != nil || !session.pendingPermissions.isEmpty
+        guard !stillPending else { return }
+        navigateAfterResolving()
+    }
 
     /// permission / question に応答した直後の遷移。
     /// 他セッションに未回答の question / permission が残っていれば連続でそこへ遷移し、

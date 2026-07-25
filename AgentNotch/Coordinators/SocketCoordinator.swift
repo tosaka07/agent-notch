@@ -21,7 +21,7 @@ final class SocketCoordinator {
         let serverBox = self.serverBox
 
         do {
-            let server = try SocketServer { [serverBox] message, connection in
+            let server = try SocketServer(onMessage: { [serverBox] message, connection in
                 // Parse off MainActor — pure data processing
                 let parsed = EventProcessor.parseMessage(message)
                 let hookEvent = message["hook_event_name"] as? String ?? ""
@@ -112,7 +112,18 @@ final class SocketCoordinator {
                 // 済みなので、ここでは常に nil（immediate な応答をしない）を返す。
                 guard deferred != nil else { return [String: Any]() }
                 return nil
-            }
+            }, onPendingExpired: { pending in
+                // socket queue 上で呼ばれる。hook が recv timeout で去った/TTL 破棄された
+                // pending をセッション状態に反映し、バナーを失効表示に切り替える（issue #28）。
+                let sessionId = pending.sessionId
+                let toolUseId = pending.toolUseId
+                let kind = pending.kind
+                Task { @MainActor in
+                    EventProcessor.applyPendingExpired(
+                        sessionId: sessionId, toolUseId: toolUseId, kind: kind, manager: manager
+                    )
+                }
+            })
             serverBox.server = server
             server.start()
             socketServer = server
@@ -145,35 +156,81 @@ final class SocketCoordinator {
             },
             answerQuestion: { [weak self] sessionId, toolUseId, answers in
                 self?.answer(sessionId: sessionId, toolUseId: toolUseId, answers: answers)
+            },
+            dismissExpired: { [weak self] sessionId, toolUseId in
+                self?.dismissExpired(sessionId: sessionId, toolUseId: toolUseId)
             }
         )
     }
 
     private func approve(sessionId: String, toolUseId: String) {
-        socketServer?.respondToPermission(toolUseId: toolUseId, decision: "allow", reason: nil)
-        clearPendingPermission(sessionId: sessionId, toolUseId: toolUseId)
+        let delivered = socketServer?.respondToPermission(
+            toolUseId: toolUseId, decision: "allow", reason: nil
+        ) ?? false
+        if delivered {
+            clearPendingPermission(sessionId: sessionId, toolUseId: toolUseId)
+        } else {
+            markPermissionExpired(sessionId: sessionId, toolUseId: toolUseId)
+        }
     }
 
     private func deny(sessionId: String, toolUseId: String, reason: String?) {
-        socketServer?.respondToPermission(toolUseId: toolUseId, decision: "deny", reason: reason)
-        clearPendingPermission(sessionId: sessionId, toolUseId: toolUseId)
+        let delivered = socketServer?.respondToPermission(
+            toolUseId: toolUseId, decision: "deny", reason: reason
+        ) ?? false
+        if delivered {
+            clearPendingPermission(sessionId: sessionId, toolUseId: toolUseId)
+        } else {
+            markPermissionExpired(sessionId: sessionId, toolUseId: toolUseId)
+        }
     }
 
     /// AskUserQuestion の回答を Claude Code の仕様に合わせて送る。
     /// `decision.updatedInput.answers` に `{question: answer}` 形式で注入される。
     /// multi-select の場合は value を " / " で結合する（Claude Code は単一文字列を期待）。
+    /// 応答経路が失効していた場合はバナーを消さず失効表示に切り替える（issue #28:
+    /// 送れていないのに送れたように見せない）。
     private func answer(sessionId: String, toolUseId: String, answers: [String: [String]]) {
+        guard let session = sessionManager.session(for: sessionId),
+              session.pendingQuestion?.toolUseId == toolUseId else {
+            // stale な View からの二重送信等。対応する pendingQuestion が無いなら何もしない。
+            Log.socket.warning("answer: no matching pendingQuestion session=\(sessionId) toolUseId=\(toolUseId)")
+            return
+        }
         let flatAnswers = answers.reduce(into: [String: String]()) { result, pair in
             result[pair.key] = pair.value.joined(separator: " / ")
         }
-        socketServer?.respondToAskQuestion(toolUseId: toolUseId, answers: flatAnswers)
-        if let session = sessionManager.session(for: sessionId) {
+        let delivered = socketServer?.respondToAskQuestion(
+            toolUseId: toolUseId, answers: flatAnswers
+        ) ?? false
+        if delivered {
             session.pendingQuestion = nil
             // #19: 他にまだ pending な承認/質問があれば permissionWaiting を維持し、
             // 無ければ subagent 実行中かどうかで復帰先を決める（thinking に決め打ちしない）。
             session.status = session.statusAfterPermissionResolved()
-            sessionManager.notifyChange()
+        } else if var question = session.pendingQuestion {
+            question.isExpired = true
+            session.pendingQuestion = question
         }
+        sessionManager.notifyChange()
+    }
+
+    /// 応答が届けられなかった permission を失効表示（canRespond=false）に切り替える。
+    private func markPermissionExpired(sessionId: String, toolUseId: String) {
+        EventProcessor.applyPendingExpired(
+            sessionId: sessionId, toolUseId: toolUseId, kind: .permissionRequest, manager: sessionManager
+        )
+    }
+
+    /// 失効した質問/権限バナーをユーザー操作で閉じる。
+    private func dismissExpired(sessionId: String, toolUseId: String) {
+        guard let session = sessionManager.session(for: sessionId) else { return }
+        if session.pendingQuestion?.toolUseId == toolUseId {
+            session.pendingQuestion = nil
+        }
+        session.pendingPermissions.removeAll { $0.toolUseId == toolUseId }
+        session.status = session.statusAfterPermissionResolved()
+        sessionManager.notifyChange()
     }
 
     private func clearPendingPermission(sessionId: String, toolUseId: String) {

@@ -47,6 +47,10 @@ struct ExpandedPageView: View {
                 }
             }
         }
+        // 使用量表示（USAGE）は #39 で SessionDetailView 右下の常時ゲージに一本化したため、
+        // ExpandedPageView 側の横長バーは廃止した。usageEnabled トグル OFF 時に Claude の
+        // 資格情報/undocumented API に一切触らないという #38 の意図は
+        // `NotchRootView.syncUsageCoordinator` 側でゲートして維持している。
     }
 
     // MARK: - Notch top bar (replaces header)

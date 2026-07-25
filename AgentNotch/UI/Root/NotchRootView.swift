@@ -1,4 +1,5 @@
 import AgentNotchCore
+import Defaults
 import SwiftUI
 
 /// Notch パネルのルート View。
@@ -17,6 +18,7 @@ struct NotchRootView: View {
     @State private var usageCoordinator = UsageCoordinator()
     @ObservedObject var sessionManager: SessionManager
     private let permissionActions: PermissionActions
+    @Default(.usageEnabled) private var usageEnabled
 
     init(
         sessionManager: SessionManager,
@@ -63,10 +65,24 @@ struct NotchRootView: View {
         .onChange(of: viewModel.mode) { _, mode in
             syncUsageCoordinator(for: mode)
         }
+        .onChange(of: usageEnabled) { _, enabled in
+            if enabled {
+                // 明示的な ON は「もう一度試してよい」という意思表示（#38）。
+                Task { await ClaudeCredentialsProvider.shared.reset() }
+                syncUsageCoordinator(for: viewModel.mode)
+            } else {
+                usageCoordinator.stop()
+            }
+        }
     }
 
     /// 使用量取得が必要な画面（`expanded` / `sessionDetail`）が見えている間だけポーリングする。
+    /// `usageEnabled` が OFF の間は、Claude の資格情報にも undocumented API にも一切触らない（#38）。
     private func syncUsageCoordinator(for mode: NotchMode) {
+        guard usageEnabled else {
+            usageCoordinator.stop()
+            return
+        }
         switch mode {
         case .expanded, .sessionDetail:
             usageCoordinator.start()

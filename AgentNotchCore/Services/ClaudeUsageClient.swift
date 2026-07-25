@@ -19,13 +19,17 @@ public actor ClaudeUsageClient {
     private static let userAgent = "claude-code/2.0.0"
 
     private let session: URLSession
+    private let credentials: ClaudeCredentialsProvider
 
-    public init(session: URLSession = .shared) {
+    public init(session: URLSession = .shared, credentials: ClaudeCredentialsProvider = .shared) {
         self.session = session
+        self.credentials = credentials
     }
 
     public func fetchUsage() async -> ClaudeUsageSnapshot? {
-        guard let token = ClaudeCredentialsStore.loadAccessToken() else {
+        // トークンは `ClaudeCredentialsProvider` がキャッシュしている。
+        // 180 秒ポーリングごとに Keychain を読み直すことはしない（issue #35）。
+        guard let token = await credentials.accessToken() else {
             Log.hooks.debug("Claude usage: no OAuth token found, skipping fetch")
             return nil
         }
@@ -43,6 +47,11 @@ public actor ClaudeUsageClient {
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let status = (response as? HTTPURLResponse)?.statusCode ?? -1
                 Log.hooks.debug("Claude usage: unexpected status \(status)")
+                // トークンが失効／ローテーションされた可能性があるのでキャッシュを捨てる。
+                // 次回ポーリングで読み直す（ここでは即リトライしない）。
+                if status == 401 || status == 403 {
+                    await credentials.invalidate()
+                }
                 return nil
             }
             return ClaudeUsageParser.parse(data: data)

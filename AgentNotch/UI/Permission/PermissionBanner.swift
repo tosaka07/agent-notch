@@ -10,6 +10,8 @@ struct PermissionBanner: View {
     let permission: PermissionRequest
     var onApprove: () -> Void
     var onDeny: () -> Void
+    /// 失効バナー（canRespond=false）を閉じる。
+    var onDismiss: () -> Void = {}
 
     @Default(.textSize) private var textSize
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -19,12 +21,22 @@ struct PermissionBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DSSpacing.sm) {
             HStack(spacing: DSSpacing.xs) {
-                Image(systemName: "exclamationmark.shield.fill")
+                Image(systemName: permission.canRespond
+                    ? "exclamationmark.shield.fill" : "clock.badge.exclamationmark.fill")
                     .foregroundStyle(DSColors.signalAlert)
                     .font(DSTypography.Native.callout(scale))
-                Text("Permission Required")
+                Text(permission.canRespond ? "Permission Required" : "Response window expired")
                     .font(DSTypography.Native.headline(scale))
                     .foregroundStyle(.primary)
+            }
+
+            // 応答経路が失効した場合は Approve/Deny の代わりにターミナルでの応答を促す
+            // （issue #28: 押しても届かないボタンを出さない）。
+            if !permission.canRespond {
+                Text("This decision can no longer be delivered. Respond directly in the terminal.")
+                    .font(DSTypography.Native.subheadline(scale))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             VStack(alignment: .leading, spacing: DSSpacing.xs) {
@@ -45,28 +57,41 @@ struct PermissionBanner: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             HStack(spacing: DSSpacing.sm) {
-                Button(role: .destructive) {
-                    onDeny()
-                } label: {
-                    Text("Deny")
-                        .font(DSTypography.Native.callout(scale, weight: .semibold))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .keyboardShortcut(.cancelAction)
-                .accessibilityHint("この tool 実行を拒否します")
+                if permission.canRespond {
+                    Button(role: .destructive) {
+                        onDeny()
+                    } label: {
+                        Text("Deny")
+                            .font(DSTypography.Native.callout(scale, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityHint("この tool 実行を拒否します")
 
-                Button {
-                    onApprove()
-                } label: {
-                    Text("Approve")
-                        .font(DSTypography.Native.callout(scale, weight: .semibold))
+                    Button {
+                        onApprove()
+                    } label: {
+                        Text("Approve")
+                            .font(DSTypography.Native.callout(scale, weight: .semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(DSColors.signalDone)
+                    .controlSize(.regular)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityHint("\(permission.toolName) の実行を許可します")
+                } else {
+                    Button {
+                        onDismiss()
+                    } label: {
+                        Text("Dismiss")
+                            .font(DSTypography.Native.callout(scale, weight: .semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityHint("この失効バナーを閉じます")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(DSColors.signalDone)
-                .controlSize(.regular)
-                .keyboardShortcut(.defaultAction)
-                .accessibilityHint("\(permission.toolName) の実行を許可します")
             }
             .armedAfter()
         }
@@ -78,7 +103,9 @@ struct PermissionBanner: View {
                 .stroke(DSColors.signalAlert.opacity(0.35), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("権限リクエスト: \(permission.toolName)")
+        .accessibilityLabel(permission.canRespond
+            ? "権限リクエスト: \(permission.toolName)"
+            : "権限リクエストの応答期限切れ: \(permission.toolName)")
         // Approve/Deny の Return/Esc ショートカットはパネルが key window の間だけ効く
         // （NotchPanel は既定 canBecomeKey=false）。表示中だけ許可し、消えたら戻す（#2 と同様の経路）。
         .onAppear {
@@ -104,6 +131,27 @@ struct PermissionBanner: View {
         ),
         onApprove: {},
         onDeny: {}
+    )
+    .padding(24)
+    .frame(width: 360)
+    .background(Color.black)
+}
+
+#Preview("Permission Banner (Expired)") {
+    PermissionBanner(
+        permission: PermissionRequest(
+            id: "2",
+            agentType: .claudeCode,
+            sessionId: "s1",
+            toolName: "Bash",
+            toolInput: ["command": "rm -rf build/"],
+            toolUseId: "t2",
+            timestamp: .now,
+            canRespond: false
+        ),
+        onApprove: {},
+        onDeny: {},
+        onDismiss: {}
     )
     .padding(24)
     .frame(width: 360)
