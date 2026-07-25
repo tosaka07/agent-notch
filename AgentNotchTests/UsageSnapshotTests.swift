@@ -3,26 +3,47 @@ import Testing
 
 @Suite("UsageSnapshot.primaryUsedPercent Tests")
 struct UsageSnapshotTests {
-    @Test("Claude Code prefers session, falls back to weekAllModels when session is nil")
-    func claudePrefersSession() {
-        let withSession = UsageSnapshot(
+    /// ゲージには「今いちばん気にすべき枠」を出す。session 固定だと、モデル別週次枠が
+    /// session より先に上限へ当たっているケース（Fable 88% > session 86%）を見落とす。
+    @Test("Claude Code picks the highest window when none is marked active")
+    func claudePicksHighestWindow() {
+        let snapshot = UsageSnapshot(
             claude: ClaudeUsageSnapshot(
                 session: UsageWindow(usedPercent: 42, resetsAt: nil),
-                weekAllModels: UsageWindow(usedPercent: 78, resetsAt: nil),
-                weekModel: nil,
-                weekModelLabel: nil
+                weekAllModels: UsageWindow(usedPercent: 78, resetsAt: nil)
             ),
             codex: nil,
             fetchedAt: .now
         )
-        #expect(withSession.primaryUsedPercent(for: .claudeCode) == 42)
+        #expect(snapshot.primaryUsedPercent(for: .claudeCode) == 78)
 
-        let sessionMissing = UsageSnapshot(
-            claude: ClaudeUsageSnapshot(session: nil, weekAllModels: UsageWindow(usedPercent: 78, resetsAt: nil), weekModel: nil, weekModelLabel: nil),
+        let onlyWeek = UsageSnapshot(
+            claude: ClaudeUsageSnapshot(session: nil, weekAllModels: UsageWindow(usedPercent: 78, resetsAt: nil)),
             codex: nil,
             fetchedAt: .now
         )
-        #expect(sessionMissing.primaryUsedPercent(for: .claudeCode) == 78)
+        #expect(onlyWeek.primaryUsedPercent(for: .claudeCode) == 78)
+    }
+
+    /// API が `is_active` を返している枠があれば、使用率の高さより優先する
+    /// （「今まさに効いている制限」がユーザーにとっての本当のボトルネックなので）。
+    @Test("Claude Code prefers the window the API marks as active")
+    func claudePrefersActiveWindow() {
+        let snapshot = UsageSnapshot(
+            claude: ClaudeUsageSnapshot(
+                session: UsageWindow(usedPercent: 95, resetsAt: nil, isActive: false),
+                weekAllModels: UsageWindow(usedPercent: 20, resetsAt: nil, isActive: false),
+                weekModels: [
+                    ModelUsageWindow(
+                        modelLabel: "Fable",
+                        window: UsageWindow(usedPercent: 60, resetsAt: nil, severity: .warning, isActive: true)
+                    )
+                ]
+            ),
+            codex: nil,
+            fetchedAt: .now
+        )
+        #expect(snapshot.primaryUsedPercent(for: .claudeCode) == 60)
     }
 
     @Test("Codex prefers primary, falls back to secondary when primary is nil")
@@ -49,7 +70,7 @@ struct UsageSnapshotTests {
     @Test("Gemini CLI / Custom always return nil regardless of snapshot content")
     func geminiAndCustomAlwaysNil() {
         let snapshot = UsageSnapshot(
-            claude: ClaudeUsageSnapshot(session: UsageWindow(usedPercent: 90, resetsAt: nil), weekAllModels: nil, weekModel: nil, weekModelLabel: nil),
+            claude: ClaudeUsageSnapshot(session: UsageWindow(usedPercent: 90, resetsAt: nil), weekAllModels: nil),
             codex: CodexUsageSnapshot(primary: UsageWindow(usedPercent: 90, resetsAt: nil), secondary: nil, planType: nil),
             fetchedAt: .now
         )
