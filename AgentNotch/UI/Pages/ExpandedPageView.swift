@@ -5,20 +5,37 @@ import SwiftUI
 /// `expanded` モードの UI。アクティブセッション一覧。
 ///
 /// # レイアウト
-/// - ヘッダ行は設けない。ソート・設定アイコンは notch 右翼に配置し、
-///   カードを即座に表示してスクロール量を最小化する。
+/// - ヘッダ行は設けない。ソート・設定アイコンは notch 右翼、使用量ゲージ（`UsageGauge`）は
+///   notch 左翼に配置し、カードを即座に表示してスクロール量を最小化する。
+///   使用量ゲージをタップするとリング⇔数字表示を切り替え、右クリック（コンテキストメニュー）
+///   から週次・モデル別の詳細（`UsageDetailSection`）をポップオーバー表示できる（issue #36）。
 struct ExpandedPageView: View {
     let viewModel: NotchViewModel
     @ObservedObject var sessionManager: SessionManager
+    @ObservedObject var usageCoordinator: UsageCoordinator
 
     @Default(.textSize) private var textSize
     @Default(.sessionSortOrder) private var sortOrder
     @Default(.sessionGrouping) private var grouping
     @Default(.collapsedGroupIDs) private var collapsedGroupIDs
+    @Default(.usageEnabled) private var usageEnabled
 
     @State private var showSortMenu = false
+    @State private var showUsageDetail = false
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+
+    /// トップバー左翼の `UsageGauge` に出す使用率。Claude / Codex のうち取得できた方の
+    /// 代表値を使い、両方取得できていれば「より注意が必要な方（値が大きい方）」を見せる。
+    /// 一覧はどの agentType のセッションが並ぶか一定しないため、特定セッションには紐づけない。
+    private var headerUsagePercent: Double? {
+        guard usageEnabled, let snapshot = usageCoordinator.snapshot else { return nil }
+        let candidates = [
+            snapshot.primaryUsedPercent(for: .claudeCode),
+            snapshot.primaryUsedPercent(for: .codex),
+        ].compactMap { $0 }
+        return candidates.max()
+    }
 
     var body: some View {
         let groups = sessionManager.groupedSessions(order: sortOrder, grouping: grouping)
@@ -47,17 +64,33 @@ struct ExpandedPageView: View {
                 }
             }
         }
-        // 使用量表示（USAGE）は #39 で SessionDetailView 右下の常時ゲージに一本化したため、
-        // ExpandedPageView 側の横長バーは廃止した。usageEnabled トグル OFF 時に Claude の
-        // 資格情報/undocumented API に一切触らないという #38 の意図は
-        // `NotchRootView.syncUsageCoordinator` 側でゲートして維持している。
     }
 
     // MARK: - Notch top bar (replaces header)
 
-    /// 物理 notch の高さ分のスペースを取りつつ、右翼にソート・設定アイコンを配置。
+    /// 物理 notch の高さ分のスペースを取りつつ、左翼に使用量ゲージ、右翼にソート・設定
+    /// アイコンを配置する。compact モードの「左翼 = DotMatrix / 右翼 = PixelCounter」という
+    /// 対称構造を、展開時のトップバーでも踏襲する。
     private func notchTopBar(totalCount: Int) -> some View {
         HStack(spacing: 0) {
+            // 左翼: 使用量ゲージ（取得できていなければ何も出さない）
+            Group {
+                if let percent = headerUsagePercent {
+                    // タップ（Button 本体）= リング⇔数字トグル、右クリック = 詳細ポップオーバー。
+                    // contextMenu の項目は VoiceOver の「アクション」ローターにも自動で載る。
+                    UsageGauge(usedPercent: percent)
+                        .contextMenu {
+                            Button("使用量の詳細を表示") { showUsageDetail = true }
+                        }
+                        .popover(isPresented: $showUsageDetail, arrowEdge: .bottom) {
+                            UsageDetailSection(snapshot: usageCoordinator.snapshot)
+                                .padding(16)
+                                .frame(width: 260)
+                        }
+                }
+            }
+            .padding(.leading, 16)
+
             Spacer()
 
             // 右翼: sort + clear + settings

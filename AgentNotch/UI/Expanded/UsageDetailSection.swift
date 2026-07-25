@@ -1,20 +1,23 @@
 import AgentNotchCore
 import SwiftUI
 
-/// `SessionDetailView` の USAGE 折りたたみセクション内容。
+/// `ExpandedPageView`（セッション一覧）のトップバー左翼 `UsageGauge` から開く使用量の詳細。
 ///
-/// 右下の `UsageGauge`（常時表示）が「今どれくらいか」の一点情報だけを見せるのに対し、
-/// こちらは展開して初めて見える詳細: Claude Code の `/usage` 相当（session / week
-/// (all models) / week (model)）、Codex の rate limit（5h / weekly）をウィンドウ単位で
-/// 内訳表示する。
+/// 左翼の `UsageGauge` が「今どれくらいか」の一点情報だけを見せるのに対し、こちらは
+/// 開いて初めて見える詳細: Claude Code の `/usage` 相当（session / week (all models) /
+/// week (model)）、Codex の rate limit（5h / weekly）をウィンドウ単位で内訳表示する。
 ///
-/// セッションの `agentType` に応じて片方のみ表示する（そのセッションに無関係な
-/// もう一方のエージェントの数値を並べても意味がないため）。
+/// 一覧画面はどの `agentType` のセッションが並んでいるか一定しないため、`agentType` は
+/// `nil`（デフォルト）にすると Claude / Codex 両方（取得できた方）を並べて見せる。
+/// 特定のエージェントだけに絞りたい場合のみ `agentType` を指定する。
+///
+/// パネル内部の表示なので #37 の方針どおり `DSTypography.Native` 等のネイティブトークンを使う
+/// （`UsageGauge` 本体とは違い、独自ピクセル言語の対象外）。
 ///
 /// 将来 API コスト推移チャートを追加する場合は、`claudeContent` / `codexContent` の
 /// 末尾に新しいセクションを足す形で拡張できるようにしてある。
 struct UsageDetailSection: View {
-    let agentType: AgentType
+    var agentType: AgentType?
     let snapshot: UsageSnapshot?
     var scale: CGFloat = 1
 
@@ -26,6 +29,25 @@ struct UsageDetailSection: View {
     }()
 
     var body: some View {
+        if let agentType {
+            content(for: agentType)
+        } else {
+            VStack(alignment: .leading, spacing: DSSpacing.lg) {
+                if snapshot?.claude != nil {
+                    claudeContent
+                }
+                if snapshot?.codex != nil {
+                    codexContent
+                }
+                if snapshot?.claude == nil, snapshot?.codex == nil {
+                    unavailable(reason: "使用量を取得できませんでした")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func content(for agentType: AgentType) -> some View {
         switch agentType {
         case .claudeCode:
             claudeContent
@@ -106,9 +128,8 @@ struct UsageDetailSection: View {
     }
 }
 
-#Preview("Usage Detail Section - Claude") {
+#Preview("Usage Detail Section - Both") {
     UsageDetailSection(
-        agentType: .claudeCode,
         snapshot: UsageSnapshot(
             claude: ClaudeUsageSnapshot(
                 session: UsageWindow(usedPercent: 42, resetsAt: .now.addingTimeInterval(3600)),
@@ -116,7 +137,11 @@ struct UsageDetailSection: View {
                 weekModel: UsageWindow(usedPercent: 95, resetsAt: .now.addingTimeInterval(86400 * 3)),
                 weekModelLabel: "opus"
             ),
-            codex: nil,
+            codex: CodexUsageSnapshot(
+                primary: UsageWindow(usedPercent: 20, resetsAt: .now.addingTimeInterval(1800)),
+                secondary: UsageWindow(usedPercent: 55, resetsAt: .now.addingTimeInterval(86400 * 5)),
+                planType: "plus"
+            ),
             fetchedAt: .now
         )
     )
@@ -124,7 +149,7 @@ struct UsageDetailSection: View {
     .frame(width: 280)
 }
 
-#Preview("Usage Detail Section - Codex") {
+#Preview("Usage Detail Section - Codex only") {
     UsageDetailSection(
         agentType: .codex,
         snapshot: UsageSnapshot(
