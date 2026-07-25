@@ -7,37 +7,40 @@ struct ChatMessageView: View {
     let entry: ChatEntry
 
     @Default(.textSize) private var textSize
-    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    private var scale: CGFloat { textSize.scale }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            // Role indicator bar
+        HStack(alignment: .top, spacing: DSSpacing.sm) {
+            // Role indicator bar（user/assistant の区別。DSColors の signal 色とは別軸）
             RoundedRectangle(cornerRadius: 1)
-                .fill(entry.role == .user ? Color.blue.opacity(0.6) : Color.orange.opacity(0.5))
+                .fill(entry.role == .user ? Color.accentColor.opacity(0.6) : Color.orange.opacity(0.5))
                 .frame(width: 2)
 
             VStack(alignment: .leading, spacing: 4) {
                 if !entry.textContent.isEmpty {
                     Markdown(entry.textContent)
-                        .markdownTheme(AgentNotchMarkdownTheme.theme(scale: textSize.scale))
+                        .markdownTheme(AgentNotchMarkdownTheme.theme(scale: scale))
                         .textSelection(.enabled)
                 }
 
                 ForEach(Array(entry.toolUses.enumerated()), id: \.offset) { _, tool in
                     HStack(spacing: 4) {
                         Text(tool.name)
-                            .font(.system(size: s(9), weight: .medium, design: .monospaced))
-                            .foregroundStyle(.green.opacity(0.7))
+                            .font(DSTypography.Native.monoCaption(scale, weight: .medium))
+                            .foregroundStyle(DSColors.signalDone)
                         Text(tool.inputSummary)
-                            .font(.system(size: s(9), design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.35))
+                            .font(DSTypography.Native.monoCaption(scale))
+                            .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
+                    .accessibilityElement(children: .combine)
                 }
             }
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(entry.role == .user ? "ユーザー" : "アシスタント")
     }
 }
 
@@ -48,7 +51,7 @@ enum AgentNotchMarkdownTheme {
         let codeSize = (9 * scale * 2).rounded() / 2
         return Theme.gitHub
             .text {
-                ForegroundColor(.white.opacity(0.85))
+                ForegroundColor(.primary.opacity(0.9))
                 BackgroundColor(nil)
                 FontSize(bodySize)
             }
@@ -57,11 +60,24 @@ enum AgentNotchMarkdownTheme {
                     .markdownTextStyle {
                         FontFamilyVariant(.monospaced)
                         FontSize(codeSize)
-                        ForegroundColor(.white.opacity(0.75))
+                        ForegroundColor(.primary.opacity(0.8))
                     }
                     .padding(8)
-                    .background(Color.white.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
             }
     }
+}
+
+#Preview("Chat Message") {
+    VStack(alignment: .leading, spacing: 2) {
+        ChatMessageView(entry: ChatEntry(role: .user, textContent: "サーバーの起動スクリプトを直して"))
+        ChatMessageView(entry: ChatEntry(
+            role: .assistant,
+            textContent: "`scripts/start.sh` の権限を修正しました。",
+            toolUses: [.init(name: "Bash", inputSummary: "chmod +x scripts/start.sh")]
+        ))
+    }
+    .padding(16)
+    .frame(width: 320)
+    .background(Color.black)
 }

@@ -6,24 +6,24 @@ struct ActiveToolIndicator: View {
     let tool: ToolInfo
 
     @Default(.textSize) private var textSize
-    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    private var scale: CGFloat { textSize.scale }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: DSSpacing.sm) {
             RoundedRectangle(cornerRadius: 1)
                 .fill(Color.orange.opacity(0.5))
                 .frame(width: 2)
 
             HStack(spacing: 6) {
-                PulsingDot(color: .blue, size: 5)
+                PulsingDot(color: DSColors.signalWorking, size: 5)
 
                 Text(tool.name)
-                    .font(.system(size: s(9), weight: .medium, design: .monospaced))
-                    .foregroundStyle(.blue.opacity(0.8))
+                    .font(DSTypography.Native.monoCaption(scale, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
 
                 Text(tool.summary)
-                    .font(.system(size: s(9), design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.35))
+                    .font(DSTypography.Native.monoCaption(scale))
+                    .foregroundStyle(.tertiary)
                     .lineLimit(1)
 
                 Spacer()
@@ -31,13 +31,15 @@ struct ActiveToolIndicator: View {
                 TimelineView(.periodic(from: tool.startedAt, by: 1)) { context in
                     let elapsed = context.date.timeIntervalSince(tool.startedAt)
                     Text(formatElapsed(elapsed))
-                        .font(.system(size: s(8), weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.25))
+                        .font(DSTypography.Native.monoCaption2(scale, weight: .medium))
+                        .foregroundStyle(.tertiary)
                 }
             }
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("実行中: \(tool.name), \(tool.summary)")
     }
 
     private func formatElapsed(_ interval: TimeInterval) -> String {
@@ -45,4 +47,18 @@ struct ActiveToolIndicator: View {
         if seconds < 60 { return "\(seconds)s" }
         return "\(seconds / 60)m\(seconds % 60)s"
     }
+}
+
+#Preview("Active Tool Indicator") {
+    ActiveToolIndicator(tool: ToolInfo(
+        id: "1",
+        name: "Bash",
+        summary: "swift build",
+        input: ["command": "swift build"],
+        startedAt: .now.addingTimeInterval(-8),
+        status: .running
+    ))
+    .padding(16)
+    .frame(width: 320)
+    .background(Color.black)
 }

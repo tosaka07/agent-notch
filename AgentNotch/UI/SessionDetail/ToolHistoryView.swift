@@ -6,15 +6,15 @@ struct ToolHistoryView: View {
     let session: UnifiedSession
 
     @Default(.textSize) private var textSize
-    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    private var scale: CGFloat { textSize.scale }
 
     var body: some View {
         let tools = session.recentTools
         if tools.isEmpty {
             Spacer()
             Text("No tool executions yet")
-                .font(.system(size: s(11)))
-                .foregroundStyle(.white.opacity(0.3))
+                .font(DSTypography.Native.callout(scale))
+                .foregroundStyle(.tertiary)
             Spacer()
         } else {
             ScrollView {
@@ -30,12 +30,28 @@ struct ToolHistoryView: View {
     }
 }
 
+#Preview("Tool History") {
+    let session = UnifiedSession(id: "1", agentType: .claudeCode)
+    session.recentTools = [
+        ToolInfo(id: "1", name: "Edit", summary: "SessionDetailView.swift",
+                 input: ["file_path": "SessionDetailView.swift", "old_string": "Color.white.opacity(0.08)", "new_string": "Divider()"],
+                 startedAt: .now.addingTimeInterval(-30), completedAt: .now.addingTimeInterval(-29), status: .succeeded, durationMs: 800),
+        ToolInfo(id: "2", name: "Bash", summary: "swift build",
+                 input: ["command": "swift build"],
+                 startedAt: .now.addingTimeInterval(-10), status: .running),
+    ]
+    return ToolHistoryView(session: session)
+        .frame(width: 320, height: 240)
+        .background(Color.black)
+}
+
 private struct ToolHistoryRow: View {
     let tool: ToolInfo
     @State private var isExpanded = false
 
     @Default(.textSize) private var textSize
-    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var scale: CGFloat { textSize.scale }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -43,19 +59,19 @@ private struct ToolHistoryRow: View {
             HStack(spacing: 6) {
                 // Status icon
                 Image(systemName: statusIcon)
-                    .font(.system(size: s(8)))
+                    .font(.system(size: 9))
                     .foregroundStyle(statusColor)
                     .frame(width: 12)
 
                 // Tool name
                 Text(tool.name)
-                    .font(.system(size: s(9), weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .font(DSTypography.Native.monoCaption(scale, weight: .medium))
+                    .foregroundStyle(.primary)
 
                 // Summary
                 Text(tool.summary)
-                    .font(.system(size: s(9), design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .font(DSTypography.Native.monoCaption(scale))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                 Spacer()
@@ -63,24 +79,29 @@ private struct ToolHistoryRow: View {
                 // Duration
                 if let ms = tool.durationMs {
                     Text(formatDuration(ms))
-                        .font(.system(size: s(8), design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.3))
+                        .font(DSTypography.Native.monoCaption2(scale))
+                        .foregroundStyle(.tertiary)
                 } else if let completed = tool.completedAt {
                     let ms = Int(completed.timeIntervalSince(tool.startedAt) * 1000)
                     Text(formatDuration(ms))
-                        .font(.system(size: s(8), design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.3))
+                        .font(DSTypography.Native.monoCaption2(scale))
+                        .foregroundStyle(.tertiary)
                 }
 
                 // Time
                 Text(formatTime(tool.startedAt))
-                    .font(.system(size: s(8), design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.25))
+                    .font(DSTypography.Native.monoCaption2(scale))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 6)
             .contentShape(Rectangle())
-            .onTapGesture { withAnimation(.easeOut(duration: 0.15)) { isExpanded.toggle() } }
+            .onTapGesture {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { isExpanded.toggle() }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(isExpanded ? "展開" : "折りたたみ")
 
             // Expanded detail
             if isExpanded {
@@ -90,8 +111,8 @@ private struct ToolHistoryRow: View {
                     .padding(.bottom, 6)
             }
         }
-        .background(isExpanded ? Color.white.opacity(0.03) : .clear)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .background(isExpanded ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private var statusIcon: String {
@@ -105,10 +126,10 @@ private struct ToolHistoryRow: View {
 
     private var statusColor: Color {
         switch tool.status {
-        case .running: .blue
-        case .succeeded: .green.opacity(0.6)
-        case .failed: .red.opacity(0.7)
-        case .denied: .orange.opacity(0.7)
+        case .running: DSColors.signalWorking
+        case .succeeded: DSColors.signalDone
+        case .failed: DSColors.signalError
+        case .denied: DSColors.signalAlert
         }
     }
 
@@ -130,7 +151,7 @@ private struct ToolDetailSection: View {
     let tool: ToolInfo
 
     @Default(.textSize) private var textSize
-    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    private var scale: CGFloat { textSize.scale }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -145,10 +166,10 @@ private struct ToolDetailSection: View {
                     DetailBlock(label: "file", content: path)
                 }
                 if let old = tool.input["old_string"], !old.isEmpty {
-                    DetailBlock(label: "old", content: old, color: .red.opacity(0.4))
+                    DetailBlock(label: "old", content: old, tint: .red)
                 }
                 if let new = tool.input["new_string"], !new.isEmpty {
-                    DetailBlock(label: "new", content: new, color: .green.opacity(0.4))
+                    DetailBlock(label: "new", content: new, tint: .green)
                 }
             case "Write":
                 if let path = tool.input["file_path"] {
@@ -175,25 +196,31 @@ private struct ToolDetailSection: View {
 private struct DetailBlock: View {
     let label: String
     let content: String
-    var color: Color = .white.opacity(0.05)
+    /// diff 表示（old/new）用の色付け。nil なら中立の material 背景。
+    var tint: Color?
 
     @Default(.textSize) private var textSize
-    private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
+    private var scale: CGFloat { textSize.scale }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.system(size: s(8), weight: .medium))
-                .foregroundStyle(.white.opacity(0.35))
+                .font(DSTypography.Native.caption2(scale, weight: .medium))
+                .foregroundStyle(.tertiary)
 
             Text(content.prefix(500))
-                .font(.system(size: s(9), design: .monospaced))
-                .foregroundStyle(.white.opacity(0.7))
+                .font(DSTypography.Native.monoCaption(scale))
+                .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(8)
                 .padding(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(color)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .background {
+                    if let tint {
+                        RoundedRectangle(cornerRadius: 4).fill(tint.opacity(0.15))
+                    } else {
+                        RoundedRectangle(cornerRadius: 4).fill(.quaternary)
+                    }
+                }
         }
     }
 }
