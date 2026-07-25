@@ -80,6 +80,51 @@ struct EventProcessorTests {
         #expect(session.status == .permissionWaiting)
     }
 
+    @Test("PreCompact does not clear permissionWaiting (symmetry with PostCompact)")
+    func preCompactDoesNotClearPermissionWaiting() {
+        let manager = SessionManager()
+        let sessionId = "s1"
+        let session = manager.getOrCreateSession(id: sessionId, agentType: .claudeCode)
+        session.status = .permissionWaiting
+        session.pendingPermissions = [
+            PermissionRequest(
+                id: "p1", agentType: .claudeCode, sessionId: sessionId, toolName: "Bash",
+                toolInput: [:], toolUseId: "tool-1", timestamp: Date(), canRespond: true
+            ),
+        ]
+
+        let preCompact = ClaudeEventParser.parse([
+            "hook_event_name": "PreCompact",
+            "session_id": sessionId,
+        ])
+        EventProcessor.apply(preCompact, agentType: .claudeCode, manager: manager)
+
+        #expect(session.status == .permissionWaiting)
+    }
+
+    @Test("UserPromptSubmit does not clear permissionWaiting")
+    func userPromptDoesNotClearPermissionWaiting() {
+        let manager = SessionManager()
+        let sessionId = "s1"
+        let session = manager.getOrCreateSession(id: sessionId, agentType: .claudeCode)
+        session.status = .permissionWaiting
+        session.pendingPermissions = [
+            PermissionRequest(
+                id: "p1", agentType: .claudeCode, sessionId: sessionId, toolName: "Bash",
+                toolInput: [:], toolUseId: "tool-1", timestamp: Date(), canRespond: true
+            ),
+        ]
+
+        let userPrompt = ClaudeEventParser.parse([
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": sessionId,
+            "prompt": "続けて",
+        ])
+        EventProcessor.apply(userPrompt, agentType: .claudeCode, manager: manager)
+
+        #expect(session.status == .permissionWaiting)
+    }
+
     @Test("permissionWaiting from a pending AskUserQuestion also survives a concurrent tool event")
     func pendingQuestionSurvivesConcurrentToolEvent() {
         let manager = SessionManager()

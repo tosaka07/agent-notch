@@ -225,9 +225,15 @@ public final class SessionManager: ObservableObject {
         sessions[id]
     }
 
-    /// 同一 pid を持つ既存セッションを探す（`excludedId` 自身は除く）。
-    public func session(withPid pid: Int32, excluding excludedId: String) -> UnifiedSession? {
-        sessions.values.first { $0.pid == pid && $0.id != excludedId }
+    /// 同一 pid かつ同一 cwd を持つ既存セッションを探す（`excludedId` 自身は除く）。
+    /// cwd も一致条件に含めるのは、socket が同一ユーザーの任意プロセスから書き込める前提上、
+    /// `_pid`（`ps` で列挙可能な値）を偽装した SessionStart 送信だけで他人の稼働中セッションを
+    /// 統合・削除できてしまうリスクを下げるため（pid 一致だけでは、攻撃者が正しい cwd を知らない
+    /// 限り無関係なセッションを消せない）。どちらの cwd も未知（nil）の場合は一致とみなさない。
+    /// 恒久対策（peer credential 検証等）は issue #24 に委ねる。
+    public func session(withPid pid: Int32, cwd: String?, excluding excludedId: String) -> UnifiedSession? {
+        guard let cwd, !cwd.isEmpty else { return nil }
+        return sessions.values.first { $0.pid == pid && $0.cwd == cwd && $0.id != excludedId }
     }
 
     /// `reconcileSessionStart` が古いセッションの統合を行ってよい `SessionInfo.source` の集合。
@@ -239,14 +245,14 @@ public final class SessionManager: ObservableObject {
 
     /// `/compact` `/clear` `resume` 等で Claude Code が同一プロセス上で新しい session_id を
     /// 発行した場合に、古い session_id のセッションを新しい方へ統合する（#23: 一覧の分裂対策）。
-    /// 同一 pid の既存セッションが見つかれば、その pin/mute 状態を新しい id に引き継いだ上で削除する。
-    /// `source` が `resume`/`clear`/`compact` のいずれでもない場合（`startup` を含む）は、
-    /// 別プロセス・別会話の可能性があるため何もしない。プロセスごと死んだ旧セッションは
-    /// `sweepStale` の pid 生死チェックが別途回収する。
+    /// 同一 pid かつ同一 cwd の既存セッションが見つかれば、その pin/mute 状態を新しい id に
+    /// 引き継いだ上で削除する。`source` が `resume`/`clear`/`compact` のいずれでもない場合
+    /// （`startup` を含む）は、別プロセス・別会話の可能性があるため何もしない。
+    /// プロセスごと死んだ旧セッションは `sweepStale` の pid 生死チェックが別途回収する。
     @discardableResult
-    public func reconcileSessionStart(newId: String, pid: Int32?, source: String?) -> Bool {
+    public func reconcileSessionStart(newId: String, pid: Int32?, cwd: String?, source: String?) -> Bool {
         guard let source, Self.reconcilableSources.contains(source) else { return false }
-        guard let pid, let old = session(withPid: pid, excluding: newId) else { return false }
+        guard let pid, let old = session(withPid: pid, cwd: cwd, excluding: newId) else { return false }
 
         if let state = userStates[old.id], !state.isDefault {
             userStates[newId] = state

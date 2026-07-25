@@ -84,7 +84,9 @@ enum EventProcessor {
             manager.removeSession(id: sessionId)
 
         case let .compacting(sessionId):
-            manager.session(for: sessionId)?.status = .compacting
+            if let session = manager.session(for: sessionId) {
+                setStatusUnlessPermissionPending(session, .compacting)
+            }
 
         case let .taskCreated(info):
             handleTaskCreated(info, agentType: agentType, manager: manager)
@@ -131,7 +133,7 @@ enum EventProcessor {
         Log.events.info("userPrompt id=\(sessionId)")
         let session = manager.session(for: sessionId)
             ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
-        session.status = .thinking
+        setStatusUnlessPermissionPending(session, .thinking)
         NotificationCenter.default.post(name: .agentNotchSessionResumed, object: sessionId)
 
         // UserPromptSubmit hook のペイロードに prompt が含まれていれば、それを直接反映する。

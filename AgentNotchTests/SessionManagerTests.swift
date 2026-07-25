@@ -212,16 +212,19 @@ struct SessionManagerTests {
     // MARK: - #23: reconcileSessionStart (pid ベースのセッション統合)
 
     @Test(
-        "reconcileSessionStart merges an old session with the same pid for resume/clear/compact sources",
+        "reconcileSessionStart merges an old session with the same pid+cwd for resume/clear/compact sources",
         arguments: ["resume", "clear", "compact"]
     )
     func reconcileSessionStartMergesSamePidForContinuationSources(source: String) {
         let manager = SessionManager()
         let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
         old.pid = 4242
+        old.cwd = "/Users/dev/project"
         old.status = .thinking
 
-        let merged = manager.reconcileSessionStart(newId: "new-session", pid: 4242, source: source)
+        let merged = manager.reconcileSessionStart(
+            newId: "new-session", pid: 4242, cwd: "/Users/dev/project", source: source
+        )
 
         #expect(merged)
         #expect(manager.session(for: "old-session") == nil)
@@ -233,11 +236,14 @@ struct SessionManagerTests {
         let manager = SessionManager()
         let leader = manager.getOrCreateSession(id: "leader-session", agentType: .claudeCode)
         leader.pid = 4242
+        leader.cwd = "/Users/dev/project"
         leader.status = .thinking
 
         // teammate が同一プロセス内で新規セッションとして起動するケースを模する。
         // pid は親と同じでも source=startup なので、リーダーセッションを誤って消してはいけない。
-        let merged = manager.reconcileSessionStart(newId: "teammate-session", pid: 4242, source: "startup")
+        let merged = manager.reconcileSessionStart(
+            newId: "teammate-session", pid: 4242, cwd: "/Users/dev/project", source: "startup"
+        )
 
         #expect(merged == false)
         #expect(manager.session(for: "leader-session") != nil)
@@ -248,9 +254,51 @@ struct SessionManagerTests {
         let manager = SessionManager()
         let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
         old.pid = 4242
+        old.cwd = "/Users/dev/project"
 
-        #expect(manager.reconcileSessionStart(newId: "new-session", pid: 4242, source: nil) == false)
-        #expect(manager.reconcileSessionStart(newId: "new-session", pid: 4242, source: "something-else") == false)
+        #expect(
+            manager.reconcileSessionStart(newId: "new-session", pid: 4242, cwd: "/Users/dev/project", source: nil)
+                == false
+        )
+        #expect(
+            manager.reconcileSessionStart(
+                newId: "new-session", pid: 4242, cwd: "/Users/dev/project", source: "something-else"
+            ) == false
+        )
+        #expect(manager.session(for: "old-session") != nil)
+    }
+
+    @Test("reconcileSessionStart does NOT merge when cwd differs (pid alone is not trusted — security)")
+    func reconcileSessionStartSkipsMismatchedCwd() {
+        let manager = SessionManager()
+        let victim = manager.getOrCreateSession(id: "victim-session", agentType: .claudeCode)
+        victim.pid = 4242
+        victim.cwd = "/Users/victim/secret-project"
+        victim.status = .thinking
+
+        // 攻撃者が victim の pid（`ps` 等で観測可能）を詐称した SessionStart を送っても、
+        // cwd を知らない・異なる限り victim のセッションを統合（削除）できてはいけない。
+        let merged = manager.reconcileSessionStart(
+            newId: "attacker-session", pid: 4242, cwd: "/tmp/attacker", source: "compact"
+        )
+
+        #expect(merged == false)
+        #expect(manager.session(for: "victim-session") != nil)
+    }
+
+    @Test("reconcileSessionStart does NOT merge when cwd is unknown on either side")
+    func reconcileSessionStartSkipsUnknownCwd() {
+        let manager = SessionManager()
+        let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
+        old.pid = 4242
+        old.cwd = nil
+
+        #expect(manager.reconcileSessionStart(newId: "new-session", pid: 4242, cwd: nil, source: "compact") == false)
+        #expect(
+            manager.reconcileSessionStart(
+                newId: "new-session", pid: 4242, cwd: "/Users/dev/project", source: "compact"
+            ) == false
+        )
         #expect(manager.session(for: "old-session") != nil)
     }
 
@@ -259,9 +307,10 @@ struct SessionManagerTests {
         let manager = SessionManager()
         let old = manager.getOrCreateSession(id: "old-session", agentType: .claudeCode)
         old.pid = 99
+        old.cwd = "/Users/dev/project"
         manager.setPinned("old-session", true)
 
-        _ = manager.reconcileSessionStart(newId: "new-session", pid: 99, source: "compact")
+        _ = manager.reconcileSessionStart(newId: "new-session", pid: 99, cwd: "/Users/dev/project", source: "compact")
         _ = manager.getOrCreateSession(id: "new-session", agentType: .claudeCode)
 
         #expect(manager.userState(for: "new-session").pinned)
@@ -273,8 +322,8 @@ struct SessionManagerTests {
         let manager = SessionManager()
         _ = manager.getOrCreateSession(id: "s1", agentType: .claudeCode)
 
-        #expect(manager.reconcileSessionStart(newId: "s2", pid: nil, source: "resume") == false)
-        #expect(manager.reconcileSessionStart(newId: "s2", pid: 12345, source: "resume") == false)
+        #expect(manager.reconcileSessionStart(newId: "s2", pid: nil, cwd: "/tmp", source: "resume") == false)
+        #expect(manager.reconcileSessionStart(newId: "s2", pid: 12345, cwd: "/tmp", source: "resume") == false)
         #expect(manager.allSessions.count == 1)
     }
 

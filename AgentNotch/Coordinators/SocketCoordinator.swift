@@ -43,8 +43,12 @@ final class SocketCoordinator {
                     // 同一プロセス（pid）が resume/compact/clear で新しい session_id を発行した場合、
                     // 古いセッションを新しい方へ統合する（#23: 一覧の分裂対策）。source が
                     // startup（teammate の新規セッション起動等も含む）の場合は統合しない。
+                    // pid だけでなく cwd も一致条件に含めることで、_pid を偽装した SessionStart
+                    // 送信による他セッションの乗っ取りの難易度を上げている（レビュー指摘 / issue #24 で恒久対策）。
                     if hookEvent == "SessionStart" {
-                        manager.reconcileSessionStart(newId: parsed.sessionId, pid: pid, source: sessionStartSource)
+                        manager.reconcileSessionStart(
+                            newId: parsed.sessionId, pid: pid, cwd: cwd, source: sessionStartSource
+                        )
                     }
                     EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
                     EventProcessor.backfillSession(
