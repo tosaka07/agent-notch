@@ -16,6 +16,8 @@ struct NotchRootView: View {
     @State private var glow = CompletionGlowController()
     @State private var focusController = NotificationFocusController()
     @State private var usageCoordinator = UsageCoordinator()
+    /// 日毎コストはローカルログ走査（ネットワーク不要・重い I/O）なので使用率とは別 Coordinator。
+    @State private var dailyCostCoordinator = DailyCostCoordinator()
     @ObservedObject var sessionManager: SessionManager
     private let permissionActions: PermissionActions
     @Default(.usageEnabled) private var usageEnabled
@@ -54,6 +56,12 @@ struct NotchRootView: View {
                     sessionManager: sessionManager,
                     usageCoordinator: usageCoordinator
                 )
+            case .usage:
+                UsagePageView(
+                    viewModel: viewModel,
+                    usageCoordinator: usageCoordinator,
+                    dailyCostCoordinator: dailyCostCoordinator
+                )
             }
         }
         .notchShell(viewModel: viewModel, glow: glow)
@@ -80,19 +88,27 @@ struct NotchRootView: View {
         }
     }
 
-    /// 使用量表示は `ExpandedPageView`（セッション一覧）のみで行うため、`expanded` が
-    /// 見えている間だけポーリングする。`usageEnabled` が OFF の間は、Claude の資格情報にも
+    /// 使用量表示は `ExpandedPageView`（セッション一覧のトップバー左翼のゲージ）と
+    /// `UsagePageView`（使用量詳細ページ）で行うため、そのどちらかが見えている間だけ
+    /// ポーリングする。`usageEnabled` が OFF の間は、Claude の資格情報にも
     /// undocumented API にも一切触らない（#38）。
     private func syncUsageCoordinator(for mode: NotchMode) {
         guard usageEnabled else {
             usageCoordinator.stop()
+            dailyCostCoordinator.stop()
             return
         }
         switch mode {
-        case .expanded:
+        case .expanded, .usage:
             usageCoordinator.start()
         case .compact, .notification, .sessionDetail:
             usageCoordinator.stop()
+        }
+        // 日毎コストは使用量ページを開いている間だけ集計する（重い I/O なので一覧では回さない）。
+        if case .usage = mode {
+            dailyCostCoordinator.start()
+        } else {
+            dailyCostCoordinator.stop()
         }
     }
 }

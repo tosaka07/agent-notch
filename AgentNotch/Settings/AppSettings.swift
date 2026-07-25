@@ -77,15 +77,20 @@ enum NotificationTapAction: String, Defaults.Serializable, CaseIterable, Sendabl
     }
 }
 
-/// ExpandedPageView トップバー左翼の常時表示ゲージの見せ方。タップで切り替わる。
+/// ExpandedPageView トップバー左翼の常時表示ゲージの見せ方。設定から選ぶ。
+///
+/// ゲージ本体のクリックは「使用量の詳細ページを開く」に割り当てているため、
+/// 表示形式の切り替えはタップではなく設定に置いている。
 enum UsageGaugeStyle: String, Defaults.Serializable, CaseIterable, Sendable {
+    /// リングのみ（ドットの円環で使用率を示す）。
     case ring
+    /// 数字のみ（2 桁のピクセル数字）。
     case number
 
-    var toggled: UsageGaugeStyle {
+    var label: String {
         switch self {
-        case .ring: .number
-        case .number: .ring
+        case .ring: "リング"
+        case .number: "数字"
         }
     }
 }

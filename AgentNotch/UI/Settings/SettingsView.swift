@@ -15,6 +15,7 @@ struct SettingsView: View {
     @Default(.soundError) var soundError
     @Default(.cardPromptSource) var cardPromptSource
     @Default(.usageEnabled) var usageEnabled
+    @Default(.usageGaugeStyle) var usageGaugeStyle
     var onClose: (() -> Void)? = nil
 
     var body: some View {
@@ -84,9 +85,17 @@ struct SettingsView: View {
 
             Section("使用量") {
                 Toggle("使用量を表示する", isOn: $usageEnabled)
-                Text("Claude / Codex のレート制限の消費状況を展開表示の下部に出します。\nOFF にすると資格情報の読み取りも API 呼び出しも行いません。")
+                Text("Claude / Codex のレート制限の消費状況を一覧のトップバー左側に出します。\nゲージをクリックすると全内訳を表示します。\nOFF にすると資格情報の読み取りも API 呼び出しも行いません。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if usageEnabled {
+                    Picker("ゲージの表示", selection: $usageGaugeStyle) {
+                        ForEach(UsageGaugeStyle.allCases, id: \.self) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }
+                }
             }
 
             Section("セッション") {

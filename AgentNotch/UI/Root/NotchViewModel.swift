@@ -47,6 +47,8 @@ final class NotchViewModel {
             return compactWidth
         case .expanded: return 520
         case .sessionDetail: return 620
+        // 使用量ページは一覧と同じ幅。ウィンドウ単位の内訳を縦に積むだけなので広げる必要はない。
+        case .usage: return 520
         }
     }
 
@@ -65,13 +67,15 @@ final class NotchViewModel {
             return 380
         case .sessionDetail:
             return 500
+        case .usage:
+            return 440
         }
     }
 
     var topCornerRadius: CGFloat {
         switch mode {
         case .compact, .notification: 6
-        case .expanded, .sessionDetail: 12
+        case .expanded, .sessionDetail, .usage: 12
         }
     }
 
@@ -79,7 +83,7 @@ final class NotchViewModel {
         switch mode {
         case .compact: 14
         case .notification: 16
-        case .expanded, .sessionDetail: 24
+        case .expanded, .sessionDetail, .usage: 24
         }
     }
 
@@ -87,11 +91,13 @@ final class NotchViewModel {
         switch mode {
         case .compact, .notification: mode = .expanded
         case .expanded: mode = .compact
-        case .sessionDetail: mode = .expanded
+        // 詳細系ページからは一覧に戻る（トグルは「一段戻る」として振る舞う）。
+        case .sessionDetail, .usage: mode = .expanded
         }
     }
 
     func close() { mode = .compact }
     func showSession(_ id: String) { mode = .sessionDetail(sessionId: id) }
+    func showUsage() { mode = .usage }
     func backToList() { mode = .expanded }
 }

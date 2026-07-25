@@ -7,8 +7,9 @@ import SwiftUI
 /// # レイアウト
 /// - ヘッダ行は設けない。ソート・設定アイコンは notch 右翼、使用量ゲージ（`UsageGauge`）は
 ///   notch 左翼に配置し、カードを即座に表示してスクロール量を最小化する。
-///   使用量ゲージをタップするとリング⇔数字表示を切り替え、右クリック（コンテキストメニュー）
-///   から週次・モデル別の詳細（`UsageDetailSection`）をポップオーバー表示できる（issue #36）。
+///   使用量ゲージは Claude / Codex を横並びで出し（取得できた方だけ）、クリックすると
+///   notch 全体が使用量詳細ページ（`UsagePageView`）に切り替わる。ゲージの表示形式
+///   （リング / 数字 / リング+数字）は設定から選ぶ（issue #36）。
 struct ExpandedPageView: View {
     let viewModel: NotchViewModel
     @ObservedObject var sessionManager: SessionManager
@@ -21,20 +22,22 @@ struct ExpandedPageView: View {
     @Default(.usageEnabled) private var usageEnabled
 
     @State private var showSortMenu = false
-    @State private var showUsageDetail = false
 
     private func s(_ base: CGFloat) -> CGFloat { textSize.scaled(base) }
 
-    /// トップバー左翼の `UsageGauge` に出す使用率。Claude / Codex のうち取得できた方の
-    /// 代表値を使い、両方取得できていれば「より注意が必要な方（値が大きい方）」を見せる。
+    /// トップバー左翼に横並びで出すゲージの一覧。Claude → Codex の順。
+    ///
+    /// 初回ポーリングが返る前（`snapshot == nil`）は percent を nil にしたプレースホルダを出す。
+    /// 何も出さないと起動直後に「ゲージが無い」ように見えて違和感があるため。
     /// 一覧はどの agentType のセッションが並ぶか一定しないため、特定セッションには紐づけない。
-    private var headerUsagePercent: Double? {
-        guard usageEnabled, let snapshot = usageCoordinator.snapshot else { return nil }
-        let candidates = [
-            snapshot.primaryUsedPercent(for: .claudeCode),
-            snapshot.primaryUsedPercent(for: .codex),
-        ].compactMap { $0 }
-        return candidates.max()
+    private var headerUsages: [(agentType: AgentType, percent: Double?)] {
+        guard usageEnabled else { return [] }
+        guard let snapshot = usageCoordinator.snapshot else {
+            return [(AgentType.claudeCode, nil)]
+        }
+        return [AgentType.claudeCode, .codex].compactMap { agentType in
+            snapshot.primaryUsedPercent(for: agentType).map { (agentType, Double?.some($0)) }
+        }
     }
 
     var body: some View {
@@ -73,23 +76,24 @@ struct ExpandedPageView: View {
     /// 対称構造を、展開時のトップバーでも踏襲する。
     private func notchTopBar(totalCount: Int) -> some View {
         HStack(spacing: 0) {
-            // 左翼: 使用量ゲージ（取得できていなければ何も出さない）
-            Group {
-                if let percent = headerUsagePercent {
-                    // タップ（Button 本体）= リング⇔数字トグル、右クリック = 詳細ポップオーバー。
-                    // contextMenu の項目は VoiceOver の「アクション」ローターにも自動で載る。
-                    UsageGauge(usedPercent: percent)
-                        .contextMenu {
-                            Button("使用量の詳細を表示") { showUsageDetail = true }
+            // 左翼: 使用量ゲージ。Claude / Codex を横並びにし、クリックで使用量詳細ページへ。
+            // 表示形式（リング / 数字 / リング+数字）は設定で選ぶ（`Defaults[.usageGaugeStyle]`）。
+            if !headerUsages.isEmpty {
+                Button {
+                    viewModel.showUsage()
+                } label: {
+                    HStack(spacing: 6) {
+                        ForEach(headerUsages, id: \.agentType) { usage in
+                            UsageGauge(usedPercent: usage.percent, agentType: usage.agentType)
                         }
-                        .popover(isPresented: $showUsageDetail, arrowEdge: .bottom) {
-                            UsageDetailSection(snapshot: usageCoordinator.snapshot)
-                                .padding(16)
-                                .frame(width: 260)
-                        }
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("使用量の詳細を開く")
+                .help("使用量の詳細を表示")
+                .padding(.leading, 16)
             }
-            .padding(.leading, 16)
 
             Spacer()
 
