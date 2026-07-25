@@ -185,13 +185,40 @@ enum EventProcessor {
 
     @MainActor
     private static func handleToolCompleted(_ info: ToolEndInfo, manager: SessionManager) {
+        clearPendingQuestionIfAnsweredElsewhere(
+            sessionId: info.sessionId, toolName: info.toolName, manager: manager
+        )
         finalizeCurrentTool(sessionId: info.sessionId, toolUseId: info.toolUseId, status: .succeeded, manager: manager)
     }
 
     @MainActor
     private static func handleToolFailed(_ info: ToolFailInfo, manager: SessionManager) {
+        clearPendingQuestionIfAnsweredElsewhere(
+            sessionId: info.sessionId, toolName: info.toolName, manager: manager
+        )
         finalizeCurrentTool(sessionId: info.sessionId, toolUseId: info.toolUseId, status: .failed, manager: manager)
     }
+
+    /// AskUserQuestion の PostToolUse / PostToolUseFailure が届いた＝質問は notch 以外
+    /// （ターミナル等）も含めどこかで決着済み。残っている pendingQuestion は stale なので消す。
+    /// 消さないと、ターミナルで回答した後もバナーが残り続け、それに回答しても届かない
+    /// 「送ったことにならない」状態になる（issue #28）。
+    /// notch 経由で回答した場合は answer() が先に nil にしているため no-op。
+    /// なお PostToolUse の tool_use_id は本物（toolu_...）だが pendingQuestion.toolUseId は
+    /// PermissionRequest 受信時のローカル生成 ID なので、id ではなく tool 名で照合する
+    /// （AskUserQuestion はセッションごとに同時に 1 つしか進行しない）。
+    @MainActor
+    private static func clearPendingQuestionIfAnsweredElsewhere(
+        sessionId: String, toolName: String, manager: SessionManager
+    ) {
+        guard toolName == "AskUserQuestion",
+              let session = manager.session(for: sessionId),
+              session.pendingQuestion != nil else { return }
+        Log.events.info("pendingQuestion cleared: AskUserQuestion resolved outside notch id=\(sessionId)")
+        session.pendingQuestion = nil
+        session.status = session.statusAfterPermissionResolved()
+    }
+
 
     /// 現在実行中のツールを `.succeeded` / `.failed` で閉じて recentTools に積む共通ロジック。
     @MainActor

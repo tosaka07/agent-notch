@@ -27,6 +27,7 @@ public struct ToolEndInfo: Sendable {
 public struct ToolFailInfo: Sendable {
     public let sessionId: String
     public let toolUseId: String
+    public let toolName: String
     public let error: String
 }
 
@@ -234,6 +235,7 @@ public enum ClaudeEventParser {
             let info = ToolFailInfo(
                 sessionId: sessionId,
                 toolUseId: toolUseId,
+                toolName: json["tool_name"] as? String ?? "",
                 error: error
             )
             return .toolFailed(info)

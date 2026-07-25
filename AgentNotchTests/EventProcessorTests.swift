@@ -176,4 +176,73 @@ struct EventProcessorTests {
         EventProcessor.apply(otherToolEnd, agentType: .claudeCode, manager: manager)
         #expect(session.status == .permissionWaiting)
     }
+
+    // MARK: - issue #28: 質問回答の取りこぼし対策
+
+    /// AskUserQuestion の pendingQuestion を作るヘルパー。
+    private func applyAskQuestion(manager: SessionManager, sessionId: String) -> UnifiedSession {
+        let askQuestion = ClaudeEventParser.parse([
+            "hook_event_name": "PermissionRequest",
+            "session_id": sessionId,
+            "tool_name": "AskUserQuestion",
+            "tool_input": [
+                "questions": [
+                    ["question": "どちらの方針にしますか？", "options": [["label": "A"], ["label": "B"]]],
+                ],
+            ],
+        ])
+        EventProcessor.apply(askQuestion, agentType: .claudeCode, manager: manager)
+        return manager.session(for: sessionId)!
+    }
+
+    @Test("PostToolUse(AskUserQuestion) はターミナル等で決着済みの stale な質問バナーを消す (#28)")
+    func postToolUseClearsStalePendingQuestion() {
+        let manager = SessionManager()
+        let session = applyAskQuestion(manager: manager, sessionId: "s1")
+        #expect(session.pendingQuestion != nil)
+
+        // ターミナル側で回答され、AskUserQuestion 本体が完了した（tool_use_id は本物の toolu_ 形式で、
+        // pendingQuestion のローカル生成 ID とは一致しない）。
+        let questionDone = ClaudeEventParser.parse([
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "AskUserQuestion",
+            "tool_use_id": "toolu_real",
+        ])
+        EventProcessor.apply(questionDone, agentType: .claudeCode, manager: manager)
+        #expect(session.pendingQuestion == nil)
+        #expect(session.status != .permissionWaiting)
+    }
+
+    @Test("PostToolUseFailure(AskUserQuestion) も stale な質問バナーを消す (#28)")
+    func postToolUseFailureClearsStalePendingQuestion() {
+        let manager = SessionManager()
+        let session = applyAskQuestion(manager: manager, sessionId: "s1")
+
+        let questionFailed = ClaudeEventParser.parse([
+            "hook_event_name": "PostToolUseFailure",
+            "session_id": "s1",
+            "tool_name": "AskUserQuestion",
+            "tool_use_id": "toolu_real",
+            "error": "schema validation failed",
+        ])
+        EventProcessor.apply(questionFailed, agentType: .claudeCode, manager: manager)
+        #expect(session.pendingQuestion == nil)
+    }
+
+    @Test("別ツールの PostToolUse では質問バナーを消さない (#28)")
+    func otherToolPostToolUseKeepsPendingQuestion() {
+        let manager = SessionManager()
+        let session = applyAskQuestion(manager: manager, sessionId: "s1")
+
+        let otherToolEnd = ClaudeEventParser.parse([
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "Read",
+            "tool_use_id": "tool-2",
+        ])
+        EventProcessor.apply(otherToolEnd, agentType: .claudeCode, manager: manager)
+        #expect(session.pendingQuestion != nil)
+        #expect(session.status == .permissionWaiting)
+    }
 }
