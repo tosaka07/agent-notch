@@ -7,9 +7,9 @@ import SwiftUI
 ///   `CompletionGlowController`（glow 演出）, `NotificationFocusController`（キーボードフォーカス）
 /// - mode に応じた Page を表示し、外殻は `NotchShell`、副作用は `NotchEventRouter` に委譲。
 ///
-/// `UsageCoordinator` はここで一つだけ保持し、`expanded` / `sessionDetail` の
-/// 両方に同じインスタンスを渡す。Page 側でそれぞれ生成すると 180 秒の
-/// 再取得ガードがモード遷移のたびにリセットされてしまうため（`UsageCoordinator` 参照）。
+/// `UsageCoordinator` はここで一つだけ保持し、`ExpandedPageView`（セッション一覧の
+/// トップバー左翼 `UsageGauge`）に渡す。Page 側で生成すると 180 秒の再取得ガードが
+/// モード遷移のたびにリセットされてしまうため（`UsageCoordinator` 参照）。
 struct NotchRootView: View {
     @State var viewModel: NotchViewModel
     @State private var notificationManager = NotchNotificationManager()
@@ -42,7 +42,11 @@ struct NotchRootView: View {
                     sessionManager: sessionManager
                 )
             case .expanded:
-                ExpandedPageView(viewModel: viewModel, sessionManager: sessionManager)
+                ExpandedPageView(
+                    viewModel: viewModel,
+                    sessionManager: sessionManager,
+                    usageCoordinator: usageCoordinator
+                )
             case .sessionDetail(let sessionId):
                 SessionDetailPage(
                     sessionId: sessionId,
@@ -76,17 +80,18 @@ struct NotchRootView: View {
         }
     }
 
-    /// 使用量取得が必要な画面（`expanded` / `sessionDetail`）が見えている間だけポーリングする。
-    /// `usageEnabled` が OFF の間は、Claude の資格情報にも undocumented API にも一切触らない（#38）。
+    /// 使用量表示は `ExpandedPageView`（セッション一覧）のみで行うため、`expanded` が
+    /// 見えている間だけポーリングする。`usageEnabled` が OFF の間は、Claude の資格情報にも
+    /// undocumented API にも一切触らない（#38）。
     private func syncUsageCoordinator(for mode: NotchMode) {
         guard usageEnabled else {
             usageCoordinator.stop()
             return
         }
         switch mode {
-        case .expanded, .sessionDetail:
+        case .expanded:
             usageCoordinator.start()
-        case .compact, .notification:
+        case .compact, .notification, .sessionDetail:
             usageCoordinator.stop()
         }
     }

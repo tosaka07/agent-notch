@@ -29,7 +29,9 @@ struct PixelCounter: View {
         return cells
     }
 
-    private static func drawTwoDigit(
+    /// 2桁の数字ビットマップを `rowOffset` 行目から描く。
+    /// `UsageGauge` など他の atom からもピクセル数字を再利用できるよう internal に公開している。
+    static func drawTwoDigit(
         _ n: Int, rowOffset: Int, color: Color, into cells: inout [[DotCell]]
     ) {
         let tens = digitBitmaps[(n / 10) % 10]

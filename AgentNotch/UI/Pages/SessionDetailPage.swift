@@ -7,6 +7,8 @@ struct SessionDetailPage: View {
     let sessionId: String
     let viewModel: NotchViewModel
     @ObservedObject var sessionManager: SessionManager
+    /// フォールバック（セッションが見つからない場合）で `ExpandedPageView` を表示するために必要。
+    /// `SessionDetailView` 自体はもう使用量表示を持たないため参照しない。
     @ObservedObject var usageCoordinator: UsageCoordinator
 
     var body: some View {
@@ -14,12 +16,15 @@ struct SessionDetailPage: View {
             SessionDetailView(
                 session: session,
                 sessionManager: sessionManager,
-                usageCoordinator: usageCoordinator,
                 onBack: { viewModel.backToList() },
                 onShowSession: { id in viewModel.showSession(id) }
             )
         } else {
-            ExpandedPageView(viewModel: viewModel, sessionManager: sessionManager)
+            ExpandedPageView(
+                viewModel: viewModel,
+                sessionManager: sessionManager,
+                usageCoordinator: usageCoordinator
+            )
         }
     }
 }

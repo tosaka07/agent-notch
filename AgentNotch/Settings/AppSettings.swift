@@ -77,7 +77,7 @@ enum NotificationTapAction: String, Defaults.Serializable, CaseIterable, Sendabl
     }
 }
 
-/// SessionDetailView 右下の常時表示ゲージの見せ方。タップで切り替わる。
+/// ExpandedPageView トップバー左翼の常時表示ゲージの見せ方。タップで切り替わる。
 enum UsageGaugeStyle: String, Defaults.Serializable, CaseIterable, Sendable {
     case ring
     case number
@@ -198,7 +198,7 @@ extension Defaults.Keys {
     /// セッションカードの目的行に表示するメッセージ。
     static let cardPromptSource = Key<CardPromptSource>("cardPromptSource", default: .firstUserMessage)
 
-    /// SessionDetailView 右下の常時表示ゲージ（リング / 数字）の表示形式。
+    /// ExpandedPageView トップバー左翼の常時表示ゲージ（リング / 数字）の表示形式。
     static let usageGaugeStyle = Key<UsageGaugeStyle>("usageGaugeStyle", default: .ring)
 
     /// ExpandedPageView 下部の USAGE セクションが折りたたまれているか。
