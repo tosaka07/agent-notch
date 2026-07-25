@@ -148,6 +148,10 @@ public final class SocketServer: Sendable {
     }
 
     private func startSweepTimer() {
+        // start() が stop() を挟まず2回呼ばれるケース（あるいは将来の呼び出し順変更）で
+        // 古いタイマーが残ったまま新しいタイマーを生成すると、二重に sweep が走ってしまう。
+        // stop() 側と対称に、生成前に既存タイマーを必ず cancel する。
+        _sweepTimer.get()?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + Self.sweepIntervalSeconds, repeating: Self.sweepIntervalSeconds)
         timer.setEventHandler { [weak self] in

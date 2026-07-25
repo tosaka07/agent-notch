@@ -38,17 +38,6 @@ final class SocketCoordinator {
                 let tty = message["_tty"] as? String
                 let permissionMode = parsed.permissionMode
 
-                Task { @MainActor in
-                    EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
-                    EventProcessor.backfillSession(
-                        parsed.sessionId, cwd: cwd, transcriptPath: transcriptPath,
-                        pid: pid, tty: tty, manager: manager
-                    )
-                    EventProcessor.applyPermissionMode(
-                        sessionId: parsed.sessionId, rawMode: permissionMode, manager: manager
-                    )
-                }
-
                 // `PermissionRequest` hook 経由のときだけ deferred にする（tool_response を注入できる唯一の経路）。
                 // `PreToolUse` 経由の AskUserQuestion は即時応答しないと agent がブロックされる上、
                 // 応答しても tool_response にならないので pass-through。
@@ -64,25 +53,51 @@ final class SocketCoordinator {
                     deferred = nil
                 }
 
-                guard let d = deferred else { return [String: Any]() }
-                let pending = PendingSocketResponse(
-                    kind: d.kind,
-                    sessionId: d.sessionId,
-                    toolUseId: d.toolUseId,
-                    connection: connection,
-                    receivedAt: Date(),
-                    toolInput: d.toolInput
-                )
-                // 既存の toolUseId と衝突した場合は先勝ちで拒否される（socket ハイジャック対策 #24）。
-                // 拒否されたら、正規セッションの応答経路を乗っ取ろうとした新規 connection 側を閉じる。
-                guard serverBox.server?.addPending(pending) == true else {
-                    Log.socket.warning(
-                        "Rejected duplicate/hijack-attempt pending toolUseId=\(d.toolUseId); closing new connection"
+                // deferred なケースは、addPending の成否を「先に」同期的に確定させる
+                // （addPending 自体は MainActor 非依存で同期）。
+                // ここで成功しなかった（＝既存 toolUseId と衝突＝ハイジャック試行）場合、
+                // 後段の apply で UI に pendingPermissions/pendingQuestion を追加してしまうと、
+                // ユーザー視点では正規の承認リクエストに見えるのに、実際に承認/拒否した応答は
+                // 攻撃者が握る新規 connection に送られてしまう（security review 指摘）。
+                // そのため apply 自体をスキップし、新規 connection を閉じて即 return する。
+                var pendingRegistered = true
+                if let d = deferred {
+                    let pending = PendingSocketResponse(
+                        kind: d.kind,
+                        sessionId: d.sessionId,
+                        toolUseId: d.toolUseId,
+                        connection: connection,
+                        receivedAt: Date(),
+                        toolInput: d.toolInput
                     )
-                    connection.cancel()
-                    return nil
+                    pendingRegistered = serverBox.server?.addPending(pending) == true
+                    if !pendingRegistered {
+                        Log.socket.warning(
+                            "Rejected duplicate/hijack-attempt pending toolUseId=\(d.toolUseId); closing new connection"
+                        )
+                        connection.cancel()
+                    } else {
+                        Log.socket.info("Deferred \(d.kind.rawValue) toolUseId=\(d.toolUseId)")
+                    }
                 }
-                Log.socket.info("Deferred \(d.kind.rawValue) toolUseId=\(d.toolUseId)")
+
+                Task { @MainActor in
+                    if pendingRegistered {
+                        EventProcessor.apply(parsed.event, agentType: parsed.agentType, manager: manager)
+                    }
+                    EventProcessor.backfillSession(
+                        parsed.sessionId, cwd: cwd, transcriptPath: transcriptPath,
+                        pid: pid, tty: tty, manager: manager
+                    )
+                    EventProcessor.applyPermissionMode(
+                        sessionId: parsed.sessionId, rawMode: permissionMode, manager: manager
+                    )
+                }
+
+                // deferred でなければ即時の空応答（pass-through）を返す。
+                // deferred の場合は成功・拒否いずれも応答は別経路（deferred送信 or 即クローズ）
+                // 済みなので、ここでは常に nil（immediate な応答をしない）を返す。
+                guard deferred != nil else { return [String: Any]() }
                 return nil
             }
             serverBox.server = server
