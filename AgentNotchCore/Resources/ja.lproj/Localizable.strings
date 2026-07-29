@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>%lld lines</key>
+	<string>%lld 行</string>
+	<key>%lldd ago</key>
+	<string>%lld日前</string>
+	<key>%lldh ago</key>
+	<string>%lld時間前</string>
+	<key>%lldm ago</key>
+	<string>%lld分前</string>
+	<key>%lldmo ago</key>
+	<string>%lldヵ月前</string>
+	<key>%llds ago</key>
+	<string>%lld秒前</string>
+	<key>%lldy ago</key>
+	<string>%lld年前</string>
+	<key>1 line</key>
+	<string>1 行</string>
+	<key>By last update</key>
+	<string>最終更新順</string>
+	<key>By project</key>
+	<string>プロジェクト順</string>
+	<key>By start time</key>
+	<string>開始時刻順</string>
+	<key>By urgency</key>
+	<string>要介入順</string>
+	<key>Group by agent</key>
+	<string>エージェント別</string>
+	<key>Group by project</key>
+	<string>プロジェクト別</string>
+	<key>Group by status</key>
+	<string>ステータス別</string>
+	<key>Group by team</key>
+	<string>チーム別</string>
+	<key>No grouping</key>
+	<string>グループ化なし</string>
+	<key>[Image ×%lld]</key>
+	<string>[画像×%lld]</string>
+	<key>[Image]</key>
+	<string>[画像]</string>
+	<key>error</key>
+	<string>エラー</string>
+</dict>
+</plist>

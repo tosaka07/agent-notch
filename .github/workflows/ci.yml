@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch supersedes the previous run. macOS runners are
+# capped at 5 concurrent jobs per account, so stale runs would block real ones.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    # `macos-26` is required, not a preference: Package.swift pins
+    # `.macOS(.v26)` and the UI calls `glassEffect` with no availability
+    # branching, so the build needs the macOS 26 SDK.
+    # Standard macOS runners are free and unlimited on public repositories.
+    runs-on: macos-26
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Runner images are refreshed weekly and the default Xcode moves with
+      # them. Pick the newest Xcode 26.x explicitly so a toolchain bump shows up
+      # in the log instead of as a mysterious build failure. Any 26.x ships the
+      # macOS 26 SDK, so "newest 26" is enough — no need to pin a patch version.
+      - name: Select Xcode
+        run: |
+          xcode="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          echo "Using $xcode"
+          sudo xcode-select -s "$xcode"
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      # Formatting is checked first, then compiler warnings are promoted to
+      # errors so diagnostics appear with the usual file/line/code frame.
+      - name: Lint
+        run: ./scripts/lint.sh
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test --skip-build

@@ -1,0 +1,711 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>%@ (current session)</key>
+	<string>%@ (現在のセッション)</string>
+	<key>%@ over the last %lld days</key>
+	<string>直近 %2$lld 日で %1$@</string>
+	<key>%@ usage</key>
+	<string>%@ の使用率</string>
+	<key>%@ — %@</key>
+	<string>%@ — %@</string>
+	<key>%@ — %@ %@</key>
+	<string>%@ — %@ %@</string>
+	<key>%@, %lld items</key>
+	<string>%@ %lld件</string>
+	<key>%lld percent</key>
+	<string>%lld パーセント</string>
+	<key>%lld percent remaining</key>
+	<string>残り %lld パーセント</string>
+	<key>%lld seconds remaining</key>
+	<string>残り %lld 秒</string>
+	<key>%lldd %lldh left</key>
+	<string>あと %lld 日 %lld 時間</string>
+	<key>%lldh %lldm left</key>
+	<string>あと %lld 時間 %lld 分</string>
+	<key>%lldm left</key>
+	<string>あと %lld 分</string>
+	<key>1 day</key>
+	<string>1日</string>
+	<key>1 hour</key>
+	<string>1時間</string>
+	<key>3 days</key>
+	<string>3日</string>
+	<key>6 hours</key>
+	<string>6時間</string>
+	<key>Aa Sample Preview 123</key>
+	<string>Aa テスト Preview 123</string>
+	<key>About Agent Notch</key>
+	<string>Agent Notch について</string>
+	<key>Aggregating</key>
+	<string>集計中</string>
+	<key>Aggregating…</key>
+	<string>集計中…</string>
+	<key>A session title will take priority when it becomes available.</key>
+	<string>セッションタイトルを取得すると、自動的にそちらを優先します。</string>
+	<key>All displays</key>
+	<string>全ディスプレイ</string>
+	<key>Allow once or deny here. To change future permissions, answer in the terminal.</key>
+	<string>ここでは今回のみ許可、または拒否できます。今後の権限を変更する場合はターミナルで回答してください。</string>
+	<key>Allows %@ to run</key>
+	<string>%@ の実行を許可します</string>
+	<key>Answer this request in the terminal</key>
+	<string>このリクエストにターミナルで回答します</string>
+	<key>Appearance</key>
+	<string>表示</string>
+	<key>Approve and deny work even while the app is inactive.
+The notch panel cannot receive keyboard input until it is clicked, so a banner's ⏎ / esc only work after clicking the panel.</key>
+	<string>承認・拒否はアプリが非アクティブでも効きます。
+notch のパネルはクリックするまでキーボード入力を受け取れないため、
+バナーの ⏎ / esc はパネルをクリックしたあとだけ有効です。</string>
+	<key>Approve permission</key>
+	<string>権限を承認</string>
+	<key>Authorization was rejected</key>
+	<string>認証が拒否されました</string>
+	<key>Auto (most constrained limit)</key>
+	<string>自動（最も逼迫している枠）</string>
+	<key>Auto-remove</key>
+	<string>自動削除</string>
+	<key>Awaiting an answer</key>
+	<string>質問に回答待ち</string>
+	<key>Awaiting approval</key>
+	<string>承認待ち</string>
+	<key>Awaiting plan approval</key>
+	<string>plan の承認待ち</string>
+	<key>Back</key>
+	<string>戻る</string>
+	<key>Back to list</key>
+	<string>一覧に戻る</string>
+	<key>Built-in only</key>
+	<string>内蔵のみ</string>
+	<key>Clear All Sessions</key>
+	<string>すべてのセッションを消去</string>
+	<key>Cancel</key>
+	<string>キャンセル</string>
+	<key>Card title</key>
+	<string>カードのタイトル</string>
+	<key>Collapsed</key>
+	<string>折りたたみ</string>
+	<key>Completed: %@. Open session detail</key>
+	<string>完了: %@。セッション詳細を開く</string>
+	<key>Couldn't fetch usage</key>
+	<string>使用量を取得できませんでした</string>
+	<key>Couldn't reach the agent on this Mac</key>
+	<string>この Mac でエージェントに接続できませんでした</string>
+	<key>Couldn't reach the server</key>
+	<string>サーバーに接続できませんでした</string>
+	<key>Current 5-hour window</key>
+	<string>現在の 5 時間枠</string>
+	<key>Current session</key>
+	<string>現在のセッション</string>
+	<key>Custom sound file…</key>
+	<string>カスタム音声ファイル...</string>
+	<key>Daily cost for %@</key>
+	<string>%@ の日毎コスト</string>
+	<key>Denies this tool call</key>
+	<string>この tool 実行を拒否します</string>
+	<key>Deny permission</key>
+	<string>権限を拒否</string>
+	<key>Directory deleted</key>
+	<string>ディレクトリ削除</string>
+	<key>Dismisses this expired request</key>
+	<string>この失効バナーを閉じます</string>
+	<key>Display</key>
+	<string>ディスプレイ</string>
+	<key>Done</key>
+	<string>完了</string>
+	<key>Enable sound</key>
+	<string>サウンドを有効にする</string>
+	<key>Error</key>
+	<string>エラー</string>
+	<key>Error — the response was interrupted</key>
+	<string>エラー — 応答が中断されました</string>
+	<key>Excluded, no pricing: %@</key>
+	<string>単価未対応で除外: %@</string>
+	<key>Expanded</key>
+	<string>展開</string>
+	<key>First prompt</key>
+	<string>最初のプロンプト</string>
+	<key>Focus Agent Notch</key>
+	<string>Agent Notch にフォーカス</string>
+	<key>Follow focus</key>
+	<string>フォーカス追従</string>
+	<key>Gauge style</key>
+	<string>ゲージの表示</string>
+	<key>General</key>
+	<string>一般</string>
+	<key>Hide preview</key>
+	<string>プレビューを閉じる</string>
+	<key>Hold Control to expand tool contents</key>
+	<string>Control キーを押している間ツールの中身を開く</string>
+	<key>Jump to Terminal</key>
+	<string>ターミナルへ移動</string>
+	<key>Jump to notification</key>
+	<string>通知にジャンプ</string>
+	<key>Jump to terminal</key>
+	<string>ターミナルへ移動</string>
+	<key>Language</key>
+	<string>言語</string>
+	<key>Language changes take effect after restarting Agent Notch.</key>
+	<string>言語の変更は Agent Notch の再起動後に反映されます。</string>
+	<key>Later</key>
+	<string>後で</string>
+	<key>Large</key>
+	<string>大</string>
+	<key>Last %lld days · estimated at API rates</key>
+	<string>直近 %lld 日 · API 換算の推定</string>
+	<key>Latest prompt</key>
+	<string>最新のプロンプト</string>
+	<key>Loading</key>
+	<string>取得中</string>
+	<key>Loading…</key>
+	<string>取得中…</string>
+	<key>MULTI</key>
+	<string>複数選択</string>
+	<key>Mark Done</key>
+	<string>完了にする</string>
+	<key>Medium</key>
+	<string>中</string>
+	<key>Message from %@</key>
+	<string>%@ の発言</string>
+	<key>Message from you</key>
+	<string>ユーザーの発言</string>
+	<key>Move</key>
+	<string>移動</string>
+	<key>Mute</key>
+	<string>Mute</string>
+	<key>No active sessions</key>
+	<string>実行中のセッションはありません</string>
+	<key>No limit</key>
+	<string>上限なし</string>
+	<key>No logs found to compute cost from</key>
+	<string>コストを算出できるログが見つかりませんでした</string>
+	<key>No preview for this option</key>
+	<string>この選択肢にプレビューはありません</string>
+	<key>No rate limits on the pay-as-you-go plan</key>
+	<string>従量課金プランのため rate limit なし</string>
+	<key>No tool executions yet</key>
+	<string>ツールの実行はまだありません</string>
+	<key>No usage limit on this plan</key>
+	<string>このプランには使用量の上限がありません</string>
+	<key>None</key>
+	<string>なし</string>
+	<key>Not signed in</key>
+	<string>未サインイン</string>
+	<key>Not signed in on this Mac</key>
+	<string>この Mac でサインインしていません</string>
+	<key>Notifications</key>
+	<string>通知</string>
+	<key>Number</key>
+	<string>数字</string>
+	<key>Off</key>
+	<string>オフ</string>
+	<key>Offline</key>
+	<string>オフライン</string>
+	<key>On tap</key>
+	<string>タップ時の動作</string>
+	<key>Only one gauge is shown per agent.
+Agents that lack the chosen window — Codex has no per-model window, for instance — fall back to automatic.
+The full breakdown is on the usage page.</key>
+	<string>エージェントごとに 1 つだけ表示します。
+選んだ枠が無いエージェント（Codex にはモデル別枠が無い等）は自動になります。
+全内訳は使用量ページで確認できます。</string>
+	<key>Open session detail</key>
+	<string>セッション詳細を開く</string>
+	<key>Open usage details</key>
+	<string>使用量の詳細を開く</string>
+	<key>Other, free text</key>
+	<string>Other、自由入力</string>
+	<key>Other…</key>
+	<string>その他…</string>
+	<key>P Preview</key>
+	<string>P プレビュー</string>
+	<key>Permission request expired: %@</key>
+	<string>権限リクエストの応答期限切れ: %@</string>
+	<key>Permission request: %@</key>
+	<string>権限リクエスト: %@</string>
+	<key>Pin</key>
+	<string>Pin</string>
+	<key>Preview</key>
+	<string>プレビュー</string>
+	<key>Preview:</key>
+	<string>プレビュー:</string>
+	<key>Previous question</key>
+	<string>前の質問</string>
+	<key>Process ended</key>
+	<string>プロセス終了</string>
+	<key>Last seen</key>
+	<string>最終確認時</string>
+	<key>Prompt display</key>
+	<string>プロンプト表示</string>
+	<key>Title fallback</key>
+	<string>タイトル未取得時</string>
+	<key>Used when the agent does not provide a session title.</key>
+	<string>エージェントのセッションタイトルを取得できない場合に使用します。</string>
+	<key>Question</key>
+	<string>質問</string>
+	<key>Question %lld of %lld</key>
+	<string>質問 %lld / %lld</string>
+	<key>Quit</key>
+	<string>終了</string>
+	<key>Quit Agent Notch</key>
+	<string>Agent Notchを終了</string>
+	<key>Quit Agent Notch and open it again to use the selected language.</key>
+	<string>選択した言語を使用するには、Agent Notch を終了してもう一度開いてください。</string>
+	<key>Rate limited</key>
+	<string>レート制限中</string>
+	<key>Rate limited. Retrying automatically.</key>
+	<string>レート制限中です。自動的に再試行します。</string>
+	<key>Reload usage</key>
+	<string>使用量を再読み込み</string>
+	<key>Reload usage (⌘R)</key>
+	<string>使用量を再読み込み (⌘R)</string>
+	<key>Remove from List</key>
+	<string>一覧から削除</string>
+	<key>Removed %@ automatically (%@)</key>
+	<string>%@ を自動削除しました（%@）</string>
+	<key>Removes idle sessions once the chosen time has passed since their last activity.
+Sessions whose directory has been deleted are removed immediately.</key>
+	<string>最後の活動から指定時間経過した非稼働セッションを自動削除します。
+ディレクトリが削除された場合は即座に削除されます。</string>
+	<key>Reopen</key>
+	<string>再開する</string>
+	<key>Reset</key>
+	<string>リセット済み</string>
+	<key>Reset to defaults</key>
+	<string>デフォルトに戻す</string>
+	<key>Resets %@</key>
+	<string>%@ リセット</string>
+	<key>Restart Agent Notch?</key>
+	<string>Agent Notch を再起動しますか？</string>
+	<key>Restart Agent Notch to use the selected language.</key>
+	<string>選択した言語を使用するには Agent Notch を再起動してください。</string>
+	<key>Restart Now</key>
+	<string>今すぐ再起動</string>
+	<key>Ring</key>
+	<string>リング</string>
+	<key>Running %lld subagents — %@</key>
+	<string>subagent ×%lld 実行中 — %@</string>
+	<key>Running %lld subagents</key>
+	<string>subagent ×%lld 実行中</string>
+	<key>Running: %@, %@</key>
+	<string>実行中: %@, %@</string>
+	<key>Scroll to the latest message</key>
+	<string>最新のメッセージへスクロール</string>
+	<key>Select</key>
+	<string>選択</string>
+	<key>Session (5-hour limit)</key>
+	<string>セッション（5 時間枠）</string>
+	<key>Sessions</key>
+	<string>セッション</string>
+	<key>Shortcuts</key>
+	<string>ショートカット</string>
+	<key>Show preview</key>
+	<string>プレビューを表示</string>
+	<key>Show usage</key>
+	<string>使用量を表示する</string>
+	<key>Show usage details</key>
+	<string>使用量の詳細を表示</string>
+	<key>Shows how much of Claude's and Codex's rate limits you have consumed, on the left of the session list's top bar.
+Clicking a gauge opens the full breakdown.
+When off, neither your credentials nor the API are touched.</key>
+	<string>Claude / Codex のレート制限の消費状況を一覧のトップバー左側に出します。
+ゲージをクリックすると全内訳を表示します。
+OFF にすると資格情報の読み取りも API 呼び出しも行いません。</string>
+	<key>Small</key>
+	<string>小</string>
+	<key>Sound</key>
+	<string>サウンド</string>
+	<key>Space Select</key>
+	<string>Space 決定</string>
+	<key>Specific display</key>
+	<string>指定ディスプレイ</string>
+	<key>Subagent completed</key>
+	<string>サブエージェント完了</string>
+	<key>System Settings</key>
+	<string>システム設定</string>
+	<key>Target display</key>
+	<string>対象ディスプレイ</string>
+	<key>Task completed</key>
+	<string>タスク完了</string>
+	<key>Terminal</key>
+	<string>ターミナル</string>
+	<key>Text size</key>
+	<string>文字サイズ</string>
+	<key>The access token expired. Launching Claude Code refreshes it.</key>
+	<string>アクセストークンが失効しました。Claude Code を起動すると更新されます。</string>
+	<key>This agent can't be answered from the notch. Respond directly in the terminal.</key>
+	<string>この agent には notch から応答できません。ターミナルで直接応答してください。</string>
+	<key>This answer can no longer be delivered here. Respond in the original agent window.</key>
+	<string>ここからは回答を届けられません。元の agent ウィンドウで応答してください。</string>
+	<key>This decision can no longer be delivered. Respond directly in the terminal.</key>
+	<string>この決定はもう届けられません。ターミナルで直接応答してください。</string>
+	<key>Timed out</key>
+	<string>タイムアウト</string>
+	<key>Unauthorized</key>
+	<string>認証エラー</string>
+	<key>Token expired</key>
+	<string>トークン失効</string>
+	<key>Turned off in settings</key>
+	<string>設定で無効になっています</string>
+	<key>Unavailable</key>
+	<string>取得できません</string>
+	<key>Unmute</key>
+	<string>Mute 解除</string>
+	<key>Unpin</key>
+	<string>Pin 解除</string>
+	<key>Unreachable</key>
+	<string>接続不可</string>
+	<key>Usage</key>
+	<string>使用量</string>
+	<key>Usage allowance</key>
+	<string>使用枠</string>
+	<key>Used %@ / %@</key>
+	<string>使用済み %1$@ / %2$@</string>
+	<key>Waiting for permission</key>
+	<string>権限待ち</string>
+	<key>Weekly (all models)</key>
+	<string>ウィークリー（全モデル）</string>
+	<key>Weekly (highest per model)</key>
+	<string>ウィークリー（モデル別の最大）</string>
+	<key>Window shown in the gauge</key>
+	<string>ゲージに出す枠</string>
+	<key>A breathing ring means the session is not actively working.</key>
+	<string>呼吸するように広がるリングは、セッションが作業中ではないことを示します。</string>
+	<key>A check mark appears when the agent has finished and is waiting for your next prompt.</key>
+	<string>チェックマークは、エージェントが処理を終え、次のプロンプトを待っていることを示します。</string>
+	<key>A cross flickers to show that the session stopped because of an error.</key>
+	<string>点滅するバツ印は、エラーによりセッションが停止したことを示します。</string>
+	<key>A pulsing core means a tool call is in progress.</key>
+	<string>脈動する中心部は、tool の実行中であることを示します。</string>
+	<key>A travelling wave means the agent is reasoning or preparing context.</key>
+	<string>流れる波は、エージェントが思考中または context の準備中であることを示します。</string>
+	<key>An error interrupted the work</key>
+	<string>エラーにより作業が中断</string>
+	<key>An exclamation mark blinks until you approve or deny the request.</key>
+	<string>リクエストを承認または拒否するまで感嘆符が点滅します。</string>
+	<key>A question mark blinks until you answer the agent.</key>
+	<string>エージェントに回答するまで疑問符が点滅します。</string>
+	<key>Approval</key>
+	<string>承認</string>
+	<key>Complete</key>
+	<string>完了</string>
+	<key>Each filled square represents an active subagent, up to nine.</key>
+	<string>塗りつぶされた四角が実行中の subagent を表し、最大 9 件まで表示します。</string>
+	<key>Fault</key>
+	<string>エラー</string>
+	<key>Glyphs</key>
+	<string>グリフ</string>
+	<key>One or more subagents running</key>
+	<string>1 件以上の subagent が実行中</string>
+	<key>Plan review</key>
+	<string>plan レビュー</string>
+	<key>Running a tool</key>
+	<string>tool 実行中</string>
+	<key>Session glyphs</key>
+	<string>セッションのグリフ</string>
+	<key>Standby</key>
+	<string>待機</string>
+	<key>Starting, idle, or session ended</key>
+	<string>開始中、待機中、またはセッション終了</string>
+	<key>Subagents</key>
+	<string>subagent</string>
+	<key>These animated dot patterns show what the current session is doing. Shape is the primary signal; color provides a secondary cue.</key>
+	<string>アニメーションするドットの形で、現在のセッションの状態を示します。形が主な手がかりで、色が補助します。</string>
+	<key>Thinking</key>
+	<string>思考中</string>
+	<key>Thinking or compacting context</key>
+	<string>思考中または context 圧縮中</string>
+	<key>Three lines identify the special approval shown when leaving plan mode.</key>
+	<string>3 本線は plan mode 終了時に表示される特別な承認待ちを示します。</string>
+	<key>Turn finished</key>
+	<string>ターン完了</string>
+	<key>Waiting for an answer</key>
+	<string>回答待ち</string>
+	<key>Waiting for permission approval</key>
+	<string>権限の承認待ち</string>
+	<key>Waiting for plan approval</key>
+	<string>plan の承認待ち</string>
+	<key>When subagents are active, their grid replaces the standby, thinking, and working glyphs. Approval requests, questions, errors, and completion stay visible because they need your attention.</key>
+	<string>subagent の実行中は、待機・思考中・tool 実行のグリフに代わって subagent のグリッドを表示します。承認待ち、質問、エラー、完了は確認が必要なため優先して表示します。</string>
+	<key>Which glyph takes priority?</key>
+	<string>どのグリフが優先されますか？</string>
+	<key>Working</key>
+	<string>作業中</string>
+	<key>running</key>
+	<string>実行中</string>
+	<key>the agent</key>
+	<string>エージェント</string>
+	<key>←→ Question</key>
+	<string>←→ 質問</string>
+	<key>↑↓ Move</key>
+	<string>↑↓ 選ぶ</string>
+	<key>+%lld more</key>
+	<string>ほか%lld件</string>
+	<key>%@ TOK</key>
+	<string>%@ トークン</string>
+	<key>%@ weekly</key>
+	<string>%@ 週間</string>
+	<key>%@s</key>
+	<string>%@秒</string>
+	<key>%lldm%llds</key>
+	<string>%lld分%lld秒</string>
+	<key>%lldms</key>
+	<string>%lldミリ秒</string>
+	<key>%llds</key>
+	<string>%lld秒</string>
+	<key>5-hour window</key>
+	<string>5時間枠</string>
+	<key>Approve</key>
+	<string>許可</string>
+	<key>Daily cost</key>
+	<string>日別コスト</string>
+	<key>Deny</key>
+	<string>拒否</string>
+	<key>Dismiss</key>
+	<string>閉じる</string>
+	<key>Extra</key>
+	<string>追加使用量</string>
+	<key>Fetching…</key>
+	<string>読み込み中…</string>
+	<key>Group by</key>
+	<string>グループ化</string>
+	<key>Lead</key>
+	<string>リーダー</string>
+	<key>Next</key>
+	<string>次へ</string>
+	<key>Permission required</key>
+	<string>権限が必要です</string>
+	<key>Plan</key>
+	<string>プラン</string>
+	<key>Response window expired</key>
+	<string>応答期限切れ</string>
+	<key>Send</key>
+	<string>送信</string>
+	<key>Session</key>
+	<string>セッション</string>
+	<key>Session title</key>
+	<string>セッションタイトル</string>
+	<key>Sort by</key>
+	<string>並び順</string>
+	<key>Team</key>
+	<string>チーム</string>
+	<key>Tools</key>
+	<string>ツール</string>
+	<key>Updated %@</key>
+	<string>%@ 更新</string>
+	<key>Weekly</key>
+	<string>週間</string>
+	<key>command</key>
+	<string>コマンド</string>
+	<key>file</key>
+	<string>ファイル</string>
+	<key>new</key>
+	<string>変更後</string>
+	<key>old</key>
+	<string>変更前</string>
+	<key>pattern</key>
+	<string>パターン</string>
+	<key>Adds Agent Notch commands to the Claude Code and Codex hook settings.</key>
+	<string>Claude Code と Codex の hook 設定に Agent Notch のコマンドを追加します。</string>
+	<key>Agent Notch receives session updates through agent hooks.</key>
+	<string>Agent Notch はエージェントの hook を通じてセッションの更新を受信します。</string>
+	<key>Approve or deny agent actions directly from the notch.</key>
+	<string>エージェントの操作を notch から直接許可・拒否できます。</string>
+	<key>Connect Claude Code and Codex</key>
+	<string>Claude Code と Codex に接続</string>
+	<key>Codex may ask you to trust the hook the first time it runs.</key>
+	<string>Codex では hook の初回実行時に信頼するか確認される場合があります。</string>
+	<key>Continue</key>
+	<string>続ける</string>
+	<key>Hook installation failed: %@</key>
+	<string>hook のインストールに失敗しました: %@</string>
+	<key>Hooks installed</key>
+	<string>hook インストール済み</string>
+	<key>Install Hooks</key>
+	<string>hook をインストール</string>
+	<key>Keep your coding agents in sight without leaving your work.</key>
+	<string>作業を中断せず、コーディングエージェントの動きを確認できます。</string>
+	<key>Keeps your existing settings and unrelated hooks unchanged.</key>
+	<string>既存の設定と無関係な hook は変更せず、そのまま保持します。</string>
+	<key>Live session state</key>
+	<string>リアルタイムのセッション状態</string>
+	<key>Permission requests</key>
+	<string>権限リクエスト</string>
+	<key>See thinking, tool use, subagents, and completion at a glance.</key>
+	<string>思考中、tool 実行、subagent、完了をひと目で確認できます。</string>
+	<key>The hook helper could not be found. Reinstall Agent Notch and try again.</key>
+	<string>hook helper が見つかりません。Agent Notch を再インストールして、もう一度お試しください。</string>
+	<key>Track Claude and Codex rate limits from one place.</key>
+	<string>Claude と Codex の rate limit をひとつの場所で確認できます。</string>
+	<key>Usage at a glance</key>
+	<string>使用量をひと目で確認</string>
+	<key>Welcome to Agent Notch</key>
+	<string>Agent Notch へようこそ</string>
+	<key>You can check or reinstall the hooks later from Settings.</key>
+	<string>あとから設定で hook の状態確認や再インストールができます。</string>
+	<key>Step %lld of %lld</key>
+	<string>ステップ %lld / %lld</string>
+	<key>Preview of the notch display</key>
+	<string>notch 表示のプレビュー</string>
+	<key>Example of a permission request</key>
+	<string>権限リクエストの例</string>
+	<key>What it does</key>
+	<string>すること</string>
+	<key>What it does not do</key>
+	<string>しないこと</string>
+	<key>Agent Notch needs agent hooks</key>
+	<string>Agent Notch の利用には hook が必要です</string>
+	<key>Without hooks, Agent Notch receives neither session state nor permission requests. They are installed only after you allow it below.</key>
+	<string>hook がないと、セッションの状態も権限リクエストも受け取れません。下のボタンで許可した場合にのみインストールします。</string>
+	<key>Installing hooks</key>
+	<string>hook をインストールしています</string>
+	<key>Writing…</key>
+	<string>書き込み中…</string>
+	<key>Added</key>
+	<string>追加済み</string>
+	<key>Checking the installed hooks</key>
+	<string>インストール結果を確認</string>
+	<key>Checking…</key>
+	<string>確認中…</string>
+	<key>The hooks were written but could not be verified. Try installing again.</key>
+	<string>hook を書き込みましたが、確認できませんでした。もう一度インストールしてください。</string>
+	<key>Connected</key>
+	<string>接続しました</string>
+	<key>The next time you start claude or codex, the notch shows its state.</key>
+	<string>次に claude または codex を起動すると、notch に状態が表示されます。</string>
+	<key>Get Started</key>
+	<string>はじめる</string>
+	<key>opens the notch anytime</key>
+	<string>でいつでも開けます</string>
+	<key>Stopped because hooks are not installed</key>
+	<string>hook がないため停止しています</string>
+	<key>Agent Notch is receiving nothing from your agents. Installing the hooks resumes it from here.</key>
+	<string>Agent Notch はエージェントの状態を一切受け取れません。hook をインストールすると、この画面から復帰できます。</string>
+	<key>Allow and Install Hooks</key>
+	<string>許可して hook をインストール</string>
+	<key>Show the Welcome Tour</key>
+	<string>ようこそツアーを表示</string>
+	<key>Replays the first-run pages, including what hook installation writes and what it leaves alone.</key>
+	<string>初回起動時のページを再表示します。hook のインストールが何を書き込み、何を変更しないかも確認できます。</string>
+	<key>Answer questions in the notch</key>
+	<string>notch で質問に答える</string>
+	<key>When the agent asks which way to go, pick an option and it continues.</key>
+	<string>エージェントが進め方を尋ねてきたら、選択肢を選ぶだけで続行します。</string>
+	<key>Example of a question from the agent</key>
+	<string>エージェントからの質問の例</string>
+	<key>Which approach should I take?</key>
+	<string>どの方針で進めますか？</string>
+	<key>Approach</key>
+	<string>方針</string>
+	<key>Extend the current API</key>
+	<string>現在の API を拡張</string>
+	<key>Add a new endpoint</key>
+	<string>新しいエンドポイントを追加</string>
+	<key>Checks</key>
+	<string>チェック</string>
+	<key>Unit tests</key>
+	<string>ユニットテスト</string>
+	<key>Type check</key>
+	<string>型チェック</string>
+	<key>Lint</key>
+	<string>Lint</string>
+	<key>Try it: this sample is not sent anywhere.</key>
+	<string>実際に押してみてください。このサンプルはどこにも送信されません。</string>
+	<key>Remove all sessions</key>
+	<string>すべてのセッションを削除</string>
+	<key>Remove all sessions?</key>
+	<string>すべてのセッションを削除しますか？</string>
+	<key>Removes every session from Agent Notch. This action cannot be undone.</key>
+	<string>Agent Notch からすべてのセッションを削除します。この操作は取り消せません。</string>
+	<key>Session data</key>
+	<string>セッションデータ</string>
+	<key>This action cannot be undone.</key>
+	<string>この操作は取り消せません。</string>
+	<key>Mute all sessions</key>
+	<string>すべてのセッションをミュート</string>
+	<key>Unmute all sessions</key>
+	<string>すべてのセッションのミュートを解除</string>
+	<key>Settings…</key>
+	<string>設定…</string>
+	<key>Confirm — remove this session</key>
+	<string>削除する</string>
+	<key>Which checks should run?</key>
+	<string>どのチェックを実行しますか？</string>
+	<key>Fewer moving parts.</key>
+	<string>変更範囲が小さく済みます。</string>
+	<key>Clean, but clients must update.</key>
+	<string>きれいですが、クライアントの更新が必要です。</string>
+	<key>Show Onboarding</key>
+	<string>オンボーディングを表示</string>
+	<key>Answer in Terminal</key>
+	<string>ターミナルで回答</string>
+	<key>This question is visible here, but its response channel belongs to Codex. Answer it in the original Codex window.</key>
+	<string>質問はここで確認できますが、回答は Codex 側で入力してください。</string>
+	<key>Moves focus to the terminal that owns this question</key>
+	<string>この質問を表示しているターミナルへ移動します</string>
+	<key>Show in Finder</key>
+	<string>Finder で表示</string>
+	<key>Show %@ in Finder</key>
+	<string>%@ を Finder で表示</string>
+	<key>Couldn’t remove the hooks: %@</key>
+	<string>hook を削除できませんでした: %@</string>
+	<key>Integration</key>
+	<string>連携</string>
+	<key>Let the agent handle permissions</key>
+	<string>権限リクエストをエージェント側で処理</string>
+	<key>Permission requests bypass Agent Notch and follow the agent’s own approval flow. Questions still appear here.</key>
+	<string>権限リクエストは Agent Notch を経由せず、エージェント側の承認フローに従います。質問は引き続きここに表示されます。</string>
+	<key>Adds hooks so Claude Code reports sessions, tools, and approvals.</key>
+	<string>hook を追加し、Claude Code のセッション・tool・承認を受け取ります。</string>
+	<key>Adds hooks so Codex reports sessions, tools, and questions, and lets Agent Notch read its session logs and usage. Off means neither.</key>
+	<string>hook を追加して Codex のセッション・tool・質問を受け取り、セッションログと使用量の読み取りを許可します。OFF ではどちらも行いません。</string>
+	<key>Tasks</key>
+	<string>タスク</string>
+	<key>Pending</key>
+	<string>未着手</string>
+	<key>In progress</key>
+	<string>進行中</string>
+	<key>Completed</key>
+	<string>完了</string>
+	<key>Codex App</key>
+	<string>Codex App</string>
+	<key>Open in Codex App</key>
+	<string>Codex App で開く</string>
+	<key>Claude App</key>
+	<string>Claude App</string>
+	<key>Open in Claude App</key>
+	<string>Claude App で開く</string>
+	<key>Couldn’t restart Agent Notch.</key>
+	<string>Agent Notch を再起動できませんでした。</string>
+	<key>OK</key>
+	<string>OK</string>
+	<key>About</key>
+	<string>情報</string>
+	<key>Agent Notch uses the following open source software.</key>
+	<string>Agent Notch は以下のオープンソースソフトウェアを使用しています。</string>
+	<key>Build %@</key>
+	<string>ビルド %@</string>
+	<key>Development build</key>
+	<string>開発ビルド</string>
+	<key>License text unavailable.</key>
+	<string>ライセンス本文を読み込めませんでした。</string>
+	<key>Open Source Licenses</key>
+	<string>オープンソースライセンス</string>
+	<key>Agent Notch’s original source code is under the MIT License.</key>
+	<string>Agent Notch 独自のソースコードは MIT License で公開しています。</string>
+	<key>Project Website</key>
+	<string>プロジェクトのWebサイト</string>
+	<key>Source Code</key>
+	<string>ソースコード</string>
+	<key>Version %@</key>
+	<string>バージョン %@</string>
+	<key>Agent</key>
+	<string>エージェント</string>
+	<key>Application</key>
+	<string>アプリケーション</string>
+	<key>Display &amp; Notifications</key>
+	<string>表示と通知</string>
+</dict>
+</plist>

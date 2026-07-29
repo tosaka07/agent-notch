@@ -1,0 +1,66 @@
+version: "3"
+
+# Task runner for day-to-day work. Install with `brew install go-task`.
+#
+#   task            # list available tasks
+#   task check      # what CI runs
+#   task hooks      # enable the repository's git hooks
+
+tasks:
+  default:
+    desc: List tasks
+    cmds: [task --list]
+    silent: true
+
+  fmt:
+    desc: Format all Swift sources in place
+    cmds: ["./scripts/swift-format.sh format"]
+
+  lint:
+    desc: Check formatting and compiler warnings without writing
+    cmds: ["./scripts/lint.sh"]
+
+  build:
+    desc: Build the debug binaries
+    cmds: ["swift build --build-tests"]
+
+  test:
+    desc: Run the test suite
+    cmds: ["swift test"]
+
+  check:
+    desc: Everything CI runs — lint, build, test
+    cmds:
+      - task: lint
+      - task: build
+      - task: test
+
+  app:
+    desc: Assemble build/AgentNotch.app
+    cmds: ["./scripts/make_app.sh"]
+
+  icons:
+    desc: Redraw the raster logo artwork (the app icon itself comes from AgentNotch.icon)
+    cmds: ["./scripts/make_icons.sh"]
+
+  hooks:
+    desc: Enable the repository's git hooks (.githooks)
+    # core.hooksPath keeps the hooks in version control, so every contributor
+    # gets the same ones and they can be reviewed. `.git/hooks` cannot be
+    # committed, which is why the stock location is not used.
+    cmds:
+      - git config core.hooksPath .githooks
+      - echo "git hooks enabled (core.hooksPath=.githooks)"
+
+  hooks:disable:
+    desc: Stop using the repository's git hooks
+    cmds:
+      - git config --unset core.hooksPath
+      - echo "git hooks disabled"
+
+  agent-hooks:
+    desc: Install the Codex format-on-edit hook into ~/.codex/hooks.json
+    # Claude Code reads .claude/settings.json from the repository, so it needs
+    # no installation step. Codex only reads ~/.codex/hooks.json, so its hook
+    # has to be merged into the user's home directory.
+    cmds: ["./scripts/install_agent_format_hook.sh"]
