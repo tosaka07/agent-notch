@@ -427,7 +427,11 @@ struct CodexQuestionCoordinatorTests {
             answers: ["target": ["Staging"]]
         )
 
-        try await waitUntil {
+        // `answer` launches its response path on the main actor. Under the full
+        // suite's concurrent load, that task can start after the one-second
+        // default even though the immediate transport failure is handled
+        // correctly.
+        try await waitUntil(timeout: .seconds(5)) {
             manager.session(for: "thread-1")?.pendingQuestion?.responseMode == .terminalOnly
         }
         let downgraded = try #require(manager.session(for: "thread-1")?.pendingQuestion)
