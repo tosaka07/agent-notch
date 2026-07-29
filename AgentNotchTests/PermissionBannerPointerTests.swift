@@ -43,7 +43,10 @@ struct PermissionBannerPointerTests {
         window.layoutIfNeeded()
         hostingView.layoutSubtreeIfNeeded()
 
-        for _ in 0..<5 where recorder.approvals == 0 {
+        // The modifier and submission callback each start a main-actor task.
+        // Keep retrying across the full CI scheduling window rather than
+        // assuming both tasks run during the first half-second of clicks.
+        for _ in 0..<100 where recorder.approvals == 0 {
             try click(
                 at: NSPoint(x: hostingView.bounds.maxX - 110, y: 48),
                 in: window
