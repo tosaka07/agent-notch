@@ -23,7 +23,12 @@ jobs:
     runs-on: macos-26
 
     steps:
-      - uses: actions/checkout@v4
+      # v6.0.2 — pin the immutable commit, not the movable v6 tag.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          # This read-only CI job never pushes, so do not leave GITHUB_TOKEN
+          # credentials available to later build or test commands.
+          persist-credentials: false
 
       # Runner images are refreshed weekly and the default Xcode moves with
       # them. Pick the newest Xcode 26.x explicitly so a toolchain bump shows up
