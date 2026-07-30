@@ -50,6 +50,28 @@ struct AppSettingsTests {
             AppLanguage.allCases.map(\.label), cases: AppLanguage.allCases.count, "AppLanguage")
     }
 
+    @Test("Display destinations are ordered from contextual to broad")
+    func displayDestinationOrder() {
+        #expect(
+            DisplayModePreference.allCases.map(\.rawValue) == [
+                "followFocus",
+                "mainDisplay",
+                "builtinOnly",
+                "specificDisplay",
+                "allDisplays",
+            ]
+        )
+    }
+
+    @Test("Display destination labels describe their selection semantics")
+    func displayDestinationLabels() {
+        #expect(L("Display with pointer", language: .japanese) == "ポインタのあるディスプレイ")
+        #expect(L("Main display", language: .japanese) == "メインディスプレイ")
+        #expect(L("Built-in display", language: .japanese) == "内蔵ディスプレイ")
+        #expect(L("Specific display", language: .japanese) == "指定ディスプレイ")
+        #expect(L("All displays", language: .japanese) == "全ディスプレイ")
+    }
+
     /// The two explicit languages name themselves in their own language on purpose: a Japanese
     /// speaker looking at an English UI still needs to recognise 日本語 in the list. Only
     /// `.system` follows the current language.

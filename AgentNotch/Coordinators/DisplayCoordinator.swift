@@ -4,18 +4,17 @@ import Defaults
 import SwiftUI
 
 /// Manages notch panel placement and the display mode
-/// (followFocus / allDisplays / builtinOnly / specificDisplay).
+/// (followFocus / mainDisplay / builtinOnly / specificDisplay / allDisplays).
 ///
 /// - Repositions on screen configuration changes (`NSApplication.didChangeScreenParametersNotification`)
-/// - In followFocus mode, follows the focused screen
+/// - In followFocus mode, follows the screen containing the pointer
 /// - Observes `Defaults[.displayMode]` / `[.specificDisplayUUID]` and reapplies on change
 @MainActor
 final class DisplayCoordinator {
     private let sessionManager: SessionManager
     private let permissionActions: PermissionActions
 
-    /// displayID → controller. A single entry for followFocus/builtinOnly/specificDisplay;
-    /// multiple entries for allDisplays.
+    /// displayID → controller. A single entry except in allDisplays mode.
     private var windowControllers: [CGDirectDisplayID: NotchWindowController] = [:]
     private var screenObserver: ScreenObserver?
     private var focusedScreenTracker: FocusedScreenTracker?
@@ -50,33 +49,35 @@ final class DisplayCoordinator {
         for controller in windowControllers.values { controller.close() }
         windowControllers.removeAll()
 
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return }
+
         switch Defaults[.displayMode] {
         case .followFocus:
             let mouse = NSEvent.mouseLocation
             let screen =
-                NSScreen.screens.first { $0.frame.contains(mouse) }
-                ?? NSScreen.builtin ?? NSScreen.screens[0]
+                screens.first { $0.frame.contains(mouse) }
+                ?? NSScreen.systemMain ?? screens[0]
             showNotch(on: screen)
             setupFocusedScreenTracker()
 
-        case .allDisplays:
-            for screen in NSScreen.screens {
-                showNotch(on: screen)
-            }
+        case .mainDisplay:
+            showNotch(on: NSScreen.systemMain ?? screens[0])
 
         case .builtinOnly:
-            if let builtin = NSScreen.builtin {
-                showNotch(on: builtin)
-            } else {
-                showNotch(on: NSScreen.screens[0])
-            }
+            showNotch(on: NSScreen.builtin ?? NSScreen.systemMain ?? screens[0])
 
         case .specificDisplay:
             let targetUUID = Defaults[.specificDisplayUUID]
             let screen =
-                NSScreen.screens.first { $0.displayUUID == targetUUID }
-                ?? NSScreen.builtin ?? NSScreen.screens[0]
+                screens.first { $0.displayUUID == targetUUID }
+                ?? NSScreen.systemMain ?? screens[0]
             showNotch(on: screen)
+
+        case .allDisplays:
+            for screen in screens {
+                showNotch(on: screen)
+            }
         }
     }
 
@@ -150,7 +151,7 @@ final class DisplayCoordinator {
         let tracker = FocusedScreenTracker()
         tracker.onScreenChanged = { [weak self] screen in
             guard let self else { return }
-            // Follow the focused screen only while in followFocus mode.
+            // Follow the pointer's screen only while in followFocus mode.
             guard Defaults[.displayMode] == .followFocus else { return }
             let newID = screen.displayID
             for (id, controller) in self.windowControllers where id != newID {

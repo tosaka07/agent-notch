@@ -76,8 +76,8 @@ The notch panel cannot receive keyboard input until it is clicked, so a banner's
 	<string>Back</string>
 	<key>Back to list</key>
 	<string>Back to list</string>
-	<key>Built-in only</key>
-	<string>Built-in only</string>
+	<key>Built-in display</key>
+	<string>Built-in display</string>
 	<key>Clear All Sessions</key>
 	<string>Clear All Sessions</string>
 	<key>Cancel</key>
@@ -112,6 +112,8 @@ The notch panel cannot receive keyboard input until it is clicked, so a banner's
 	<string>Dismisses this expired request</string>
 	<key>Display</key>
 	<string>Display</string>
+	<key>Display with pointer</key>
+	<string>Display with pointer</string>
 	<key>Done</key>
 	<string>Done</string>
 	<key>Enable sound</key>
@@ -128,8 +130,6 @@ The notch panel cannot receive keyboard input until it is clicked, so a banner's
 	<string>First prompt</string>
 	<key>Focus Agent Notch</key>
 	<string>Focus Agent Notch</string>
-	<key>Follow focus</key>
-	<string>Follow focus</string>
 	<key>Gauge style</key>
 	<string>Gauge style</string>
 	<key>General</key>
@@ -162,6 +162,8 @@ The notch panel cannot receive keyboard input until it is clicked, so a banner's
 	<string>Loading…</string>
 	<key>MULTI</key>
 	<string>MULTI</string>
+	<key>Main display</key>
+	<string>Main display</string>
 	<key>Mark Done</key>
 	<string>Mark Done</string>
 	<key>Medium</key>

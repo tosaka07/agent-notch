@@ -125,16 +125,18 @@ extension UsageGaugeMetric {
 
 enum DisplayModePreference: String, Defaults.Serializable, CaseIterable, Sendable {
     case followFocus
-    case allDisplays
+    case mainDisplay
     case builtinOnly
     case specificDisplay
+    case allDisplays
 
     var label: String {
         switch self {
-        case .followFocus: L("Follow focus")
-        case .allDisplays: L("All displays")
-        case .builtinOnly: L("Built-in only")
+        case .followFocus: L("Display with pointer")
+        case .mainDisplay: L("Main display")
+        case .builtinOnly: L("Built-in display")
         case .specificDisplay: L("Specific display")
+        case .allDisplays: L("All displays")
         }
     }
 }

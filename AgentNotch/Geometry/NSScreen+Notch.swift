@@ -51,10 +51,21 @@ extension NSScreen {
         return CGSize(width: 224, height: 38)
     }
 
-    /// The first built-in screen, or the main screen as fallback.
+    /// The display designated as Main Display in macOS System Settings.
+    ///
+    /// `NSScreen.main` means the screen containing the key window, so it is not
+    /// suitable for resolving the user's persistent Main Display choice.
+    @MainActor
+    static var systemMain: NSScreen? {
+        let mainDisplayID = CGMainDisplayID()
+        return NSScreen.screens.first(where: { $0.displayID == mainDisplayID })
+            ?? NSScreen.screens.first
+    }
+
+    /// The first built-in screen, if one is currently available.
     @MainActor
     static var builtin: NSScreen? {
-        NSScreen.screens.first(where: { $0.isBuiltinDisplay }) ?? NSScreen.main
+        NSScreen.screens.first(where: { $0.isBuiltinDisplay })
     }
 
     /// Persistent UUID string for this display (survives reconnection).
