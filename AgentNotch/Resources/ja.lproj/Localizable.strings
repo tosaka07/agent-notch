@@ -77,8 +77,8 @@ notch のパネルはクリックするまでキーボード入力を受け取�
 	<string>戻る</string>
 	<key>Back to list</key>
 	<string>一覧に戻る</string>
-	<key>Built-in only</key>
-	<string>内蔵のみ</string>
+	<key>Built-in display</key>
+	<string>内蔵ディスプレイ</string>
 	<key>Clear All Sessions</key>
 	<string>すべてのセッションを消去</string>
 	<key>Cancel</key>
@@ -113,6 +113,8 @@ notch のパネルはクリックするまでキーボード入力を受け取�
 	<string>この失効バナーを閉じます</string>
 	<key>Display</key>
 	<string>ディスプレイ</string>
+	<key>Display with pointer</key>
+	<string>ポインタのあるディスプレイ</string>
 	<key>Done</key>
 	<string>完了</string>
 	<key>Enable sound</key>
@@ -129,8 +131,6 @@ notch のパネルはクリックするまでキーボード入力を受け取�
 	<string>最初のプロンプト</string>
 	<key>Focus Agent Notch</key>
 	<string>Agent Notch にフォーカス</string>
-	<key>Follow focus</key>
-	<string>フォーカス追従</string>
 	<key>Gauge style</key>
 	<string>ゲージの表示</string>
 	<key>General</key>
@@ -163,6 +163,8 @@ notch のパネルはクリックするまでキーボード入力を受け取�
 	<string>取得中…</string>
 	<key>MULTI</key>
 	<string>複数選択</string>
+	<key>Main display</key>
+	<string>メインディスプレイ</string>
 	<key>Mark Done</key>
 	<string>完了にする</string>
 	<key>Medium</key>
