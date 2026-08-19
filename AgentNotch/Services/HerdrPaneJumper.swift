@@ -141,7 +141,7 @@ enum HerdrPaneJumper {
 
     // MARK: - Finding the client that draws the pane
 
-    /// The herdr clients attached to `socketPath`, most recently started first.
+    /// The herdr clients attached to `socketPath`, highest pid first.
     ///
     /// herdr publishes no client inventory — its API reaches clients only to set a window title — so
     /// the processes are matched by hand: a `herdr` executable that is not the server, and not an
@@ -162,9 +162,13 @@ enum HerdrPaneJumper {
                 guard !isServer(arguments: process.arguments),
                     !isRemote(arguments: process.arguments)
                 else { return false }
+                // The environment is read only for a client whose arguments do not name a session.
+                // It is the one thing that cannot come out of the `ps` snapshot, so every process
+                // spared this read is also spared the chance of its pid having been recycled by the
+                // time the read happens.
                 let session = clientSessionName(
                     arguments: process.arguments,
-                    environment: readEnvironment(process.pid)
+                    environment: { readEnvironment(process.pid) }
                 )
                 return session == wanted
             }
@@ -186,7 +190,10 @@ enum HerdrPaneJumper {
 
     /// The session a client was started against, read the way herdr resolves it itself: the explicit
     /// flag first, then the subcommand, then the environment.
-    static func clientSessionName(arguments: String, environment: [String: String]?) -> String? {
+    static func clientSessionName(
+        arguments: String,
+        environment: () -> [String: String]?
+    ) -> String? {
         let tokens = arguments.split(separator: " ").map(String.init)
         if let flag = tokens.firstIndex(of: "--session"), tokens.count > flag + 1 {
             return tokens[flag + 1]
@@ -196,7 +203,7 @@ enum HerdrPaneJumper {
         {
             return tokens[subcommand + 2]
         }
-        return environment?[sessionEnvironmentKey].flatMap { $0.isEmpty ? nil : $0 }
+        return environment()?[sessionEnvironmentKey].flatMap { $0.isEmpty ? nil : $0 }
     }
 
     static func isServer(arguments: String) -> Bool {

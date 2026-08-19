@@ -117,6 +117,12 @@ enum HerdrSocketClient {
         return true
     }
 
+    /// Connects within the same deadline as the rest of the exchange.
+    ///
+    /// The socket timeouts bound `send` and `recv` but say nothing about `connect`, which on a Unix
+    /// socket waits for room in the listener's backlog. A herdr that has stopped answering would
+    /// hold that wait, and this runs on the main thread during a jump — the notch would stop
+    /// drawing. Connecting non-blocking and polling for the result keeps the wait bounded.
     private static func connectSocket(fd: Int32, socketPath: String) -> Bool {
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
@@ -126,12 +132,29 @@ enum HerdrSocketClient {
                 _ = strcpy(UnsafeMutableRawPointer(pathPtr).assumingMemoryBound(to: CChar.self), ptr)
             }
         }
-        let result = withUnsafePointer(to: &addr) { ptr in
+
+        let flags = fcntl(fd, F_GETFL, 0)
+        guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0 else { return false }
+        defer { _ = fcntl(fd, F_SETFL, flags) }
+
+        let started = withUnsafePointer(to: &addr) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
                 connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        return result == 0
+        if started == 0 { return true }
+        guard errno == EINPROGRESS || errno == EINTR else { return false }
+
+        var event = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+        let ready = poll(&event, 1, Int32(timeoutSeconds) * 1000)
+        guard ready == 1, event.revents & Int16(POLLOUT) != 0 else { return false }
+
+        // A connect that failed after `EINPROGRESS` reports so through the socket, not through poll.
+        var pendingError: Int32 = 0
+        var size = socklen_t(MemoryLayout<Int32>.size)
+        guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &pendingError, &size) == 0, pendingError == 0
+        else { return false }
+        return true
     }
 
     /// Reads up to the first newline, which is where one herdr record ends.

@@ -200,23 +200,44 @@ struct HerdrPaneJumperTests {
 
     @Test("a client's session is read from its flag, its subcommand, or its environment")
     func readsSessionNameFromClient() {
-        #expect(HerdrPaneJumper.clientSessionName(arguments: "herdr", environment: [:]) == nil)
+        #expect(HerdrPaneJumper.clientSessionName(arguments: "herdr", environment: { [:] }) == nil)
         #expect(
-            HerdrPaneJumper.clientSessionName(arguments: "herdr --session work", environment: nil)
-                == "work"
+            HerdrPaneJumper.clientSessionName(
+                arguments: "herdr --session work",
+                environment: { nil }
+            ) == "work"
         )
         #expect(
             HerdrPaneJumper.clientSessionName(
                 arguments: "herdr session attach work",
-                environment: nil
+                environment: { nil }
             ) == "work"
         )
         #expect(
             HerdrPaneJumper.clientSessionName(
                 arguments: "herdr",
-                environment: ["HERDR_SESSION": "work"]
+                environment: { ["HERDR_SESSION": "work"] }
             ) == "work"
         )
+    }
+
+    /// Reading a process environment is the one lookup that cannot come from the `ps` snapshot, so a
+    /// client whose arguments already name its session must not pay for it — nor expose the pid to
+    /// being recycled before the read.
+    @Test("the environment is left unread when the arguments already name the session")
+    func skipsEnvironmentWhenArgumentsNameTheSession() {
+        var reads = 0
+
+        let session = HerdrPaneJumper.clientSessionName(
+            arguments: "herdr --session work",
+            environment: {
+                reads += 1
+                return nil
+            }
+        )
+
+        #expect(session == "work")
+        #expect(reads == 0)
     }
 
     @Test("the server and remote attachments are not clients to activate")
