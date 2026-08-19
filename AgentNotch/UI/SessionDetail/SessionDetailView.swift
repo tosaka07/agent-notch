@@ -902,6 +902,13 @@ struct SessionDetailView: View {
             if shouldFollowNewest {
                 scrollPosition.scrollTo(edge: .top)
             }
+
+            // A model notification can arrive while this read is in flight and be rejected by the
+            // single-reader guard above. Only follow up when this selected session's transcript
+            // changed; activity in another session leaves both the path and signature untouched.
+            if session.transcriptPath != path || TranscriptSignature(path: path) != signature {
+                loadTimelineAsync()
+            }
         }
     }
 
