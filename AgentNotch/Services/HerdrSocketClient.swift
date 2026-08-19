@@ -144,10 +144,7 @@ enum HerdrSocketClient {
         }
         if started == 0 { return true }
         guard errno == EINPROGRESS || errno == EINTR else { return false }
-
-        var event = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-        let ready = poll(&event, 1, Int32(timeoutSeconds) * 1000)
-        guard ready == 1, event.revents & Int16(POLLOUT) != 0 else { return false }
+        guard waitUntilWritable(fd: fd) else { return false }
 
         // A connect that failed after `EINPROGRESS` reports so through the socket, not through poll.
         var pendingError: Int32 = 0
@@ -155,6 +152,25 @@ enum HerdrSocketClient {
         guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &pendingError, &size) == 0, pendingError == 0
         else { return false }
         return true
+    }
+
+    /// Waits for a connect in progress to settle, within the deadline.
+    ///
+    /// A signal interrupts `poll` without the connect having failed, so the wait is resumed against
+    /// what is left of the deadline rather than reported as herdr refusing. The deadline itself comes
+    /// from the monotonic clock, which a wall-clock adjustment cannot move.
+    private static func waitUntilWritable(fd: Int32) -> Bool {
+        let deadline =
+            DispatchTime.now().uptimeNanoseconds
+            + UInt64(timeoutSeconds) * NSEC_PER_SEC
+        while true {
+            let now = DispatchTime.now().uptimeNanoseconds
+            let remaining = deadline > now ? deadline - now : 0
+            var event = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            let ready = poll(&event, 1, Int32(remaining / NSEC_PER_MSEC))
+            if ready < 0, errno == EINTR { continue }
+            return ready == 1 && event.revents & Int16(POLLOUT) != 0
+        }
     }
 
     /// Reads up to the first newline, which is where one herdr record ends.
