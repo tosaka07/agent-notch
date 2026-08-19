@@ -192,12 +192,45 @@ struct SVGPathParser {
 struct AgentMarkShape: Shape {
     let commands: String
 
-    // The parse result is not cached: `Shape` conformance cannot cross actors, so there is no
-    // place for a static mutable cache, and `Path` itself is not Sendable.
-    // It is a ~400-token scan, so re-parsing per draw is fine for a handful of 10pt marks.
+    /// Parsed marks, keyed by their command string.
+    ///
+    /// # Why this has to be cached
+    /// **SwiftUI calls `path(in:)` on every hit test, not only on every draw.** A click runs hit
+    /// testing down the whole tree, so one mark per session card meant re-scanning every vendor
+    /// path, character by character, on each click and each pointer move. The marks are 1.9–2.3 KB
+    /// of commands and measured 0.12–0.14 ms per parse in a release build; sampling the panel
+    /// during a compact→expanded transition showed that scan burning about as much CPU as
+    /// SwiftUI's entire attribute-graph update, which is what made the transition stutter.
+    ///
+    /// The bounding box is stored alongside the path because `boundingRect` walks the path too,
+    /// and it is invariant for a given mark.
+    ///
+    /// Keyed by the command string rather than by `AgentType`, so a caller passing its own path
+    /// still gets a correct result. There are only a handful of marks, so it never needs eviction.
+    ///
+    /// `Path` is not Sendable and a `Shape` cannot be isolated to an actor, so the storage is
+    /// `nonisolated(unsafe)` and the lock is what makes it safe. Parsing happens outside the lock:
+    /// it is idempotent, so a race merely does the work twice rather than blocking every caller
+    /// behind the slowest one.
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cache: [String: (path: Path, box: CGRect)] = [:]
+
+    private static func parsed(_ commands: String) -> (path: Path, box: CGRect) {
+        cacheLock.lock()
+        let hit = cache[commands]
+        cacheLock.unlock()
+        if let hit { return hit }
+
+        let path = SVGPathParser.path(from: commands)
+        let entry = (path: path, box: path.boundingRect)
+        cacheLock.lock()
+        cache[commands] = entry
+        cacheLock.unlock()
+        return entry
+    }
+
     func path(in rect: CGRect) -> Path {
-        let raw = SVGPathParser.path(from: commands)
-        let box = raw.boundingRect
+        let (raw, box) = Self.parsed(commands)
         guard box.width > 0, box.height > 0 else { return Path() }
         let scale = min(rect.width / box.width, rect.height / box.height)
         let transform = CGAffineTransform.identity

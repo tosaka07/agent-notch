@@ -80,4 +80,71 @@ struct AgentMarkTests {
         let withArc = SVGPathParser.path(from: "M0 0L10 0A5 5 0 0 1 0 0Z")
         #expect(!withArc.isEmpty)
     }
+
+    // MARK: - Parse caching
+
+    /// SwiftUI calls `path(in:)` on every hit test, not only on every draw, so an uncached parse
+    /// re-scanned kilobytes of commands on each click and pointer move — enough to visibly stall
+    /// the compact→expanded transition. These pin the cache's two obligations: it must be fast on
+    /// repeat, and it must not hand one mark's geometry to another.
+    @Test("Repeating a mark's path is far cheaper than the first parse")
+    func cachesParsedPaths() {
+        let rect = CGRect(x: 0, y: 0, width: 10, height: 10)
+        // A path string no other test uses, so the first call is genuinely cold. Measuring a
+        // vendor mark here would depend on whether another test had already warmed the cache,
+        // and the suite runs in parallel.
+        let commands = "M0 0" + String(repeating: "L1 1L2 0", count: 400) + "Z"
+        let shape = AgentMarkShape(commands: commands)
+
+        let coldStart = DispatchTime.now()
+        _ = shape.path(in: rect)
+        let cold = DispatchTime.now().uptimeNanoseconds - coldStart.uptimeNanoseconds
+
+        let iterations = 500
+        let warmStart = DispatchTime.now()
+        for _ in 0..<iterations { _ = shape.path(in: rect) }
+        let warm =
+            (DispatchTime.now().uptimeNanoseconds - warmStart.uptimeNanoseconds) / UInt64(iterations)
+
+        // A generous margin: the point is the order of magnitude, not a specific timing. Without
+        // the cache a repeat costs the same as the first parse, so anything near parity is the
+        // regression this guards against.
+        #expect(
+            warm * 5 < cold,
+            "a repeated path(in:) cost \(warm)ns against a first parse of \(cold)ns"
+        )
+    }
+
+    @Test("Each mark keeps its own geometry through the cache")
+    func cacheKeepsMarksDistinct() {
+        let rect = CGRect(x: 0, y: 0, width: 20, height: 20)
+        let claude = AgentMarkShape(commands: AgentMarkPath.claude).path(in: rect)
+        let openAI = AgentMarkShape(commands: AgentMarkPath.openAI).path(in: rect)
+
+        #expect(!claude.isEmpty)
+        #expect(!openAI.isEmpty)
+        // Both are normalized into the same rect, so equal bounds are expected; the paths
+        // themselves must still differ, which is what a mixed-up cache entry would break.
+        #expect(claude.description != openAI.description)
+
+        // Re-reading after the other mark was cached must still return the original geometry.
+        let claudeAgain = AgentMarkShape(commands: AgentMarkPath.claude).path(in: rect)
+        #expect(claudeAgain.description == claude.description)
+    }
+
+    /// The cache must not become a size cache: the same mark is drawn at several sizes (the text
+    /// size setting scales it), and every one has to be normalized to the rect it was asked for.
+    @Test("A cached mark still fits whatever rect it is given")
+    func cachedMarkRespectsRequestedRect() {
+        let commands = AgentMarkPath.claude
+        for side in [8.0, 10.0, 26.0, 64.0] as [CGFloat] {
+            let rect = CGRect(x: 0, y: 0, width: side, height: side)
+            let box = AgentMarkShape(commands: commands).path(in: rect).boundingRect
+
+            #expect(max(box.width, box.height) <= side + 0.01)
+            #expect(max(box.width, box.height) > side - 0.5)
+            #expect(abs(box.midX - rect.midX) < 0.01)
+            #expect(abs(box.midY - rect.midY) < 0.01)
+        }
+    }
 }
