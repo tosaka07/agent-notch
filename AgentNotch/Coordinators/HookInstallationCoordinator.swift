@@ -39,6 +39,8 @@ final class HookInstallationCoordinator {
 
     enum Status: Equatable {
         case installed
+        case needsCodexReview
+        case disabledInCodex
         case notInstalled
         case developmentCLIUnavailable(path: String?)
         case failed(message: String)
@@ -50,6 +52,7 @@ final class HookInstallationCoordinator {
     private let installAgent: (HookAgent, HookRuntime) throws -> Void
     private let uninstallAgent: (HookAgent) throws -> Void
     private let isAgentInstalled: (HookAgent, HookRuntime) throws -> Bool
+    private let inspectCodexHooks: (String) async -> CodexHookTrustState
     private let recordConsent: () -> Void
     /// Stores whether Agent Notch may work with Codex beyond its hook — its log files, its app
     /// server. Written here rather than by the UI so the switch cannot leave the two disagreeing.
@@ -73,6 +76,9 @@ final class HookInstallationCoordinator {
             isAgentInstalled: { agent, runtime in
                 try HookInstaller.isInstalled(agent, using: runtime)
             },
+            inspectCodexHooks: { command in
+                await CodexHookTrustClient.shared.inspect(expectedCommand: command)
+            },
             recordConsent: {
                 Defaults[.hasCompletedOnboarding] = true
             },
@@ -89,6 +95,7 @@ final class HookInstallationCoordinator {
         installAgent: @escaping (HookAgent, HookRuntime) throws -> Void = { _, _ in },
         uninstallAgent: @escaping (HookAgent) throws -> Void = { _ in },
         isAgentInstalled: @escaping (HookAgent, HookRuntime) throws -> Bool = { _, _ in false },
+        inspectCodexHooks: @escaping (String) async -> CodexHookTrustState = { _ in .trusted },
         recordConsent: @escaping () -> Void = {},
         setCodexIntegration: @escaping (Bool) -> Void = { _ in }
     ) {
@@ -98,6 +105,7 @@ final class HookInstallationCoordinator {
         self.installAgent = installAgent
         self.uninstallAgent = uninstallAgent
         self.isAgentInstalled = isAgentInstalled
+        self.inspectCodexHooks = inspectCodexHooks
         self.recordConsent = recordConsent
         self.setCodexIntegration = setCodexIntegration
     }
@@ -185,6 +193,39 @@ final class HookInstallationCoordinator {
             return try isAgentInstalled(agent, runtime) ? .installed : .notInstalled
         } catch {
             return .failed(message: error.localizedDescription)
+        }
+    }
+
+    /// Whether one agent's installed hooks can actually run.
+    ///
+    /// Claude Code's file presence is sufficient for the integration contract. Codex adds a
+    /// separate trust gate, so its own `hooks/list` metadata is consulted after the file check.
+    /// An unavailable inspector does not turn a known installation off; only an explicit Codex
+    /// state changes the result.
+    func operationalStatus(of agent: HookAgent) async -> Status {
+        guard case .success(let runtime) = resolveRuntime() else {
+            return .developmentCLIUnavailable(path: unavailableDevelopmentCLIPath)
+        }
+
+        do {
+            guard try isAgentInstalled(agent, runtime) else {
+                return .notInstalled
+            }
+        } catch {
+            return .failed(message: error.localizedDescription)
+        }
+
+        guard agent == .codex else { return .installed }
+        let command = HookInstaller.hookCommand(for: .codex, using: runtime)
+        switch await inspectCodexHooks(command) {
+        case .trusted:
+            return .installed
+        case .needsReview:
+            return .needsCodexReview
+        case .disabled:
+            return .disabledInCodex
+        case .notFound, .unavailable:
+            return .installed
         }
     }
 

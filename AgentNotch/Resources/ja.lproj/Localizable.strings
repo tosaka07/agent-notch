@@ -663,6 +663,16 @@ OFF にすると資格情報の読み取りも API 呼び出しも行いませ�
 	<string>hook を追加し、Claude Code のセッション・tool・承認を受け取ります。</string>
 	<key>Adds hooks so Codex reports sessions, tools, and questions, and lets Agent Notch read its session logs and usage. Off means neither.</key>
 	<string>hook を追加して Codex のセッション・tool・質問を受け取り、セッションログと使用量の読み取りを許可します。OFF ではどちらも行いません。</string>
+	<key>The hooks are installed, but Codex is waiting for you to trust the changes.</key>
+	<string>hook はインストール済みですが、Codex 側で変更の再信頼が必要です。</string>
+	<key>The hooks are installed, but at least one is disabled in Codex.</key>
+	<string>hook はインストール済みですが、Codex 側で無効になっている hook があります。</string>
+	<key>Codex paused Agent Notch because the hook definition changed. Run /hooks in Codex, review the Agent Notch hooks, and trust them again.</key>
+	<string>hook の定義が変わったため、Codex が Agent Notch を停止しています。Codex で /hooks を実行し、Agent Notch の hook を確認して再信頼してください。</string>
+	<key>At least one Agent Notch hook is disabled in Codex. Run /hooks in Codex and enable it again.</key>
+	<string>Codex 側で無効になっている Agent Notch の hook があります。Codex で /hooks を実行し、もう一度有効にしてください。</string>
+	<key>Copy /hooks</key>
+	<string>/hooks をコピー</string>
 	<key>Tasks</key>
 	<string>タスク</string>
 	<key>Pending</key>

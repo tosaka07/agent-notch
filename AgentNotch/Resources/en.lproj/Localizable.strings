@@ -662,6 +662,16 @@ When off, neither your credentials nor the API are touched.</string>
 	<string>Adds hooks so Claude Code reports sessions, tools, and approvals.</string>
 	<key>Adds hooks so Codex reports sessions, tools, and questions, and lets Agent Notch read its session logs and usage. Off means neither.</key>
 	<string>Adds hooks so Codex reports sessions, tools, and questions, and lets Agent Notch read its session logs and usage. Off means neither.</string>
+	<key>The hooks are installed, but Codex is waiting for you to trust the changes.</key>
+	<string>The hooks are installed, but Codex is waiting for you to trust the changes.</string>
+	<key>The hooks are installed, but at least one is disabled in Codex.</key>
+	<string>The hooks are installed, but at least one is disabled in Codex.</string>
+	<key>Codex paused Agent Notch because the hook definition changed. Run /hooks in Codex, review the Agent Notch hooks, and trust them again.</key>
+	<string>Codex paused Agent Notch because the hook definition changed. Run /hooks in Codex, review the Agent Notch hooks, and trust them again.</string>
+	<key>At least one Agent Notch hook is disabled in Codex. Run /hooks in Codex and enable it again.</key>
+	<string>At least one Agent Notch hook is disabled in Codex. Run /hooks in Codex and enable it again.</string>
+	<key>Copy /hooks</key>
+	<string>Copy /hooks</string>
 	<key>Tasks</key>
 	<string>Tasks</string>
 	<key>Pending</key>

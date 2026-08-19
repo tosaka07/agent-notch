@@ -233,6 +233,38 @@ struct HookInstallationCoordinatorTests {
         #expect(checked == [.claudeCode, .codex])
     }
 
+    @Test("Codex hooks changed after trust are reported as needing review")
+    func modifiedCodexHooksNeedReview() async {
+        let coordinator = makeCoordinator(
+            distribution: "production",
+            executableURL: nil,
+            isAgentInstalled: { _, _ in true },
+            inspectCodexHooks: { command in
+                #expect(command == "agent-notch hook --agent codex")
+                return .needsReview
+            }
+        )
+
+        #expect(await coordinator.operationalStatus(of: .codex) == .needsCodexReview)
+    }
+
+    @Test("Claude status does not invoke Codex trust inspection")
+    func claudeStatusSkipsCodexInspection() async {
+        var inspectionWasCalled = false
+        let coordinator = makeCoordinator(
+            distribution: "production",
+            executableURL: nil,
+            isAgentInstalled: { _, _ in true },
+            inspectCodexHooks: { _ in
+                inspectionWasCalled = true
+                return .needsReview
+            }
+        )
+
+        #expect(await coordinator.operationalStatus(of: .claudeCode) == .installed)
+        #expect(!inspectionWasCalled)
+    }
+
     @Test("Configuration paths are shown with the home directory abbreviated")
     func configurationPathsUseTilde() {
         let coordinator = makeCoordinator(distribution: "production", executableURL: nil)
@@ -314,6 +346,7 @@ struct HookInstallationCoordinatorTests {
         installAgent: @escaping (HookAgent, HookRuntime) throws -> Void = { _, _ in },
         uninstallAgent: @escaping (HookAgent) throws -> Void = { _ in },
         isAgentInstalled: @escaping (HookAgent, HookRuntime) throws -> Bool = { _, _ in false },
+        inspectCodexHooks: @escaping (String) async -> CodexHookTrustState = { _ in .trusted },
         recordConsent: @escaping () -> Void = {},
         setCodexIntegration: @escaping (Bool) -> Void = { _ in }
     ) -> HookInstallationCoordinator {
@@ -328,6 +361,7 @@ struct HookInstallationCoordinatorTests {
             installAgent: installAgent,
             uninstallAgent: uninstallAgent,
             isAgentInstalled: isAgentInstalled,
+            inspectCodexHooks: inspectCodexHooks,
             recordConsent: recordConsent,
             setCodexIntegration: setCodexIntegration
         )

@@ -77,6 +77,27 @@ struct AgentHookSettingsSection: View {
                 }
             }
 
+            if let codexAttentionMessage {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(DSColors.signalAlert)
+
+                    Text(verbatim: codexAttentionMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        copyHooksCommand()
+                    } label: {
+                        Text(l10n: "Copy /hooks")
+                    }
+                    .controlSize(.small)
+                }
+            }
+
             if let failure {
                 Label {
                     Text(verbatim: failure)
@@ -93,13 +114,28 @@ struct AgentHookSettingsSection: View {
                 Text(verbatim: agent.agentType.displayName)
             }
         }
-        .onAppear(perform: refreshStatus)
+        .task {
+            await refreshStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) {
+            _ in
+            Task { @MainActor in
+                await refreshStatus()
+            }
+        }
     }
 
     /// The switch's own state is the installation on disk, so it cannot drift from reality.
     private var integrationBinding: Binding<Bool> {
         Binding(
-            get: { status == .installed },
+            get: {
+                switch status {
+                case .installed, .needsCodexReview, .disabledInCodex:
+                    true
+                case .notInstalled, .developmentCLIUnavailable, .failed:
+                    false
+                }
+            },
             set: { isOn in isOn ? enable() : disable() }
         )
     }
@@ -119,6 +155,10 @@ struct AgentHookSettingsSection: View {
             return L("The hook helper could not be found. Reinstall Agent Notch and try again.")
         case .failed(let message):
             return message
+        case .needsCodexReview:
+            return L("The hooks are installed, but Codex is waiting for you to trust the changes.")
+        case .disabledInCodex:
+            return L("The hooks are installed, but at least one is disabled in Codex.")
         case .installed, .notInstalled:
             return agent == .codex
                 ? L(
@@ -133,10 +173,25 @@ struct AgentHookSettingsSection: View {
         return false
     }
 
+    private var codexAttentionMessage: String? {
+        switch status {
+        case .needsCodexReview:
+            return L(
+                "Codex paused Agent Notch because the hook definition changed. Run /hooks in Codex, review the Agent Notch hooks, and trust them again."
+            )
+        case .disabledInCodex:
+            return L(
+                "At least one Agent Notch hook is disabled in Codex. Run /hooks in Codex and enable it again."
+            )
+        case .installed, .notInstalled, .developmentCLIUnavailable, .failed:
+            return nil
+        }
+    }
+
     // MARK: - Actions
 
-    private func refreshStatus() {
-        status = hookInstallation.status(of: agent)
+    private func refreshStatus() async {
+        status = await hookInstallation.operationalStatus(of: agent)
     }
 
     private func enable() {
@@ -146,14 +201,14 @@ struct AgentHookSettingsSection: View {
             await Task.yield()
             switch hookInstallation.install(agent) {
             case .installed:
-                status = .installed
+                await refreshStatus()
             case .developmentCLIUnavailable(let path):
                 status = .developmentCLIUnavailable(path: path)
             case .failed(let message):
                 failure = L("Hook installation failed: \(message)")
                 // Read the files back rather than trusting the attempt: a partial write must not
                 // leave the switch claiming the integration is on.
-                refreshStatus()
+                await refreshStatus()
             }
             isWorking = false
         }
@@ -167,9 +222,14 @@ struct AgentHookSettingsSection: View {
             if case .failed(let message) = hookInstallation.uninstall(agent) {
                 failure = L("Couldn’t remove the hooks: \(message)")
             }
-            refreshStatus()
+            await refreshStatus()
             isWorking = false
         }
+    }
+
+    private func copyHooksCommand() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("/hooks", forType: .string)
     }
 
     private func reveal(_ tildePath: String) {
