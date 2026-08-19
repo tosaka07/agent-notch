@@ -40,6 +40,36 @@ struct TerminalInfoResolverTests {
         #expect(restored.isTerminalJumpAvailable)
     }
 
+    /// A herdr pane identifier is only as good as the resolution that produced it: the stale one is
+    /// dropped before the attempt, and the pane that answered replaces it.
+    @Test("A herdr pane target is replaced by the one this resolution confirmed")
+    func herdrPaneTargetIsRevalidated() async throws {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "herdr-session", agentType: .claudeCode)
+        session.presence = .live
+        session.pid = 4_242
+        session.herdrPaneTarget = "w1:p1"
+
+        let pendingTask = TerminalInfoResolver.resolveIfNeeded(
+            session: session,
+            sessionId: session.id,
+            manager: manager,
+            resolve: { _, _ in
+                TerminalJumper.TerminalInfo(
+                    appName: "Ghostty",
+                    appIcon: nil,
+                    tmuxTarget: nil,
+                    herdrPaneTarget: "w6:p2"
+                )
+            }
+        )
+        let task = try #require(pendingTask)
+        await task.value
+
+        #expect(session.herdrPaneTarget == "w6:p2")
+        #expect(session.isTerminalJumpAvailable)
+    }
+
     @Test("An unresolved destination never exposes terminal jump")
     func unavailableDestinationStaysHidden() async throws {
         let manager = SessionManager()

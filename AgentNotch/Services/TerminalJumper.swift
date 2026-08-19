@@ -4,7 +4,7 @@ import Foundation
 
 /// Activates the terminal window running a given Claude session.
 /// Handles direct terminal processes, tmux sessions (switch-client + select-window + select-pane),
-/// and cmux panes (see `CmuxPaneJumper`).
+/// herdr panes (see `HerdrPaneJumper`), and cmux panes (see `CmuxPaneJumper`).
 enum TerminalJumper {
     private static let supportedTerminalBundleIdentifiers: Set<String> = [
         "com.apple.terminal",
@@ -53,6 +53,10 @@ enum TerminalJumper {
                     return activateTerminalApp(app, paneAnchorPID: tmuxInfo.clientPID)
                 }
                 Log.terminal.error("tmux client PID \(tmuxInfo.clientPID): no GUI app found")
+                // The tmux client's own environment is the live one. Panes inherit theirs from the
+                // tmux server, which was started by whichever client came first, so the session's
+                // copy of the herdr pane variable can name a pane the user has long left.
+                if let jumped = jumpThroughHerdr(anchorPID: tmuxInfo.clientPID) { return jumped }
             }
 
             // Fallback: direct TTY lookup
@@ -68,21 +72,67 @@ enum TerminalJumper {
             }
         }
 
+        // Strategy 3: herdr. Its server owns the pane processes and is reparented to launchd the
+        // first time the client detaches, so from then on no walk that starts at the session reaches
+        // a GUI application at all. herdr's socket names the pane; the client draws it.
+        for anchor in herdrAnchorCandidates(pid: pid, tty: tty) {
+            if let jumped = jumpThroughHerdr(anchorPID: anchor) { return jumped }
+        }
+
         Log.terminal.error("all strategies failed")
         return false
     }
 
+    /// Focuses the herdr pane holding `anchorPID` and activates the terminal its client runs in.
+    ///
+    /// Returns nil when the anchor is not inside herdr, leaving the caller its other strategies, and
+    /// false when it is but no attached client resolves to an application — a server nobody is
+    /// looking at. The pane stays focused in that case, so the next attach opens on it.
+    @MainActor
+    private static func jumpThroughHerdr(anchorPID: Int32) -> Bool? {
+        guard let location = HerdrPaneJumper.location(forProcessTree: anchorPID) else { return nil }
+        Log.terminal.info("herdr pane=\(location.paneId) socket=\(location.socketPath)")
+        HerdrPaneJumper.focusPane(location)
+
+        for clientPID in HerdrPaneJumper.clientPIDs(forSocketPath: location.socketPath) {
+            if let app = findTerminalApp(forChildPID: clientPID) {
+                Log.terminal.info(
+                    "herdr client → \(app.localizedName ?? "?") (\(app.processIdentifier))")
+                return activateTerminalApp(app, paneAnchorPID: clientPID)
+            }
+        }
+        Log.terminal.error("herdr: no attached client resolves to a terminal app")
+        return false
+    }
+
+    /// The processes worth asking herdr about: the session's own, then whatever holds its TTY.
+    private static func herdrAnchorCandidates(pid: Int32?, tty: String?) -> [Int32] {
+        var anchors: [Int32] = []
+        if let pid { anchors.append(pid) }
+        if let tty {
+            let ttyName = tty.hasPrefix("/dev/") ? String(tty.dropFirst(5)) : tty
+            anchors.append(contentsOf: (pidsForTTY(ttyName) ?? []).filter { $0 != pid })
+        }
+        return anchors
+    }
+
     /// Activating an app lands on the window and pane it left off in, which is the whole answer for
-    /// a terminal that gives each session its own window. cmux does not: it stacks workspaces and
-    /// panes inside one window, so the session's own pane is selected first — the same extra step
-    /// tmux needs. A failed selection still activates, leaving the user in cmux rather than nowhere.
+    /// a terminal that gives each session its own window. A multiplexer sharing one window does not:
+    /// the session's own pane is selected first — herdr over its socket, cmux over Apple events —
+    /// the same extra step tmux needs. A failed selection still activates, leaving the user in the
+    /// terminal rather than nowhere.
     @MainActor
     private static func activateTerminalApp(
         _ app: NSRunningApplication,
         paneAnchorPID: Int32?
     ) -> Bool {
-        if let paneAnchorPID, CmuxPaneJumper.isCmux(app) {
-            CmuxPaneJumper.focusPane(forProcessTree: paneAnchorPID)
+        if let paneAnchorPID {
+            if let location = HerdrPaneJumper.location(forProcessTree: paneAnchorPID) {
+                HerdrPaneJumper.focusPane(location)
+            }
+            if CmuxPaneJumper.isCmux(app) {
+                CmuxPaneJumper.focusPane(forProcessTree: paneAnchorPID)
+            }
         }
         return completeActivation(accepted: app.activate(), onActivated: closeNotch)
     }
@@ -109,9 +159,22 @@ enum TerminalJumper {
         let appName: String  // e.g. "iTerm2"
         let appIcon: NSImage?  // app icon
         let tmuxTarget: String?  // e.g. "main:2.1" or nil
+        let herdrPaneTarget: String?  // e.g. "w6:p2" or nil
+
+        init(
+            appName: String,
+            appIcon: NSImage?,
+            tmuxTarget: String?,
+            herdrPaneTarget: String? = nil
+        ) {
+            self.appName = appName
+            self.appIcon = appIcon
+            self.tmuxTarget = tmuxTarget
+            self.herdrPaneTarget = herdrPaneTarget
+        }
     }
 
-    /// Resolve terminal app and tmux info for a session. Call once and cache results.
+    /// Resolve terminal app and multiplexer info for a session. Call once and cache results.
     @MainActor
     static func resolveTerminalInfo(pid: Int32?, tty: String?) -> TerminalInfo? {
         // Try PID tree first
@@ -120,7 +183,8 @@ enum TerminalJumper {
             return TerminalInfo(
                 appName: app.localizedName ?? "Terminal",
                 appIcon: app.icon,
-                tmuxTarget: tmux?.paneTarget
+                tmuxTarget: tmux?.paneTarget,
+                herdrPaneTarget: ownHerdrPaneId(of: pid)
             )
         }
 
@@ -130,8 +194,15 @@ enum TerminalJumper {
                 return TerminalInfo(
                     appName: app.localizedName ?? "Terminal",
                     appIcon: app.icon,
-                    tmuxTarget: tmux.paneTarget
+                    tmuxTarget: tmux.paneTarget,
+                    herdrPaneTarget: ownHerdrPaneId(of: tmux.clientPID)
                 )
+            }
+            if let info = resolveHerdrTerminalInfo(
+                anchorPID: tmux.clientPID,
+                tmuxTarget: tmux.paneTarget
+            ) {
+                return info
             }
         }
 
@@ -144,14 +215,56 @@ enum TerminalJumper {
                         return TerminalInfo(
                             appName: app.localizedName ?? "Terminal",
                             appIcon: app.icon,
-                            tmuxTarget: nil
+                            tmuxTarget: nil,
+                            herdrPaneTarget: ownHerdrPaneId(of: p)
                         )
                     }
                 }
             }
         }
 
+        // herdr, whose detached server hides the terminal from every walk above
+        for anchor in herdrAnchorCandidates(pid: pid, tty: tty) {
+            if let info = resolveHerdrTerminalInfo(anchorPID: anchor, tmuxTarget: nil) {
+                return info
+            }
+        }
+
         return nil
+    }
+
+    /// Names the terminal drawing the herdr pane `anchorPID` sits in, once herdr confirms it still
+    /// holds that pane.
+    ///
+    /// An inherited pane identifier is display history: the pane is gone after a server restart, or
+    /// after being closed while the process it held lived on. Confirming it keeps a stale value from
+    /// being offered as a destination — the same reason `TerminalInfoResolver` revalidates at all.
+    @MainActor
+    private static func resolveHerdrTerminalInfo(
+        anchorPID: Int32,
+        tmuxTarget: String?
+    ) -> TerminalInfo? {
+        guard let location = HerdrPaneJumper.location(forProcessTree: anchorPID),
+            HerdrPaneJumper.paneExists(location)
+        else { return nil }
+
+        for clientPID in HerdrPaneJumper.clientPIDs(forSocketPath: location.socketPath) {
+            if let app = findTerminalApp(forChildPID: clientPID) {
+                return TerminalInfo(
+                    appName: app.localizedName ?? "Terminal",
+                    appIcon: app.icon,
+                    tmuxTarget: tmuxTarget,
+                    herdrPaneTarget: location.paneId
+                )
+            }
+        }
+        return nil
+    }
+
+    /// The pane variable on one process, without the walk `jumpThroughHerdr` pays for. A terminal
+    /// that was already found needs no help locating herdr — the identifier is recorded for display.
+    private static func ownHerdrPaneId(of pid: Int32) -> String? {
+        HerdrPaneJumper.location(forProcessTree: pid, maximumDepth: 1)?.paneId
     }
 
     // Icon is now cached on UnifiedSession.terminalAppIcon via resolveTerminalInfo()
@@ -286,7 +399,8 @@ enum TerminalJumper {
         return Int32(output.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
     }
 
-    private static func runProcess(_ path: String, args: [String]) -> String {
+    /// Shared with `HerdrPaneJumper`, which reads the process table through the same `ps` calls.
+    static func runProcess(_ path: String, args: [String]) -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args

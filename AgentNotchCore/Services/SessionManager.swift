@@ -390,6 +390,7 @@ public final class SessionManager: ObservableObject {
             session.terminalAppName = nil
             session.terminalAppIcon = nil
             session.tmuxPaneTarget = nil
+            session.herdrPaneTarget = nil
             session.terminalInfoResolved = false
         }
     }

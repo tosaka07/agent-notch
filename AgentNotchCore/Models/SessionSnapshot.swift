@@ -50,6 +50,7 @@ public struct SessionSnapshot: Codable, Sendable {
     public let transcriptPath: String?
     public let terminalAppName: String?
     public let tmuxPaneTarget: String?
+    public let herdrPaneTarget: String?
 
     public let sessionTitle: String?
     public let firstUserPrompt: String?
@@ -82,6 +83,7 @@ public struct SessionSnapshot: Codable, Sendable {
         transcriptPath = session.transcriptPath
         terminalAppName = session.terminalAppName
         tmuxPaneTarget = session.tmuxPaneTarget
+        herdrPaneTarget = session.herdrPaneTarget
 
         sessionTitle = session.sessionTitle
         firstUserPrompt = session.firstUserPrompt
@@ -121,6 +123,7 @@ public struct SessionSnapshot: Codable, Sendable {
         session.transcriptPath = transcriptPath
         session.terminalAppName = terminalAppName
         session.tmuxPaneTarget = tmuxPaneTarget
+        session.herdrPaneTarget = herdrPaneTarget
         session.terminalInfoResolved = false
 
         session.sessionTitle = sessionTitle
@@ -156,6 +159,7 @@ public struct SessionSnapshot: Codable, Sendable {
         case transcriptPath
         case terminalAppName
         case tmuxPaneTarget
+        case herdrPaneTarget
         case sessionTitle
         case firstUserPrompt
         case lastUserPrompt
@@ -192,6 +196,7 @@ public struct SessionSnapshot: Codable, Sendable {
         transcriptPath = try container.decodeIfPresent(String.self, forKey: .transcriptPath)
         terminalAppName = try container.decodeIfPresent(String.self, forKey: .terminalAppName)
         tmuxPaneTarget = try container.decodeIfPresent(String.self, forKey: .tmuxPaneTarget)
+        herdrPaneTarget = try container.decodeIfPresent(String.self, forKey: .herdrPaneTarget)
 
         sessionTitle = try container.decodeIfPresent(String.self, forKey: .sessionTitle)
         firstUserPrompt = try container.decodeIfPresent(String.self, forKey: .firstUserPrompt)

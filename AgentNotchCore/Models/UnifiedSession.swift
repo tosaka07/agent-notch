@@ -367,6 +367,8 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var terminalAppIcon: Any?
     /// Resolved tmux pane target (e.g. "main:2.1")
     public var tmuxPaneTarget: String?
+    /// Resolved herdr pane target (e.g. "w6:p2"), confirmed to still exist when it was resolved
+    public var herdrPaneTarget: String?
     /// Whether terminal info resolution has been attempted (prevents repeated retries)
     public var terminalInfoResolved: Bool = false
     /// True only after the current PID/TTY has been resolved to an activatable terminal app.

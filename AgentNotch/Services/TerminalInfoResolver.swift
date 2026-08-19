@@ -50,6 +50,7 @@ enum TerminalInfoResolver {
         session.terminalAppName = nil
         session.terminalAppIcon = nil
         session.tmuxPaneTarget = nil
+        session.herdrPaneTarget = nil
         manager.notifyChange()
 
         return Task { @MainActor in
@@ -65,6 +66,7 @@ enum TerminalInfoResolver {
             current.terminalAppName = info?.appName
             current.terminalAppIcon = info?.appIcon
             current.tmuxPaneTarget = info?.tmuxTarget
+            current.herdrPaneTarget = info?.herdrPaneTarget
             manager.notifyChange()
         }
     }
