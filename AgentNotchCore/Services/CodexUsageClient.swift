@@ -89,8 +89,10 @@ enum CodexAppServerUsageProvider {
         let response = try await CodexAppServerProcess(
             executableURL: executableURL,
             arguments: ["app-server", "--stdio"],
-            timeout: 8
-        ).requestRateLimits()
+            timeout: 8,
+            requestMethod: "account/rateLimits/read",
+            requestParams: NSNull()
+        ).request()
         return try CodexAppServerUsageParser.parseResponse(response)
     }
 }
@@ -351,12 +353,12 @@ enum CodexAppServerError: LocalizedError {
 /// Runs one App Server exchange and terminates it after the matching response.
 ///
 /// The state machine waits for initialize response id 1 before announcing
-/// `initialized` and sending `account/rateLimits/read` as id 2. Notifications
-/// and unrelated responses are ignored.
+/// `initialized` and sending the configured request as id 2. Notifications and unrelated
+/// responses are ignored.
 final class CodexAppServerProcess: @unchecked Sendable {
     private enum Phase: Equatable {
         case awaitingInitialization
-        case awaitingRateLimits
+        case awaitingResponse
     }
 
     private enum Completion {
@@ -367,6 +369,8 @@ final class CodexAppServerProcess: @unchecked Sendable {
     private let executableURL: URL
     private let arguments: [String]
     private let timeout: TimeInterval
+    private let requestMethod: String
+    private let requestParams: Any
     private let maxBufferedBytes = 1_048_576
 
     private let lock = NSLock()
@@ -379,13 +383,21 @@ final class CodexAppServerProcess: @unchecked Sendable {
     private var phase = Phase.awaitingInitialization
     private var isFinished = false
 
-    init(executableURL: URL, arguments: [String], timeout: TimeInterval) {
+    init(
+        executableURL: URL,
+        arguments: [String],
+        timeout: TimeInterval,
+        requestMethod: String = "account/rateLimits/read",
+        requestParams: Any = NSNull()
+    ) {
         self.executableURL = executableURL
         self.arguments = arguments
         self.timeout = timeout
+        self.requestMethod = requestMethod
+        self.requestParams = requestParams
     }
 
-    func requestRateLimits() async throws -> Data {
+    func request() async throws -> Data {
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<Data, any Error>) in
@@ -394,6 +406,11 @@ final class CodexAppServerProcess: @unchecked Sendable {
         } onCancel: {
             finish(.failure(CancellationError()))
         }
+    }
+
+    /// Kept as the narrow convenience used by existing usage-process tests.
+    func requestRateLimits() async throws -> Data {
+        try await request()
     }
 
     private func start(continuation: CheckedContinuation<Data, any Error>) {
@@ -508,16 +525,16 @@ final class CodexAppServerProcess: @unchecked Sendable {
         }
 
         if id == 1 {
-            let shouldRequestRateLimits = lock.withLock {
+            let shouldSendRequest = lock.withLock {
                 guard !isFinished, phase == .awaitingInitialization else { return false }
-                phase = .awaitingRateLimits
+                phase = .awaitingResponse
                 return true
             }
-            guard shouldRequestRateLimits else { return }
+            guard shouldSendRequest else { return }
 
             do {
                 try send(["method": "initialized", "params": [:]])
-                try send(["id": 2, "method": "account/rateLimits/read", "params": NSNull()])
+                try send(["id": 2, "method": requestMethod, "params": requestParams])
             } catch {
                 finish(.failure(CodexAppServerError.rpc(error.localizedDescription)))
             }
@@ -525,7 +542,7 @@ final class CodexAppServerProcess: @unchecked Sendable {
         }
 
         let isExpected = lock.withLock {
-            !isFinished && phase == .awaitingRateLimits
+            !isFinished && phase == .awaitingResponse
         }
         if isExpected {
             finish(.success(line))

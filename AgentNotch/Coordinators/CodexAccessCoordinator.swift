@@ -43,7 +43,7 @@ final class CodexAccessCoordinator {
     /// turns it off.
     private func reconcileWithInstalledHooks() {
         switch hookInstallation.status(of: .codex) {
-        case .installed:
+        case .installed, .needsCodexReview, .disabledInCodex:
             Defaults[.codexIntegrationEnabled] = true
         case .notInstalled:
             Defaults[.codexIntegrationEnabled] = false

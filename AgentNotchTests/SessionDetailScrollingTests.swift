@@ -82,6 +82,57 @@ struct SessionDetailScrollingTests {
         )
     }
 
+    @Test("A message written while the selected session is loading still appears")
+    func messageArrivingDuringReadAppears() async throws {
+        let transcriptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agent-notch-in-flight-\(UUID()).jsonl")
+        let filler =
+            #"{"type":"attachment","payload":"\#(String(repeating: "x", count: 320))"}"# + "\n"
+        try String(repeating: filler, count: 60_000)
+            .write(to: transcriptURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: transcriptURL) }
+
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "in-flight", agentType: .claudeCode)
+        session.cwd = "/tmp/in-flight"
+        session.status = .permissionWaiting
+        session.transcriptPath = transcriptURL.path
+
+        let hostingView = NSHostingView(
+            rootView: SessionDetailView(
+                session: session,
+                sessionManager: manager,
+                physicalNotchHeight: 32,
+                onBack: {},
+                onClose: {},
+                keyboardInteraction: KeyboardInteractionController()
+            )
+            .frame(width: 620, height: 500)
+            .environment(\.colorScheme, .dark)
+        )
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 500),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.layoutIfNeeded()
+        hostingView.layoutSubtreeIfNeeded()
+
+        // This fixture keeps the initial read in flight long enough to append the context message
+        // at the same boundary where an AskUserQuestion notification reaches the open detail view.
+        try await Task.sleep(for: .milliseconds(100))
+        try appendMessage(index: 1, paragraphs: 80, to: transcriptURL)
+        manager.notifyChange()
+
+        _ = try await waitForScrollableTimeline(
+            in: hostingView,
+            window: window,
+            attempts: 160
+        )
+    }
+
     private func scrollIntoHistory(
         in scrollView: NSScrollView,
         distance: CGFloat
@@ -100,9 +151,10 @@ struct SessionDetailScrollingTests {
 
     private func waitForScrollableTimeline(
         in hostingView: NSHostingView<some View>,
-        window: NSWindow
+        window: NSWindow,
+        attempts: Int = 40
     ) async throws -> NSScrollView {
-        for _ in 0..<40 {
+        for _ in 0..<attempts {
             window.layoutIfNeeded()
             hostingView.layoutSubtreeIfNeeded()
 

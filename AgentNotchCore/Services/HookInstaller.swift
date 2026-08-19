@@ -155,17 +155,17 @@ public enum HookInstaller {
         using runtime: HookRuntime,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) throws {
-        let command = runtime.executableCommand
+        let command = hookCommand(for: agent, using: runtime)
         Log.hooks.info("Installing \(agent.rawValue) hooks, command: \(command)")
         switch agent {
         case .claudeCode:
             try updateClaudeSettings(
-                command: "\(command) hook",
+                command: command,
                 path: claudeSettingsPath(homeDirectory: homeDirectory)
             )
         case .codex:
             try updateCodexHooks(
-                command: "\(command) hook --agent codex",
+                command: command,
                 path: codexHooksPath(homeDirectory: homeDirectory)
             )
         }
@@ -195,20 +195,34 @@ public enum HookInstaller {
         using runtime: HookRuntime,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) throws -> Bool {
-        let command = runtime.executableCommand
+        let command = hookCommand(for: agent, using: runtime)
         switch agent {
         case .claudeCode:
             return try hooksFileContainsAllEvents(
                 path: claudeSettingsPath(homeDirectory: homeDirectory),
                 events: claudeHookEvents,
-                command: "\(command) hook"
+                command: command
             )
         case .codex:
             return try hooksFileContainsAllEvents(
                 path: codexHooksPath(homeDirectory: homeDirectory),
                 events: codexHookEvents,
-                command: "\(command) hook --agent codex"
+                command: command
             )
+        }
+    }
+
+    /// The exact command persisted for one agent.
+    ///
+    /// Codex trusts a hash of the complete hook definition. Exposing the canonical command lets
+    /// the trust inspector match only Agent Notch's hooks instead of attributing another
+    /// application's changed hook to this integration.
+    public static func hookCommand(for agent: HookAgent, using runtime: HookRuntime) -> String {
+        switch agent {
+        case .claudeCode:
+            return "\(runtime.executableCommand) hook"
+        case .codex:
+            return "\(runtime.executableCommand) hook --agent codex"
         }
     }
 
