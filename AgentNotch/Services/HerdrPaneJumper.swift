@@ -21,14 +21,6 @@ enum HerdrPaneJumper {
         let socketPath: String
     }
 
-    /// A process as the pane/client walks need it.
-    struct RunningProcess: Equatable {
-        let pid: Int32
-        let parentPID: Int32
-        /// Absolute path of the executable, as `ps -o comm=` prints it.
-        let executablePath: String
-    }
-
     nonisolated static let paneEnvironmentKey = "HERDR_PANE_ID"
     nonisolated static let socketEnvironmentKey = "HERDR_SOCKET_PATH"
     nonisolated static let sessionEnvironmentKey = "HERDR_SESSION"
@@ -156,27 +148,25 @@ enum HerdrPaneJumper {
     /// their windows shows the pane, and the newest is the one the user attached last.
     static func clientPIDs(
         forSocketPath socketPath: String,
-        processes: () -> [RunningProcess] = { runningProcesses() },
+        candidates: () -> [Int32] = { herdrProcessIDs() },
         argumentsOf readArguments: (Int32) -> String = { arguments(ofPID: $0) },
         environmentOf readEnvironment: EnvironmentReader = {
             ProcessEnvironment.environment(ofPID: $0)
         }
     ) -> [Int32] {
         let wanted = sessionName(forSocketPath: socketPath)
-        return processes()
-            .filter { executableName($0.executablePath) == "herdr" }
-            .filter { process in
-                let arguments = readArguments(process.pid)
+        return candidates()
+            .filter { pid in
+                let arguments = readArguments(pid)
                 guard !isServer(arguments: arguments), !isRemote(arguments: arguments) else {
                     return false
                 }
                 let session = clientSessionName(
                     arguments: arguments,
-                    environment: readEnvironment(process.pid)
+                    environment: readEnvironment(pid)
                 )
                 return session == wanted
             }
-            .map(\.pid)
             .sorted(by: >)
     }
 
@@ -223,22 +213,25 @@ enum HerdrPaneJumper {
 
     // MARK: - Process inventory
 
-    static func runningProcesses() -> [RunningProcess] {
-        TerminalJumper.runProcess("/bin/ps", args: ["-Ao", "pid=,ppid=,comm="])
+    /// Every process running the `herdr` executable.
+    ///
+    /// The whole table is printed and filtered here rather than asked for by name: `pgrep -x herdr`
+    /// was measured missing a running herdr server on this platform, and a lookup that can miss a
+    /// client would silently cost the jump its window. Draining `ps` as it writes is what makes a
+    /// table this size safe to ask for — see `TerminalJumper.runProcess`.
+    static func herdrProcessIDs() -> [Int32] {
+        TerminalJumper.runProcess("/bin/ps", args: ["-Ao", "pid=,comm="])
             .split(separator: "\n")
             .compactMap { line in
                 let fields = line.split(
                     separator: " ",
-                    maxSplits: 2,
+                    maxSplits: 1,
                     omittingEmptySubsequences: true
                 )
-                guard fields.count == 3, let pid = Int32(fields[0]), let parent = Int32(fields[1])
+                guard fields.count == 2, let pid = Int32(fields[0]),
+                    executableName(fields[1].trimmingCharacters(in: .whitespaces)) == "herdr"
                 else { return nil }
-                return RunningProcess(
-                    pid: pid,
-                    parentPID: parent,
-                    executablePath: fields[2].trimmingCharacters(in: .whitespaces)
-                )
+                return pid
             }
     }
 

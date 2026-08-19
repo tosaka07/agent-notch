@@ -409,8 +409,12 @@ enum TerminalJumper {
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
-            process.waitUntilExit()
+            // Drain before waiting. A child whose output fills the pipe blocks in `write`, so a
+            // parent that waits for exit first would hold a buffer nobody is reading and neither
+            // side would ever move again. `ps -A` prints more than the buffer holds, which is how
+            // this order froze the main thread once it was asked for the whole process table.
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
             return String(data: data, encoding: .utf8) ?? ""
         } catch {
             return ""

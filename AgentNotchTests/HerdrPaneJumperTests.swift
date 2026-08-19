@@ -229,23 +229,17 @@ struct HerdrPaneJumperTests {
 
     @Test("only the clients of this session are offered, newest first")
     func picksClientsOfTheSameSession() {
-        let processes = [
-            HerdrPaneJumper.RunningProcess(pid: 100, parentPID: 1, executablePath: "/bin/zsh"),
-            HerdrPaneJumper.RunningProcess(pid: 200, parentPID: 1, executablePath: "/opt/bin/herdr"),
-            HerdrPaneJumper.RunningProcess(pid: 300, parentPID: 1, executablePath: "/opt/bin/herdr"),
-            HerdrPaneJumper.RunningProcess(pid: 400, parentPID: 1, executablePath: "/opt/bin/herdr"),
-            HerdrPaneJumper.RunningProcess(pid: 500, parentPID: 1, executablePath: "/opt/bin/herdr"),
-        ]
         let arguments: [Int32: String] = [
             200: "herdr server",
             300: "herdr",
             400: "herdr --session work",
             500: "herdr",
+            600: "herdr --remote workbox",
         ]
 
         let clients = HerdrPaneJumper.clientPIDs(
             forSocketPath: socketPath,
-            processes: { processes },
+            candidates: { [200, 300, 400, 500, 600] },
             argumentsOf: { arguments[$0] ?? "" },
             environmentOf: { _ in [:] }
         )
@@ -255,15 +249,11 @@ struct HerdrPaneJumperTests {
 
     @Test("a named session is served by the client started against that name")
     func picksNamedSessionClient() {
-        let processes = [
-            HerdrPaneJumper.RunningProcess(pid: 300, parentPID: 1, executablePath: "/opt/bin/herdr"),
-            HerdrPaneJumper.RunningProcess(pid: 400, parentPID: 1, executablePath: "/opt/bin/herdr"),
-        ]
         let arguments: [Int32: String] = [300: "herdr", 400: "herdr --session work"]
 
         let clients = HerdrPaneJumper.clientPIDs(
             forSocketPath: "/Users/tester/.config/herdr/sessions/work/herdr.sock",
-            processes: { processes },
+            candidates: { [300, 400] },
             argumentsOf: { arguments[$0] ?? "" },
             environmentOf: { _ in [:] }
         )
