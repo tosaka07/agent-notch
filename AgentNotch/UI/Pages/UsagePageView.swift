@@ -324,15 +324,7 @@ struct UsagePageView: View {
                 windowRow(label: row.label, window: row.window)
             }
         }
-        .panelCard(border: sectionBorder(rows: rows))
-    }
-
-    /// Strengthens the border only for windows in the danger zone.
-    private func sectionBorder(rows: [Row]) -> Color {
-        let severities = rows.compactMap(\.window).map { severity(for: $0) }
-        if severities.contains(.critical) { return DSColors.signalError.opacity(0.3) }
-        if severities.contains(.warning) { return DSColors.signalAlert.opacity(0.25) }
-        return DSColors.lineDefault
+        .panelCard()
     }
 
     /// The section headline: ring on the left, label plus the large 5×7 number
