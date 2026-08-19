@@ -21,6 +21,12 @@ enum HerdrPaneJumper {
         let socketPath: String
     }
 
+    /// A `herdr` process as the client search sees it: its pid and how it was invoked.
+    struct HerdrProcess: Equatable {
+        let pid: Int32
+        let arguments: String
+    }
+
     nonisolated static let paneEnvironmentKey = "HERDR_PANE_ID"
     nonisolated static let socketEnvironmentKey = "HERDR_SOCKET_PATH"
     nonisolated static let sessionEnvironmentKey = "HERDR_SESSION"
@@ -55,11 +61,14 @@ enum HerdrPaneJumper {
                 let paneId = environment[paneEnvironmentKey],
                 isPaneIdentifier(paneId)
             {
-                return Location(
-                    paneId: paneId,
-                    socketPath: environment[socketEnvironmentKey].flatMap { $0.isEmpty ? nil : $0 }
-                        ?? defaultSocketPath
-                )
+                // Both halves have to come from the same pane. herdr injects them together, and
+                // guessing the socket when only the pane survived would address a pane number on
+                // whichever server happens to answer — a named session's `w1:p1` exists on the
+                // unnamed one too, belonging to something else entirely.
+                guard let socketPath = environment[socketEnvironmentKey], !socketPath.isEmpty else {
+                    return nil
+                }
+                return Location(paneId: paneId, socketPath: socketPath)
             }
             let parent = resolveParent(currentPID)
             if parent <= 1 { return nil }
@@ -82,13 +91,6 @@ enum HerdrPaneJumper {
     private static func isIdentifier(_ half: Substring, prefix: Character) -> Bool {
         guard half.first == prefix, half.count > 1 else { return false }
         return half.dropFirst().allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
-    }
-
-    /// The socket of the unnamed session, which is the one an ordinary `herdr` run attaches to.
-    static var defaultSocketPath: String {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/herdr/herdr.sock")
-            .path
     }
 
     // MARK: - Driving herdr
@@ -145,28 +147,28 @@ enum HerdrPaneJumper {
     /// the processes are matched by hand: a `herdr` executable that is not the server, and not an
     /// `--remote` attachment to someone else's machine, running against the session this socket
     /// belongs to. Several clients can attach to one server; focus is server-wide state, so any of
-    /// their windows shows the pane, and the newest is the one the user attached last.
+    /// their windows shows the pane, so the order only decides which window to raise; the highest
+    /// pid goes first as a stand-in for the most recent attach.
     static func clientPIDs(
         forSocketPath socketPath: String,
-        candidates: () -> [Int32] = { herdrProcessIDs() },
-        argumentsOf readArguments: (Int32) -> String = { arguments(ofPID: $0) },
+        candidates: () -> [HerdrProcess] = { herdrProcesses() },
         environmentOf readEnvironment: EnvironmentReader = {
             ProcessEnvironment.environment(ofPID: $0)
         }
     ) -> [Int32] {
         let wanted = sessionName(forSocketPath: socketPath)
         return candidates()
-            .filter { pid in
-                let arguments = readArguments(pid)
-                guard !isServer(arguments: arguments), !isRemote(arguments: arguments) else {
-                    return false
-                }
+            .filter { process in
+                guard !isServer(arguments: process.arguments),
+                    !isRemote(arguments: process.arguments)
+                else { return false }
                 let session = clientSessionName(
-                    arguments: arguments,
-                    environment: readEnvironment(pid)
+                    arguments: process.arguments,
+                    environment: readEnvironment(process.pid)
                 )
                 return session == wanted
             }
+            .map(\.pid)
             .sorted(by: >)
     }
 
@@ -213,14 +215,18 @@ enum HerdrPaneJumper {
 
     // MARK: - Process inventory
 
-    /// Every process running the `herdr` executable.
+    /// Every process running `herdr`, with the arguments that say which one it is.
     ///
-    /// The whole table is printed and filtered here rather than asked for by name: `pgrep -x herdr`
+    /// Both come out of one `ps` call on purpose. Asking for the pids first and their arguments
+    /// afterwards leaves a window for the pid to be recycled in between, which would hand the jump
+    /// an unrelated process to walk up from. It is also half the work.
+    ///
+    /// The table is printed whole and filtered here rather than asked for by name: `pgrep -x herdr`
     /// was measured missing a running herdr server on this platform, and a lookup that can miss a
     /// client would silently cost the jump its window. Draining `ps` as it writes is what makes a
     /// table this size safe to ask for — see `TerminalJumper.runProcess`.
-    static func herdrProcessIDs() -> [Int32] {
-        TerminalJumper.runProcess("/bin/ps", args: ["-Ao", "pid=,comm="])
+    static func herdrProcesses() -> [HerdrProcess] {
+        TerminalJumper.runProcess("/bin/ps", args: ["-Ao", "pid=,command="])
             .split(separator: "\n")
             .compactMap { line in
                 let fields = line.split(
@@ -228,16 +234,11 @@ enum HerdrPaneJumper {
                     maxSplits: 1,
                     omittingEmptySubsequences: true
                 )
-                guard fields.count == 2, let pid = Int32(fields[0]),
-                    executableName(fields[1].trimmingCharacters(in: .whitespaces)) == "herdr"
-                else { return nil }
-                return pid
+                guard fields.count == 2, let pid = Int32(fields[0]) else { return nil }
+                let arguments = fields[1].trimmingCharacters(in: .whitespaces)
+                let executable = arguments.split(separator: " ").first.map(String.init) ?? ""
+                guard executableName(executable) == "herdr" else { return nil }
+                return HerdrProcess(pid: pid, arguments: arguments)
             }
-    }
-
-    /// The full argument vector of one process. `comm` alone cannot tell a server from a client.
-    static func arguments(ofPID pid: Int32) -> String {
-        TerminalJumper.runProcess("/bin/ps", args: ["-p", "\(pid)", "-o", "command="])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

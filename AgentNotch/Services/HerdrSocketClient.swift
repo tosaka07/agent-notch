@@ -85,15 +85,36 @@ enum HerdrSocketClient {
         var timeout = timeval(tv_sec: timeoutSeconds, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        // Writing to a socket the peer has already closed raises SIGPIPE, whose default action is to
+        // kill the process. A herdr server that stopped between the connect and the write would
+        // therefore take Agent Notch down with it; the error is wanted as a return value instead.
+        var noSignal: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size))
 
         guard connectSocket(fd: fd, socketPath: socketPath) else { return nil }
-
-        let sent = requestLine.withUnsafeBytes {
-            Darwin.send(fd, $0.baseAddress!, requestLine.count, 0)
-        }
-        guard sent == requestLine.count else { return nil }
+        guard sendAll(fd: fd, data: requestLine) else { return nil }
 
         return receiveLine(fd: fd)
+    }
+
+    /// Writes every byte of `data`.
+    ///
+    /// A stream socket may accept part of a write, and a signal can interrupt one before it has
+    /// moved anything. Treating either as a failure would drop a jump for a reason that has nothing
+    /// to do with herdr.
+    private static func sendAll(fd: Int32, data: Data) -> Bool {
+        var offset = 0
+        while offset < data.count {
+            let written = data.withUnsafeBytes { buffer in
+                Darwin.send(fd, buffer.baseAddress! + offset, data.count - offset, 0)
+            }
+            if written > 0 {
+                offset += written
+                continue
+            }
+            guard written < 0, errno == EINTR else { return false }
+        }
+        return true
     }
 
     private static func connectSocket(fd: Int32, socketPath: String) -> Bool {
@@ -119,6 +140,7 @@ enum HerdrSocketClient {
         var chunk = [UInt8](repeating: 0, count: 4096)
         while line.count < maximumResponseBytes {
             let read = chunk.withUnsafeMutableBytes { recv(fd, $0.baseAddress!, $0.count, 0) }
+            if read < 0, errno == EINTR { continue }
             if read <= 0 { break }
             if let newline = chunk[0..<read].firstIndex(of: 0x0A) {
                 line.append(contentsOf: chunk[0..<newline])

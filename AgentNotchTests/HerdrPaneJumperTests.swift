@@ -44,17 +44,17 @@ struct HerdrPaneJumperTests {
         #expect(location?.paneId == "w1:pD")
     }
 
-    /// herdr always injects the socket path, but a pane whose environment was inherited through
-    /// something that dropped it still belongs to the session every plain `herdr` run attaches to.
-    @Test("a missing socket variable falls back to the unnamed session's socket")
-    func fallsBackToDefaultSocket() {
+    /// Guessing the socket would address a pane number on whichever server answered: a named
+    /// session's `w6:p2` exists on the unnamed one too, belonging to something else.
+    @Test("a pane without its socket is not a location")
+    func rejectsPaneWithoutSocket() {
         let location = HerdrPaneJumper.location(
             forProcessTree: 500,
             environmentOf: { $0 == 500 ? ["HERDR_PANE_ID": "w6:p2"] : nil },
             parentOf: { _ in 1 }
         )
 
-        #expect(location?.socketPath == HerdrPaneJumper.defaultSocketPath)
+        #expect(location == nil)
     }
 
     @Test("a process tree outside herdr resolves to nothing")
@@ -71,8 +71,8 @@ struct HerdrPaneJumperTests {
     @Test("a pane variable that is not a pane identifier is ignored, and the walk goes on")
     func ignoresUnusablePaneIdentifiers() {
         let environments: [Int32: [String: String]] = [
-            500: ["HERDR_PANE_ID": ""],
-            400: ["HERDR_PANE_ID": "not-a-pane"],
+            500: ["HERDR_PANE_ID": "", "HERDR_SOCKET_PATH": socketPath],
+            400: ["HERDR_PANE_ID": "not-a-pane", "HERDR_SOCKET_PATH": socketPath],
             300: ["HERDR_PANE_ID": "w2:p7", "HERDR_SOCKET_PATH": socketPath],
         ]
 
@@ -227,20 +227,19 @@ struct HerdrPaneJumperTests {
         #expect(HerdrPaneJumper.isRemote(arguments: "herdr") == false)
     }
 
-    @Test("only the clients of this session are offered, newest first")
+    @Test("only the clients of this session are offered, highest pid first")
     func picksClientsOfTheSameSession() {
-        let arguments: [Int32: String] = [
-            200: "herdr server",
-            300: "herdr",
-            400: "herdr --session work",
-            500: "herdr",
-            600: "herdr --remote workbox",
+        let processes = [
+            HerdrPaneJumper.HerdrProcess(pid: 200, arguments: "/opt/bin/herdr server"),
+            HerdrPaneJumper.HerdrProcess(pid: 300, arguments: "herdr"),
+            HerdrPaneJumper.HerdrProcess(pid: 400, arguments: "herdr --session work"),
+            HerdrPaneJumper.HerdrProcess(pid: 500, arguments: "herdr"),
+            HerdrPaneJumper.HerdrProcess(pid: 600, arguments: "herdr --remote workbox"),
         ]
 
         let clients = HerdrPaneJumper.clientPIDs(
             forSocketPath: socketPath,
-            candidates: { [200, 300, 400, 500, 600] },
-            argumentsOf: { arguments[$0] ?? "" },
+            candidates: { processes },
             environmentOf: { _ in [:] }
         )
 
@@ -249,15 +248,30 @@ struct HerdrPaneJumperTests {
 
     @Test("a named session is served by the client started against that name")
     func picksNamedSessionClient() {
-        let arguments: [Int32: String] = [300: "herdr", 400: "herdr --session work"]
+        let processes = [
+            HerdrPaneJumper.HerdrProcess(pid: 300, arguments: "herdr"),
+            HerdrPaneJumper.HerdrProcess(pid: 400, arguments: "herdr --session work"),
+        ]
 
         let clients = HerdrPaneJumper.clientPIDs(
             forSocketPath: "/Users/tester/.config/herdr/sessions/work/herdr.sock",
-            candidates: { [300, 400] },
-            argumentsOf: { arguments[$0] ?? "" },
+            candidates: { processes },
             environmentOf: { _ in [:] }
         )
 
         #expect(clients == [400])
+    }
+
+    /// The session name can also come from the environment, which is read per candidate rather than
+    /// from the `ps` line.
+    @Test("a client that names its session through the environment is matched too")
+    func picksClientFromEnvironmentSession() {
+        let clients = HerdrPaneJumper.clientPIDs(
+            forSocketPath: "/Users/tester/.config/herdr/sessions/work/herdr.sock",
+            candidates: { [HerdrPaneJumper.HerdrProcess(pid: 300, arguments: "herdr")] },
+            environmentOf: { _ in ["HERDR_SESSION": "work"] }
+        )
+
+        #expect(clients == [300])
     }
 }

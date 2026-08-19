@@ -367,7 +367,9 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var terminalAppIcon: Any?
     /// Resolved tmux pane target (e.g. "main:2.1")
     public var tmuxPaneTarget: String?
-    /// Resolved herdr pane target (e.g. "w6:p2"), confirmed to still exist when it was resolved
+    /// Resolved herdr pane target (e.g. "w6:p2"). Confirmed against herdr only when herdr is also
+    /// what named the terminal; where the terminal was found by a process walk this is the pane
+    /// variable as inherited, which is display information rather than a verified destination.
     public var herdrPaneTarget: String?
     /// Whether terminal info resolution has been attempted (prevents repeated retries)
     public var terminalInfoResolved: Bool = false
