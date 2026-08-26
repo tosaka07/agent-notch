@@ -11,11 +11,11 @@ import Foundation
 /// the app and stops there.
 ///
 /// What is left is the workspace. The editor titles each window after its root folder by default,
-/// and it starts integrated terminals in that folder, so the working directory a session inherited
-/// names the window to raise. That is a match on a display string rather than on an identifier the
-/// editor issued: a renamed title, a multi-root workspace, or two windows on folders of the same
-/// name can all miss. A miss is not a failure — the caller still activates the app, which is where
-/// the jump used to end for every VS Code session.
+/// and both an integrated terminal and an extension-run agent work inside that folder, so the
+/// directory a session is in names the window to raise. That is a match on a display string rather
+/// than on an identifier the editor issued: a renamed title, a multi-root workspace, or two windows
+/// on folders of the same name can all miss. A miss is not a failure — the caller still activates
+/// the app, which is where the jump used to end for every VS Code session.
 @MainActor
 enum VSCodeWindowJumper {
     /// The VS Code family, by bundle identifier. Forks ship the same window titling and the same
@@ -33,10 +33,6 @@ enum VSCodeWindowJumper {
         "com.exafunction.windsurf",
     ]
 
-    /// The variable a shell exports for its working directory. Every VS Code integrated terminal
-    /// starts in the window's workspace folder, so this is where the workspace name comes from.
-    nonisolated static let workingDirectoryEnvironmentKey = "PWD"
-
     /// How many trailing path components of the working directory can name the workspace.
     ///
     /// One covers a session started at the workspace root, which is the common case. Going a little
@@ -48,7 +44,7 @@ enum VSCodeWindowJumper {
     /// What VS Code puts between the active editor and the workspace root in a window title.
     nonisolated static let titleSeparator = " — "
 
-    typealias EnvironmentReader = (Int32) -> [String: String]?
+    typealias DirectoryReader = (Int32) -> String?
     typealias ParentResolver = (Int32) -> Int32
     typealias ScriptRunner = (String) -> String?
 
@@ -68,8 +64,8 @@ enum VSCodeWindowJumper {
     static func focusWindow(
         forProcessTree pid: Int32,
         applicationPID: Int32,
-        environmentOf readEnvironment: EnvironmentReader = {
-            ProcessEnvironment.environment(ofPID: $0)
+        workingDirectoryOf readWorkingDirectory: DirectoryReader = {
+            ProcessWorkingDirectory.path(ofPID: $0)
         },
         parentOf resolveParent: ParentResolver = { TerminalJumper.parentPIDOf($0) },
         isAutomationPermitted permitted: () -> Bool = { isAutomationPermitted() },
@@ -78,15 +74,11 @@ enum VSCodeWindowJumper {
         guard
             let directory = workingDirectory(
                 forProcessTree: pid,
-                environmentOf: readEnvironment,
+                workingDirectoryOf: readWorkingDirectory,
                 parentOf: resolveParent
             )
         else {
-            Log.terminal.info("vscode: no \(workingDirectoryEnvironmentKey) above PID \(pid)")
-            return false
-        }
-        guard !workspaceCandidates(forWorkingDirectory: directory).isEmpty else {
-            Log.terminal.info("vscode: no workspace name in \(directory)")
+            Log.terminal.info("vscode: no workspace directory above PID \(pid)")
             return false
         }
         guard permitted() else {
@@ -116,20 +108,23 @@ enum VSCodeWindowJumper {
         return true
     }
 
-    /// Walks up from `pid` until a process carries a working directory.
+    /// Walks up from `pid` until a process is in a directory that could name a workspace.
     ///
-    /// The session's own process almost always has one, since the shell VS Code started exports it
-    /// and every child inherits it. The walk covers the anchors that sit further from the shell.
+    /// The session's own process is almost always the answer: an agent runs where its project is,
+    /// whether a terminal or an extension started it. The walk covers the anchors that sit further
+    /// from the project, and it steps over the processes VS Code itself runs from the file system
+    /// root, which name nothing.
     static func workingDirectory(
         forProcessTree pid: Int32,
-        environmentOf readEnvironment: EnvironmentReader,
+        workingDirectoryOf readWorkingDirectory: DirectoryReader,
         parentOf resolveParent: ParentResolver,
         maximumDepth: Int = 15
     ) -> String? {
         var currentPID = pid
         for _ in 0..<maximumDepth {
-            if let directory = readEnvironment(currentPID)?[workingDirectoryEnvironmentKey],
-                directory.hasPrefix("/")
+            if let directory = readWorkingDirectory(currentPID),
+                directory.hasPrefix("/"),
+                !workspaceCandidates(forWorkingDirectory: directory).isEmpty
             {
                 return directory
             }

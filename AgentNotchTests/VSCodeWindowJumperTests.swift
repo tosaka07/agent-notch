@@ -160,9 +160,9 @@ struct VSCodeWindowJumperTests {
     func readsWorkingDirectoryFromSessionProcess() {
         let resolved = VSCodeWindowJumper.workingDirectory(
             forProcessTree: 500,
-            environmentOf: { $0 == 500 ? ["PWD": "/Users/me/agent-notch"] : nil },
+            workingDirectoryOf: { $0 == 500 ? "/Users/me/agent-notch" : nil },
             parentOf: { _ in
-                Issue.record("walked past a process that had the variable")
+                Issue.record("walked past a process that was in a project")
                 return 1
             }
         )
@@ -170,32 +170,42 @@ struct VSCodeWindowJumperTests {
         #expect(resolved == "/Users/me/agent-notch")
     }
 
-    /// A hook's anchor can be a process started before the shell exported its own directory.
-    @Test("the working directory is found on an ancestor when the anchor does not carry it")
+    @Test("the working directory is found on an ancestor when the anchor has none")
     @MainActor
     func readsWorkingDirectoryFromAncestor() {
-        let environments: [Int32: [String: String]] = [
-            500: ["TERM": "xterm-256color"],
-            400: ["PWD": "/Users/me/agent-notch"],
-        ]
+        let directories: [Int32: String] = [400: "/Users/me/agent-notch"]
 
         let resolved = VSCodeWindowJumper.workingDirectory(
             forProcessTree: 500,
-            environmentOf: { environments[$0] },
+            workingDirectoryOf: { directories[$0] },
             parentOf: { $0 == 500 ? 400 : 1 }
         )
 
         #expect(resolved == "/Users/me/agent-notch")
     }
 
-    /// `PWD` is an ordinary variable a user can set to anything. Only an absolute path names a
-    /// directory the editor could have titled a window after.
+    /// VS Code runs its own processes from the file system root, and an extension host hands that
+    /// down to anything it starts. The session's project is above it, not below.
+    @Test("a process at the file system root is stepped over rather than matched")
+    @MainActor
+    func stepsOverTheFileSystemRoot() {
+        let directories: [Int32: String] = [500: "/", 400: "/Users/me/agent-notch"]
+
+        let resolved = VSCodeWindowJumper.workingDirectory(
+            forProcessTree: 500,
+            workingDirectoryOf: { directories[$0] },
+            parentOf: { $0 == 500 ? 400 : 1 }
+        )
+
+        #expect(resolved == "/Users/me/agent-notch")
+    }
+
     @Test("a working directory that is not an absolute path is ignored")
     @MainActor
     func ignoresRelativeWorkingDirectory() {
         let resolved = VSCodeWindowJumper.workingDirectory(
             forProcessTree: 500,
-            environmentOf: { $0 == 500 ? ["PWD": "agent-notch"] : nil },
+            workingDirectoryOf: { $0 == 500 ? "agent-notch" : nil },
             parentOf: { _ in 1 }
         )
 
@@ -207,7 +217,7 @@ struct VSCodeWindowJumperTests {
     func stopsWalkingAtTheTop() {
         let resolved = VSCodeWindowJumper.workingDirectory(
             forProcessTree: 500,
-            environmentOf: { _ in [:] },
+            workingDirectoryOf: { _ in nil },
             parentOf: { $0 - 1 }
         )
 
@@ -222,7 +232,7 @@ struct VSCodeWindowJumperTests {
         let focused = VSCodeWindowJumper.focusWindow(
             forProcessTree: 500,
             applicationPID: editorPID,
-            environmentOf: { $0 == 500 ? ["PWD": "/Users/me/projects/agent-notch"] : nil },
+            workingDirectoryOf: { $0 == 500 ? "/Users/me/projects/agent-notch" : nil },
             parentOf: { _ in 1 },
             isAutomationPermitted: { true },
             runScript: { script in
@@ -245,7 +255,7 @@ struct VSCodeWindowJumperTests {
         let focused = VSCodeWindowJumper.focusWindow(
             forProcessTree: 500,
             applicationPID: editorPID,
-            environmentOf: { $0 == 500 ? ["PWD": "/Users/me/agent-notch"] : nil },
+            workingDirectoryOf: { $0 == 500 ? "/Users/me/agent-notch" : nil },
             parentOf: { _ in 1 },
             isAutomationPermitted: { true },
             runScript: { script in
@@ -267,7 +277,7 @@ struct VSCodeWindowJumperTests {
         let focused = VSCodeWindowJumper.focusWindow(
             forProcessTree: 500,
             applicationPID: editorPID,
-            environmentOf: { $0 == 500 ? ["PWD": "/Users/me/agent-notch"] : nil },
+            workingDirectoryOf: { $0 == 500 ? "/Users/me/agent-notch" : nil },
             parentOf: { _ in 1 },
             isAutomationPermitted: { true },
             runScript: { script in script.contains("AXRaise") ? nil : "agent-notch\n" }
@@ -282,7 +292,7 @@ struct VSCodeWindowJumperTests {
         let focused = VSCodeWindowJumper.focusWindow(
             forProcessTree: 500,
             applicationPID: editorPID,
-            environmentOf: { $0 == 500 ? ["PWD": "/Users/me/agent-notch"] : nil },
+            workingDirectoryOf: { $0 == 500 ? "/Users/me/agent-notch" : nil },
             parentOf: { _ in 1 },
             isAutomationPermitted: { false },
             runScript: { _ in
@@ -294,13 +304,13 @@ struct VSCodeWindowJumperTests {
         #expect(focused == false)
     }
 
-    @Test("a process tree with no working directory runs no script at all")
+    @Test("a process tree with no workspace directory runs no script at all")
     @MainActor
     func runsNoScriptWithoutAWorkingDirectory() {
         let focused = VSCodeWindowJumper.focusWindow(
             forProcessTree: 500,
             applicationPID: editorPID,
-            environmentOf: { _ in nil },
+            workingDirectoryOf: { _ in nil },
             parentOf: { _ in 1 },
             isAutomationPermitted: { true },
             runScript: { _ in
