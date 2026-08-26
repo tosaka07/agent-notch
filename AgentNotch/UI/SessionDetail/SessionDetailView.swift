@@ -213,7 +213,7 @@ struct SessionDetailView: View {
                         responseMode: question.responseMode,
                         keyboardInteraction: keyboardInteraction,
                         onAnswer: { answers in
-                            resolveInNotch(interruption, fallback: .back) {
+                            resolveInNotch(interruption, fallback: .close) {
                                 permissionActions.answerQuestion(
                                     session.id, question.toolUseId, answers)
                             }
@@ -227,7 +227,7 @@ struct SessionDetailView: View {
                             }
                             : nil,
                         onDismiss: {
-                            resolveInNotch(interruption, fallback: .back) {
+                            resolveInNotch(interruption, fallback: .close) {
                                 permissionActions.dismissExpired(
                                     session.id, question.toolUseId)
                             }
