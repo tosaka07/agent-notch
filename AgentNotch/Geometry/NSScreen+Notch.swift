@@ -1,0 +1,81 @@
+import AppKit
+
+extension NSScreen {
+    /// Stable display identifier for comparing screens across notification cycles.
+    var displayID: CGDirectDisplayID {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? 0
+    }
+
+    /// Whether this screen is the built-in display (e.g., MacBook's internal screen).
+    @MainActor
+    var isBuiltinDisplay: Bool {
+        CGDisplayIsBuiltin(displayID) != 0
+    }
+
+    /// Whether this screen has a physical notch (safe area insets at top > 0).
+    @MainActor
+    var hasPhysicalNotch: Bool {
+        if #available(macOS 14.0, *) {
+            return safeAreaInsets.top > 0
+        }
+        return false
+    }
+
+    /// The size of the notch area. Uses auxiliary top-left/right areas when available,
+    /// otherwise falls back to a default size matching the MacBook Pro notch.
+    @MainActor
+    var notchSize: CGSize {
+        guard hasPhysicalNotch else {
+            return CGSize(width: 224, height: 38)
+        }
+
+        if #available(macOS 14.0, *) {
+            let topInset = safeAreaInsets.top
+            let leftWidth = auxiliaryTopLeftArea?.width ?? 0
+            let rightWidth = auxiliaryTopRightArea?.width ?? 0
+
+            guard leftWidth > 0, rightWidth > 0 else {
+                return CGSize(width: 180, height: topInset)
+            }
+
+            // +4 compensates for the physical notch's rounded corners that extend
+            // beyond the auxiliary area boundary
+            let notchWidth = frame.width - leftWidth - rightWidth + 4
+            let notchHeight = topInset
+
+            if notchWidth > 0 && notchHeight > 0 {
+                return CGSize(width: notchWidth, height: notchHeight)
+            }
+        }
+
+        return CGSize(width: 224, height: 38)
+    }
+
+    /// The display designated as Main Display in macOS System Settings.
+    ///
+    /// `NSScreen.main` means the screen containing the key window, so it is not
+    /// suitable for resolving the user's persistent Main Display choice.
+    @MainActor
+    static var systemMain: NSScreen? {
+        let mainDisplayID = CGMainDisplayID()
+        return NSScreen.screens.first(where: { $0.displayID == mainDisplayID })
+            ?? NSScreen.screens.first
+    }
+
+    /// The first built-in screen, if one is currently available.
+    @MainActor
+    static var builtin: NSScreen? {
+        NSScreen.screens.first(where: { $0.isBuiltinDisplay })
+    }
+
+    /// Persistent UUID string for this display (survives reconnection).
+    var displayUUID: String? {
+        let uuid = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue()
+        return uuid.map { CFUUIDCreateString(nil, $0) as String }
+    }
+
+    /// Human-readable name for this display.
+    var displayName: String {
+        localizedName
+    }
+}

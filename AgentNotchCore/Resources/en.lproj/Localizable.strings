@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>%lld lines</key>
+	<string>%lld lines</string>
+	<key>%lldd ago</key>
+	<string>%lldd ago</string>
+	<key>%lldh ago</key>
+	<string>%lldh ago</string>
+	<key>%lldm ago</key>
+	<string>%lldm ago</string>
+	<key>%lldmo ago</key>
+	<string>%lldmo ago</string>
+	<key>%llds ago</key>
+	<string>%llds ago</string>
+	<key>%lldy ago</key>
+	<string>%lldy ago</string>
+	<key>1 line</key>
+	<string>1 line</string>
+	<key>By last update</key>
+	<string>By last update</string>
+	<key>By project</key>
+	<string>By project</string>
+	<key>By start time</key>
+	<string>By start time</string>
+	<key>By urgency</key>
+	<string>By urgency</string>
+	<key>Group by agent</key>
+	<string>Group by agent</string>
+	<key>Group by project</key>
+	<string>Group by project</string>
+	<key>Group by status</key>
+	<string>Group by status</string>
+	<key>Group by team</key>
+	<string>Group by team</string>
+	<key>No grouping</key>
+	<string>No grouping</string>
+	<key>[Image ×%lld]</key>
+	<string>[Image ×%lld]</string>
+	<key>[Image]</key>
+	<string>[Image]</string>
+	<key>error</key>
+	<string>error</string>
+</dict>
+</plist>

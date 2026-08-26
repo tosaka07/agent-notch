@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Format staged Swift files before the commit is created.
+#
+# Enable with `task hooks` (sets core.hooksPath=.githooks).
+#
+# # Why format instead of only linting
+# A hook that merely rejects the commit makes you run the formatter and stage
+# again for something the machine can fix. This rewrites the staged files and
+# re-stages them, so the commit contains formatted code either way.
+#
+# # Why only staged files
+# Formatting the whole tree from a hook would sweep unrelated work-in-progress
+# into the commit. Only what is being committed is touched.
+set -euo pipefail
+
+# Only fully-added files: a partially staged file (git add -p) would have its
+# unstaged half clobbered by re-adding the whole formatted file.
+mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACMR -- '*.swift')
+[ ${#staged[@]} -eq 0 ] && exit 0
+
+existing=()
+for file in "${staged[@]}"; do
+  [ -f "$file" ] && existing+=("$file")
+done
+[ ${#existing[@]} -eq 0 ] && exit 0
+
+partially_staged=()
+mapfile -t unstaged < <(git diff --name-only -- '*.swift')
+for file in "${existing[@]}"; do
+  for dirty in ${unstaged[@]+"${unstaged[@]}"}; do
+    [ "$file" = "$dirty" ] && partially_staged+=("$file")
+  done
+done
+
+if [ ${#partially_staged[@]} -gt 0 ]; then
+  echo "pre-commit: skipping files with unstaged changes (format them yourself):" >&2
+  printf '  %s\n' "${partially_staged[@]}" >&2
+fi
+
+format_targets=()
+for file in "${existing[@]}"; do
+  skip=""
+  for dirty in ${partially_staged[@]+"${partially_staged[@]}"}; do
+    [ "$file" = "$dirty" ] && skip=1
+  done
+  [ -z "$skip" ] && format_targets+=("$file")
+done
+[ ${#format_targets[@]} -eq 0 ] && exit 0
+
+swift format --in-place "${format_targets[@]}"
+git add -- "${format_targets[@]}"
+
+# Findings the formatter cannot fix (naming, semicolons, ...) still block the
+# commit — they need a human decision, and silently committing them would let
+# them pile up until CI is permanently red.
+swift format lint --strict "${format_targets[@]}"

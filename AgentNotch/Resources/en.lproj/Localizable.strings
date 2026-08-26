@@ -1,0 +1,722 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>%@ (current session)</key>
+	<string>%@ (current session)</string>
+	<key>%@ over the last %lld days</key>
+	<string>%@ over the last %lld days</string>
+	<key>%@ usage</key>
+	<string>%@ usage</string>
+	<key>%@ — %@</key>
+	<string>%@ — %@</string>
+	<key>%@ — %@ %@</key>
+	<string>%@ — %@ %@</string>
+	<key>%@, %lld items</key>
+	<string>%@, %lld items</string>
+	<key>%lld percent</key>
+	<string>%lld percent</string>
+	<key>%lld percent remaining</key>
+	<string>%lld percent remaining</string>
+	<key>%lld seconds remaining</key>
+	<string>%lld seconds remaining</string>
+	<key>%lldd %lldh left</key>
+	<string>%lldd %lldh left</string>
+	<key>%lldh %lldm left</key>
+	<string>%lldh %lldm left</string>
+	<key>%lldm left</key>
+	<string>%lldm left</string>
+	<key>1 day</key>
+	<string>1 day</string>
+	<key>1 hour</key>
+	<string>1 hour</string>
+	<key>3 days</key>
+	<string>3 days</string>
+	<key>6 hours</key>
+	<string>6 hours</string>
+	<key>Aa Sample Preview 123</key>
+	<string>Aa Sample Preview 123</string>
+	<key>About Agent Notch</key>
+	<string>About Agent Notch</string>
+	<key>Aggregating</key>
+	<string>Aggregating</string>
+	<key>Aggregating…</key>
+	<string>Aggregating…</string>
+	<key>A session title will take priority when it becomes available.</key>
+	<string>A session title will take priority when it becomes available.</string>
+	<key>All displays</key>
+	<string>All displays</string>
+	<key>Allow once or deny here. To change future permissions, answer in the terminal.</key>
+	<string>Allow once or deny here. To change future permissions, answer in the terminal.</string>
+	<key>Allows %@ to run</key>
+	<string>Allows %@ to run</string>
+	<key>Answer this request in the terminal</key>
+	<string>Answer this request in the terminal</string>
+	<key>Appearance</key>
+	<string>Appearance</string>
+	<key>Approve and deny work even while the app is inactive.
+The notch panel cannot receive keyboard input until it is clicked, so a banner's ⏎ / esc only work after clicking the panel.</key>
+	<string>Approve and deny work even while the app is inactive.
+The notch panel cannot receive keyboard input until it is clicked, so a banner's ⏎ / esc only work after clicking the panel.</string>
+	<key>Approve permission</key>
+	<string>Approve permission</string>
+	<key>Authorization was rejected</key>
+	<string>Authorization was rejected</string>
+	<key>Auto (most constrained limit)</key>
+	<string>Auto (most constrained limit)</string>
+	<key>Auto-remove</key>
+	<string>Auto-remove</string>
+	<key>Awaiting an answer</key>
+	<string>Awaiting an answer</string>
+	<key>Awaiting approval</key>
+	<string>Awaiting approval</string>
+	<key>Awaiting plan approval</key>
+	<string>Awaiting plan approval</string>
+	<key>Back</key>
+	<string>Back</string>
+	<key>Back to list</key>
+	<string>Back to list</string>
+	<key>Built-in display</key>
+	<string>Built-in display</string>
+	<key>Clear All Sessions</key>
+	<string>Clear All Sessions</string>
+	<key>Cancel</key>
+	<string>Cancel</string>
+	<key>Card title</key>
+	<string>Card title</string>
+	<key>Collapsed</key>
+	<string>Collapsed</string>
+	<key>Completed: %@. Open session detail</key>
+	<string>Completed: %@. Open session detail</string>
+	<key>Couldn't fetch usage</key>
+	<string>Couldn't fetch usage</string>
+	<key>Couldn't reach the agent on this Mac</key>
+	<string>Couldn't reach the agent on this Mac</string>
+	<key>Couldn't reach the server</key>
+	<string>Couldn't reach the server</string>
+	<key>Current 5-hour window</key>
+	<string>Current 5-hour window</string>
+	<key>Current session</key>
+	<string>Current session</string>
+	<key>Custom sound file…</key>
+	<string>Custom sound file…</string>
+	<key>Daily cost for %@</key>
+	<string>Daily cost for %@</string>
+	<key>Denies this tool call</key>
+	<string>Denies this tool call</string>
+	<key>Deny permission</key>
+	<string>Deny permission</string>
+	<key>Directory deleted</key>
+	<string>Directory deleted</string>
+	<key>Dismisses this expired request</key>
+	<string>Dismisses this expired request</string>
+	<key>Display</key>
+	<string>Display</string>
+	<key>Display with pointer</key>
+	<string>Display with pointer</string>
+	<key>Done</key>
+	<string>Done</string>
+	<key>Enable sound</key>
+	<string>Enable sound</string>
+	<key>Error</key>
+	<string>Error</string>
+	<key>Error — the response was interrupted</key>
+	<string>Error — the response was interrupted</string>
+	<key>Excluded, no pricing: %@</key>
+	<string>Excluded, no pricing: %@</string>
+	<key>Expanded</key>
+	<string>Expanded</string>
+	<key>First prompt</key>
+	<string>First prompt</string>
+	<key>Focus Agent Notch</key>
+	<string>Focus Agent Notch</string>
+	<key>Gauge style</key>
+	<string>Gauge style</string>
+	<key>General</key>
+	<string>General</string>
+	<key>Hide preview</key>
+	<string>Hide preview</string>
+	<key>Hold Control to expand tool contents</key>
+	<string>Hold Control to expand tool contents</string>
+	<key>Jump to Terminal</key>
+	<string>Jump to Terminal</string>
+	<key>Jump to notification</key>
+	<string>Jump to notification</string>
+	<key>Jump to terminal</key>
+	<string>Jump to terminal</string>
+	<key>Language</key>
+	<string>Language</string>
+	<key>Language changes take effect after restarting Agent Notch.</key>
+	<string>Language changes take effect after restarting Agent Notch.</string>
+	<key>Later</key>
+	<string>Later</string>
+	<key>Large</key>
+	<string>Large</string>
+	<key>Last %lld days · estimated at API rates</key>
+	<string>Last %lld days · estimated at API rates</string>
+	<key>Latest prompt</key>
+	<string>Latest prompt</string>
+	<key>Loading</key>
+	<string>Loading</string>
+	<key>Loading…</key>
+	<string>Loading…</string>
+	<key>MULTI</key>
+	<string>MULTI</string>
+	<key>Main display</key>
+	<string>Main display</string>
+	<key>Mark Done</key>
+	<string>Mark Done</string>
+	<key>Medium</key>
+	<string>Medium</string>
+	<key>Message from %@</key>
+	<string>Message from %@</string>
+	<key>Message from you</key>
+	<string>Message from you</string>
+	<key>Move</key>
+	<string>Move</string>
+	<key>Mute</key>
+	<string>Mute</string>
+	<key>No active sessions</key>
+	<string>No active sessions</string>
+	<key>No limit</key>
+	<string>No limit</string>
+	<key>No logs found to compute cost from</key>
+	<string>No logs found to compute cost from</string>
+	<key>No preview for this option</key>
+	<string>No preview for this option</string>
+	<key>No rate limits on the pay-as-you-go plan</key>
+	<string>No rate limits on the pay-as-you-go plan</string>
+	<key>No tool executions yet</key>
+	<string>No tool executions yet</string>
+	<key>No usage limit on this plan</key>
+	<string>No usage limit on this plan</string>
+	<key>None</key>
+	<string>None</string>
+	<key>Not signed in</key>
+	<string>Not signed in</string>
+	<key>Not signed in on this Mac</key>
+	<string>Not signed in on this Mac</string>
+	<key>Notifications</key>
+	<string>Notifications</string>
+	<key>Number</key>
+	<string>Number</string>
+	<key>Off</key>
+	<string>Off</string>
+	<key>Offline</key>
+	<string>Offline</string>
+	<key>On tap</key>
+	<string>On tap</string>
+	<key>Only one gauge is shown per agent.
+Agents that lack the chosen window — Codex has no per-model window, for instance — fall back to automatic.
+The full breakdown is on the usage page.</key>
+	<string>Only one gauge is shown per agent.
+Agents that lack the chosen window — Codex has no per-model window, for instance — fall back to automatic.
+The full breakdown is on the usage page.</string>
+	<key>Open session detail</key>
+	<string>Open session detail</string>
+	<key>Open usage details</key>
+	<string>Open usage details</string>
+	<key>Other, free text</key>
+	<string>Other, free text</string>
+	<key>Other…</key>
+	<string>Other…</string>
+	<key>P Preview</key>
+	<string>P Preview</string>
+	<key>Permission request expired: %@</key>
+	<string>Permission request expired: %@</string>
+	<key>Permission request: %@</key>
+	<string>Permission request: %@</string>
+	<key>Pin</key>
+	<string>Pin</string>
+	<key>Preview</key>
+	<string>Preview</string>
+	<key>Preview:</key>
+	<string>Preview:</string>
+	<key>Previous question</key>
+	<string>Previous question</string>
+	<key>Process ended</key>
+	<string>Process ended</string>
+	<key>Last seen</key>
+	<string>Last seen</string>
+	<key>Prompt display</key>
+	<string>Prompt display</string>
+	<key>Title fallback</key>
+	<string>Title fallback</string>
+	<key>Used when the agent does not provide a session title.</key>
+	<string>Used when the agent does not provide a session title.</string>
+	<key>Question</key>
+	<string>Question</string>
+	<key>Question %lld of %lld</key>
+	<string>Question %lld of %lld</string>
+	<key>Quit</key>
+	<string>Quit</string>
+	<key>Quit Agent Notch</key>
+	<string>Quit Agent Notch</string>
+	<key>Quit Agent Notch and open it again to use the selected language.</key>
+	<string>Quit Agent Notch and open it again to use the selected language.</string>
+	<key>Rate limited</key>
+	<string>Rate limited</string>
+	<key>Rate limited. Retrying automatically.</key>
+	<string>Rate limited. Retrying automatically.</string>
+	<key>Reload usage</key>
+	<string>Reload usage</string>
+	<key>Reload usage (⌘R)</key>
+	<string>Reload usage (⌘R)</string>
+	<key>Remove from List</key>
+	<string>Remove from List</string>
+	<key>Removed %@ automatically (%@)</key>
+	<string>Removed %@ automatically (%@)</string>
+	<key>Removes idle sessions once the chosen time has passed since their last activity.
+Sessions whose directory has been deleted are removed immediately.</key>
+	<string>Removes idle sessions once the chosen time has passed since their last activity.
+Sessions whose directory has been deleted are removed immediately.</string>
+	<key>Reopen</key>
+	<string>Reopen</string>
+	<key>Reset</key>
+	<string>Reset</string>
+	<key>Reset to defaults</key>
+	<string>Reset to defaults</string>
+	<key>Resets %@</key>
+	<string>Resets %@</string>
+	<key>Restart Agent Notch?</key>
+	<string>Restart Agent Notch?</string>
+	<key>Restart Agent Notch to use the selected language.</key>
+	<string>Restart Agent Notch to use the selected language.</string>
+	<key>Restart Now</key>
+	<string>Restart Now</string>
+	<key>Ring</key>
+	<string>Ring</string>
+	<key>Running %lld subagents — %@</key>
+	<string>Running %lld subagents — %@</string>
+	<key>Running %lld subagents</key>
+	<string>Running %lld subagents</string>
+	<key>Running: %@, %@</key>
+	<string>Running: %@, %@</string>
+	<key>Scroll to the latest message</key>
+	<string>Scroll to the latest message</string>
+	<key>Select</key>
+	<string>Select</string>
+	<key>Session (5-hour limit)</key>
+	<string>Session (5-hour limit)</string>
+	<key>Sessions</key>
+	<string>Sessions</string>
+	<key>Shortcuts</key>
+	<string>Shortcuts</string>
+	<key>Show preview</key>
+	<string>Show preview</string>
+	<key>Show usage</key>
+	<string>Show usage</string>
+	<key>Show usage details</key>
+	<string>Show usage details</string>
+	<key>Shows how much of Claude's and Codex's rate limits you have consumed, on the left of the session list's top bar.
+Clicking a gauge opens the full breakdown.
+When off, neither your credentials nor the API are touched.</key>
+	<string>Shows how much of Claude's and Codex's rate limits you have consumed, on the left of the session list's top bar.
+Clicking a gauge opens the full breakdown.
+When off, neither your credentials nor the API are touched.</string>
+	<key>Small</key>
+	<string>Small</string>
+	<key>Sound</key>
+	<string>Sound</string>
+	<key>Space Select</key>
+	<string>Space Select</string>
+	<key>Specific display</key>
+	<string>Specific display</string>
+	<key>Subagent completed</key>
+	<string>Subagent completed</string>
+	<key>System Settings</key>
+	<string>System Settings</string>
+	<key>Target display</key>
+	<string>Target display</string>
+	<key>Task completed</key>
+	<string>Task completed</string>
+	<key>Terminal</key>
+	<string>Terminal</string>
+	<key>Text size</key>
+	<string>Text size</string>
+	<key>The access token expired. Launching Claude Code refreshes it.</key>
+	<string>The access token expired. Launching Claude Code refreshes it.</string>
+	<key>This agent can't be answered from the notch. Respond directly in the terminal.</key>
+	<string>This agent can't be answered from the notch. Respond directly in the terminal.</string>
+	<key>This answer can no longer be delivered here. Respond in the original agent window.</key>
+	<string>This answer can no longer be delivered here. Respond in the original agent window.</string>
+	<key>This decision can no longer be delivered. Respond directly in the terminal.</key>
+	<string>This decision can no longer be delivered. Respond directly in the terminal.</string>
+	<key>Timed out</key>
+	<string>Timed out</string>
+	<key>Unauthorized</key>
+	<string>Unauthorized</string>
+	<key>Token expired</key>
+	<string>Token expired</string>
+	<key>Turned off in settings</key>
+	<string>Turned off in settings</string>
+	<key>Unavailable</key>
+	<string>Unavailable</string>
+	<key>Unmute</key>
+	<string>Unmute</string>
+	<key>Unpin</key>
+	<string>Unpin</string>
+	<key>Unreachable</key>
+	<string>Unreachable</string>
+	<key>Usage</key>
+	<string>Usage</string>
+	<key>Usage allowance</key>
+	<string>Usage allowance</string>
+	<key>Used %@ / %@</key>
+	<string>Used %1$@ / %2$@</string>
+	<key>Waiting for permission</key>
+	<string>Waiting for permission</string>
+	<key>Weekly (all models)</key>
+	<string>Weekly (all models)</string>
+	<key>Weekly (highest per model)</key>
+	<string>Weekly (highest per model)</string>
+	<key>Window shown in the gauge</key>
+	<string>Window shown in the gauge</string>
+	<key>A breathing ring means the session is not actively working.</key>
+	<string>A breathing ring means the session is not actively working.</string>
+	<key>A check mark appears when the agent has finished and is waiting for your next prompt.</key>
+	<string>A check mark appears when the agent has finished and is waiting for your next prompt.</string>
+	<key>A cross flickers to show that the session stopped because of an error.</key>
+	<string>A cross flickers to show that the session stopped because of an error.</string>
+	<key>A pulsing core means a tool call is in progress.</key>
+	<string>A pulsing core means a tool call is in progress.</string>
+	<key>A travelling wave means the agent is reasoning or preparing context.</key>
+	<string>A travelling wave means the agent is reasoning or preparing context.</string>
+	<key>An error interrupted the work</key>
+	<string>An error interrupted the work</string>
+	<key>An exclamation mark blinks until you approve or deny the request.</key>
+	<string>An exclamation mark blinks until you approve or deny the request.</string>
+	<key>A question mark blinks until you answer the agent.</key>
+	<string>A question mark blinks until you answer the agent.</string>
+	<key>Approval</key>
+	<string>Approval</string>
+	<key>Complete</key>
+	<string>Complete</string>
+	<key>Each filled square represents an active subagent, up to nine.</key>
+	<string>Each filled square represents an active subagent, up to nine.</string>
+	<key>Fault</key>
+	<string>Fault</string>
+	<key>Glyphs</key>
+	<string>Glyphs</string>
+	<key>One or more subagents running</key>
+	<string>One or more subagents running</string>
+	<key>Plan review</key>
+	<string>Plan review</string>
+	<key>Running a tool</key>
+	<string>Running a tool</string>
+	<key>Session glyphs</key>
+	<string>Session glyphs</string>
+	<key>Standby</key>
+	<string>Standby</string>
+	<key>Starting, idle, or session ended</key>
+	<string>Starting, idle, or session ended</string>
+	<key>Subagents</key>
+	<string>Subagents</string>
+	<key>These animated dot patterns show what the current session is doing. Shape is the primary signal; color provides a secondary cue.</key>
+	<string>These animated dot patterns show what the current session is doing. Shape is the primary signal; color provides a secondary cue.</string>
+	<key>Thinking</key>
+	<string>Thinking</string>
+	<key>Thinking or compacting context</key>
+	<string>Thinking or compacting context</string>
+	<key>Three lines identify the special approval shown when leaving plan mode.</key>
+	<string>Three lines identify the special approval shown when leaving plan mode.</string>
+	<key>Turn finished</key>
+	<string>Turn finished</string>
+	<key>Waiting for an answer</key>
+	<string>Waiting for an answer</string>
+	<key>Waiting for permission approval</key>
+	<string>Waiting for permission approval</string>
+	<key>Waiting for plan approval</key>
+	<string>Waiting for plan approval</string>
+	<key>When subagents are active, their grid replaces the standby, thinking, and working glyphs. Approval requests, questions, errors, and completion stay visible because they need your attention.</key>
+	<string>When subagents are active, their grid replaces the standby, thinking, and working glyphs. Approval requests, questions, errors, and completion stay visible because they need your attention.</string>
+	<key>Which glyph takes priority?</key>
+	<string>Which glyph takes priority?</string>
+	<key>Working</key>
+	<string>Working</string>
+	<key>running</key>
+	<string>running</string>
+	<key>the agent</key>
+	<string>the agent</string>
+	<key>←→ Question</key>
+	<string>←→ Question</string>
+	<key>↑↓ Move</key>
+	<string>↑↓ Move</string>
+	<key>+%lld more</key>
+	<string>+%lld more</string>
+	<key>%@ TOK</key>
+	<string>%@ TOK</string>
+	<key>%@ weekly</key>
+	<string>%@ weekly</string>
+	<key>%@s</key>
+	<string>%@s</string>
+	<key>%lldm%llds</key>
+	<string>%lldm%llds</string>
+	<key>%lldms</key>
+	<string>%lldms</string>
+	<key>%llds</key>
+	<string>%llds</string>
+	<key>5-hour window</key>
+	<string>5-hour window</string>
+	<key>Approve</key>
+	<string>Approve</string>
+	<key>Daily cost</key>
+	<string>Daily cost</string>
+	<key>Deny</key>
+	<string>Deny</string>
+	<key>Dismiss</key>
+	<string>Dismiss</string>
+	<key>Extra</key>
+	<string>Extra</string>
+	<key>Fetching…</key>
+	<string>Fetching…</string>
+	<key>Group by</key>
+	<string>Group by</string>
+	<key>Lead</key>
+	<string>Lead</string>
+	<key>Next</key>
+	<string>Next</string>
+	<key>Permission required</key>
+	<string>Permission required</string>
+	<key>Plan</key>
+	<string>Plan</string>
+	<key>Response window expired</key>
+	<string>Response window expired</string>
+	<key>Send</key>
+	<string>Send</string>
+	<key>Session</key>
+	<string>Session</string>
+	<key>Session title</key>
+	<string>Session title</string>
+	<key>Sort by</key>
+	<string>Sort by</string>
+	<key>Team</key>
+	<string>Team</string>
+	<key>Tools</key>
+	<string>Tools</string>
+	<key>Updated %@</key>
+	<string>Updated %@</string>
+	<key>Weekly</key>
+	<string>Weekly</string>
+	<key>command</key>
+	<string>command</string>
+	<key>file</key>
+	<string>file</string>
+	<key>new</key>
+	<string>new</string>
+	<key>old</key>
+	<string>old</string>
+	<key>pattern</key>
+	<string>pattern</string>
+	<key>Adds Agent Notch commands to the Claude Code and Codex hook settings.</key>
+	<string>Adds Agent Notch commands to the Claude Code and Codex hook settings.</string>
+	<key>Agent Notch receives session updates through agent hooks.</key>
+	<string>Agent Notch receives session updates through agent hooks.</string>
+	<key>Approve or deny agent actions directly from the notch.</key>
+	<string>Approve or deny agent actions directly from the notch.</string>
+	<key>Connect Claude Code and Codex</key>
+	<string>Connect Claude Code and Codex</string>
+	<key>Codex may ask you to trust the hook the first time it runs.</key>
+	<string>Codex may ask you to trust the hook the first time it runs.</string>
+	<key>Continue</key>
+	<string>Continue</string>
+	<key>Hook installation failed: %@</key>
+	<string>Hook installation failed: %@</string>
+	<key>Hooks installed</key>
+	<string>Hooks installed</string>
+	<key>Install Hooks</key>
+	<string>Install Hooks</string>
+	<key>Keep your coding agents in sight without leaving your work.</key>
+	<string>Keep your coding agents in sight without leaving your work.</string>
+	<key>Keeps your existing settings and unrelated hooks unchanged.</key>
+	<string>Keeps your existing settings and unrelated hooks unchanged.</string>
+	<key>Live session state</key>
+	<string>Live session state</string>
+	<key>Permission requests</key>
+	<string>Permission requests</string>
+	<key>See thinking, tool use, subagents, and completion at a glance.</key>
+	<string>See thinking, tool use, subagents, and completion at a glance.</string>
+	<key>The hook helper could not be found. Reinstall Agent Notch and try again.</key>
+	<string>The hook helper could not be found. Reinstall Agent Notch and try again.</string>
+	<key>Track Claude and Codex rate limits from one place.</key>
+	<string>Track Claude and Codex rate limits from one place.</string>
+	<key>Usage at a glance</key>
+	<string>Usage at a glance</string>
+	<key>Welcome to Agent Notch</key>
+	<string>Welcome to Agent Notch</string>
+	<key>You can check or reinstall the hooks later from Settings.</key>
+	<string>You can check or reinstall the hooks later from Settings.</string>
+	<key>Step %lld of %lld</key>
+	<string>Step %lld of %lld</string>
+	<key>Preview of the notch display</key>
+	<string>Preview of the notch display</string>
+	<key>Example of a permission request</key>
+	<string>Example of a permission request</string>
+	<key>What it does</key>
+	<string>What it does</string>
+	<key>What it does not do</key>
+	<string>What it does not do</string>
+	<key>Agent Notch needs agent hooks</key>
+	<string>Agent Notch needs agent hooks</string>
+	<key>Without hooks, Agent Notch receives neither session state nor permission requests. They are installed only after you allow it below.</key>
+	<string>Without hooks, Agent Notch receives neither session state nor permission requests. They are installed only after you allow it below.</string>
+	<key>Installing hooks</key>
+	<string>Installing hooks</string>
+	<key>Writing…</key>
+	<string>Writing…</string>
+	<key>Added</key>
+	<string>Added</string>
+	<key>Checking the installed hooks</key>
+	<string>Checking the installed hooks</string>
+	<key>Checking…</key>
+	<string>Checking…</string>
+	<key>The hooks were written but could not be verified. Try installing again.</key>
+	<string>The hooks were written but could not be verified. Try installing again.</string>
+	<key>Connected</key>
+	<string>Connected</string>
+	<key>The next time you start claude or codex, the notch shows its state.</key>
+	<string>The next time you start claude or codex, the notch shows its state.</string>
+	<key>Get Started</key>
+	<string>Get Started</string>
+	<key>opens the notch anytime</key>
+	<string>opens the notch anytime</string>
+	<key>Stopped because hooks are not installed</key>
+	<string>Stopped because hooks are not installed</string>
+	<key>Agent Notch is receiving nothing from your agents. Installing the hooks resumes it from here.</key>
+	<string>Agent Notch is receiving nothing from your agents. Installing the hooks resumes it from here.</string>
+	<key>Allow and Install Hooks</key>
+	<string>Allow and Install Hooks</string>
+	<key>Show the Welcome Tour</key>
+	<string>Show the Welcome Tour</string>
+	<key>Replays the first-run pages, including what hook installation writes and what it leaves alone.</key>
+	<string>Replays the first-run pages, including what hook installation writes and what it leaves alone.</string>
+	<key>Answer questions in the notch</key>
+	<string>Answer questions in the notch</string>
+	<key>When the agent asks which way to go, pick an option and it continues.</key>
+	<string>When the agent asks which way to go, pick an option and it continues.</string>
+	<key>Example of a question from the agent</key>
+	<string>Example of a question from the agent</string>
+	<key>Which approach should I take?</key>
+	<string>Which approach should I take?</string>
+	<key>Approach</key>
+	<string>Approach</string>
+	<key>Extend the current API</key>
+	<string>Extend the current API</string>
+	<key>Add a new endpoint</key>
+	<string>Add a new endpoint</string>
+	<key>Checks</key>
+	<string>Checks</string>
+	<key>Unit tests</key>
+	<string>Unit tests</string>
+	<key>Type check</key>
+	<string>Type check</string>
+	<key>Lint</key>
+	<string>Lint</string>
+	<key>Try it: this sample is not sent anywhere.</key>
+	<string>Try it: this sample is not sent anywhere.</string>
+	<key>Remove all sessions</key>
+	<string>Remove all sessions</string>
+	<key>Remove all sessions?</key>
+	<string>Remove all sessions?</string>
+	<key>Removes every session from Agent Notch. This action cannot be undone.</key>
+	<string>Removes every session from Agent Notch. This action cannot be undone.</string>
+	<key>Session data</key>
+	<string>Session data</string>
+	<key>This action cannot be undone.</key>
+	<string>This action cannot be undone.</string>
+	<key>Mute all sessions</key>
+	<string>Mute all sessions</string>
+	<key>Unmute all sessions</key>
+	<string>Unmute all sessions</string>
+	<key>Settings…</key>
+	<string>Settings…</string>
+	<key>Confirm — remove this session</key>
+	<string>Confirm — remove this session</string>
+	<key>Which checks should run?</key>
+	<string>Which checks should run?</string>
+	<key>Fewer moving parts.</key>
+	<string>Fewer moving parts.</string>
+	<key>Clean, but clients must update.</key>
+	<string>Clean, but clients must update.</string>
+	<key>Show Onboarding</key>
+	<string>Show Onboarding</string>
+	<key>Answer in Terminal</key>
+	<string>Answer in Terminal</string>
+	<key>This question is visible here, but its response channel belongs to Codex. Answer it in the original Codex window.</key>
+	<string>This question is visible here, but its response channel belongs to Codex. Answer it in the original Codex window.</string>
+	<key>Moves focus to the terminal that owns this question</key>
+	<string>Moves focus to the terminal that owns this question</string>
+	<key>Show in Finder</key>
+	<string>Show in Finder</string>
+	<key>Show %@ in Finder</key>
+	<string>Show %@ in Finder</string>
+	<key>Couldn’t remove the hooks: %@</key>
+	<string>Couldn’t remove the hooks: %@</string>
+	<key>Integration</key>
+	<string>Integration</string>
+	<key>Let the agent handle permissions</key>
+	<string>Let the agent handle permissions</string>
+	<key>Permission requests bypass Agent Notch and follow the agent’s own approval flow. Questions still appear here.</key>
+	<string>Permission requests bypass Agent Notch and follow the agent’s own approval flow. Questions still appear here.</string>
+	<key>Adds hooks so Claude Code reports sessions, tools, and approvals.</key>
+	<string>Adds hooks so Claude Code reports sessions, tools, and approvals.</string>
+	<key>Adds hooks so Codex reports sessions, tools, and questions, and lets Agent Notch read its session logs and usage. Off means neither.</key>
+	<string>Adds hooks so Codex reports sessions, tools, and questions, and lets Agent Notch read its session logs and usage. Off means neither.</string>
+	<key>The hooks are installed, but Codex is waiting for you to trust the changes.</key>
+	<string>The hooks are installed, but Codex is waiting for you to trust the changes.</string>
+	<key>The hooks are installed, but at least one is disabled in Codex.</key>
+	<string>The hooks are installed, but at least one is disabled in Codex.</string>
+	<key>Codex paused Agent Notch because the hook definition changed. Run /hooks in Codex, review the Agent Notch hooks, and trust them again.</key>
+	<string>Codex paused Agent Notch because the hook definition changed. Run /hooks in Codex, review the Agent Notch hooks, and trust them again.</string>
+	<key>At least one Agent Notch hook is disabled in Codex. Run /hooks in Codex and enable it again.</key>
+	<string>At least one Agent Notch hook is disabled in Codex. Run /hooks in Codex and enable it again.</string>
+	<key>Copy /hooks</key>
+	<string>Copy /hooks</string>
+	<key>Tasks</key>
+	<string>Tasks</string>
+	<key>Pending</key>
+	<string>Pending</string>
+	<key>In progress</key>
+	<string>In progress</string>
+	<key>Completed</key>
+	<string>Completed</string>
+	<key>Codex App</key>
+	<string>Codex App</string>
+	<key>Open in Codex App</key>
+	<string>Open in Codex App</string>
+	<key>Claude App</key>
+	<string>Claude App</string>
+	<key>Open in Claude App</key>
+	<string>Open in Claude App</string>
+	<key>Couldn’t restart Agent Notch.</key>
+	<string>Couldn’t restart Agent Notch.</string>
+	<key>OK</key>
+	<string>OK</string>
+	<key>About</key>
+	<string>About</string>
+	<key>Agent Notch uses the following open source software.</key>
+	<string>Agent Notch uses the following open source software.</string>
+	<key>Build %@</key>
+	<string>Build %@</string>
+	<key>Development build</key>
+	<string>Development build</string>
+	<key>License text unavailable.</key>
+	<string>License text unavailable.</string>
+	<key>Open Source Licenses</key>
+	<string>Open Source Licenses</string>
+	<key>Agent Notch’s original source code is under the MIT License.</key>
+	<string>Agent Notch’s original source code is under the MIT License.</string>
+	<key>Project Website</key>
+	<string>Project Website</string>
+	<key>Source Code</key>
+	<string>Source Code</string>
+	<key>Version %@</key>
+	<string>Version %@</string>
+	<key>Agent</key>
+	<string>Agent</string>
+	<key>Application</key>
+	<string>Application</string>
+	<key>Display &amp; Notifications</key>
+	<string>Display &amp; Notifications</string>
+</dict>
+</plist>

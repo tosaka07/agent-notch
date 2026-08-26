@@ -1,0 +1,107 @@
+import Foundation
+import Network
+
+public enum SocketProtocol {
+    public static func encode(_ object: Any) throws -> Data {
+        let jsonData = try JSONSerialization.data(withJSONObject: object)
+        var length = UInt32(jsonData.count)
+        var data = Data(bytes: &length, count: 4)
+        data.append(jsonData)
+        return data
+    }
+
+    public static func decode(_ data: Data) throws -> (message: [String: Any], bytesConsumed: Int)? {
+        guard data.count >= 4 else { return nil }
+        let length = data.prefix(4).withUnsafeBytes { $0.load(as: UInt32.self) }
+        let totalNeeded = 4 + Int(length)
+        guard data.count >= totalNeeded else { return nil }
+        let jsonData = data[4..<totalNeeded]
+        guard let dict = try JSONSerialization.jsonObject(with: Data(jsonData)) as? [String: Any] else {
+            throw SocketError.invalidJSON
+        }
+        return (dict, totalNeeded)
+    }
+}
+
+public enum SocketError: Error {
+    case invalidJSON
+    case connectionFailed
+}
+
+public final class SocketConnection: Sendable {
+    public let connection: NWConnection
+    private let queue: DispatchQueue
+    public let onMessage: @Sendable ([String: Any], NWConnection) -> [String: Any]?
+
+    public init(
+        connection: NWConnection,
+        queue: DispatchQueue,
+        onMessage: @escaping @Sendable ([String: Any], NWConnection) -> [String: Any]?
+    ) {
+        self.connection = connection
+        self.queue = queue
+        self.onMessage = onMessage
+    }
+
+    public func start() {
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready:
+                self?.receiveMessage()
+            case .failed, .cancelled:
+                self?.connection.cancel()
+            default:
+                break
+            }
+        }
+        connection.start(queue: queue)
+    }
+
+    public func cancel() {
+        connection.cancel()
+    }
+
+    private func receiveMessage(buffer: Data = Data()) {
+        // A message does not necessarily arrive in one receive: a large tool_input — the full text
+        // of a Write, or a PermissionRequest carrying a plan — exceeds 64KB and comes in several
+        // chunks. While decode reports "not enough yet" (nil), keep appending to the buffer and
+        // receiving. Without this, a split message is silently dropped and the hook waits out its
+        // full recv timeout.
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) {
+            [weak self] content, _, isComplete, error in
+            guard let self else { return }
+
+            var accumulated = buffer
+            if let content { accumulated.append(content) }
+
+            guard error == nil else {
+                self.connection.cancel()
+                return
+            }
+
+            do {
+                if let result = try SocketProtocol.decode(accumulated) {
+                    let response = self.onMessage(result.message, self.connection)
+                    if let response {
+                        // Immediate response — send and close
+                        let responseData = try SocketProtocol.encode(response)
+                        self.connection.send(
+                            content: responseData,
+                            completion: .contentProcessed { _ in
+                                self.connection.cancel()
+                            }
+                        )
+                    }
+                    // nil response = deferred (connection stays open for later response)
+                } else if isComplete {
+                    // The peer closed before the message was complete; discard the partial send.
+                    self.connection.cancel()
+                } else {
+                    receiveMessage(buffer: accumulated)
+                }
+            } catch {
+                self.connection.cancel()
+            }
+        }
+    }
+}
