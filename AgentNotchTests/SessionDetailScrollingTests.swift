@@ -53,9 +53,15 @@ struct SessionDetailScrollingTests {
             "The inverted timeline opened \(distanceFromNewest)pt away from its logical origin"
         )
 
+        let heightBeforeFollowingAppend = scrollView.documentView?.bounds.height ?? 0
         try appendMessage(index: 60, paragraphs: 10, to: transcriptURL)
         manager.notifyChange()
-        try await settle(hostingView: hostingView, window: window)
+        try await settle(
+            hostingView: hostingView,
+            window: window,
+            scrollView: scrollView,
+            heightBefore: heightBeforeFollowingAppend
+        )
 
         let distanceAfterAppend = scrollView.documentVisibleRect.minY
         #expect(
@@ -71,9 +77,15 @@ struct SessionDetailScrollingTests {
             "The scroll view did not move the timeline into history"
         )
 
+        let heightBeforeHistoryAppend = scrollView.documentView?.bounds.height ?? 0
         try appendMessage(index: 61, paragraphs: 15, to: transcriptURL)
         manager.notifyChange()
-        try await settle(hostingView: hostingView, window: window)
+        try await settle(
+            hostingView: hostingView,
+            window: window,
+            scrollView: scrollView,
+            heightBefore: heightBeforeHistoryAppend
+        )
 
         let distanceWhileReadingHistory = scrollView.documentVisibleRect.minY
         #expect(
@@ -220,13 +232,48 @@ struct SessionDetailScrollingTests {
         return String(decoding: data, as: UTF8.self)
     }
 
+    /// Waits for an appended message to land and the timeline to stop moving.
+    ///
+    /// A fixed sleep is not enough. Reloading the transcript rebuilds the
+    /// document view, which drops the scroll offset to zero before the intended
+    /// position is restored, so a slower machine can read that intermediate
+    /// state instead of the settled one. Waiting for the document to grow proves
+    /// the reload arrived; waiting for the offset to hold still proves the
+    /// restore finished. A timeline that genuinely ends up back at newest also
+    /// settles — at zero — so a real regression still fails the assertion.
     private func settle<Content: View>(
         hostingView: NSHostingView<Content>,
-        window: NSWindow
+        window: NSWindow,
+        scrollView: NSScrollView,
+        heightBefore: CGFloat,
+        attempts: Int = 80
     ) async throws {
-        try await Task.sleep(for: .milliseconds(100))
-        window.layoutIfNeeded()
-        hostingView.layoutSubtreeIfNeeded()
+        for _ in 0..<attempts {
+            window.layoutIfNeeded()
+            hostingView.layoutSubtreeIfNeeded()
+            if (scrollView.documentView?.bounds.height ?? 0) > heightBefore { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        // Three matching samples, rather than two: the offset can pause for a
+        // single frame between the reset and the restore.
+        var previous: CGFloat?
+        var stableSamples = 0
+        for _ in 0..<attempts {
+            window.layoutIfNeeded()
+            hostingView.layoutSubtreeIfNeeded()
+
+            let offset = scrollView.documentVisibleRect.minY
+            if let previous, abs(offset - previous) < 0.5 {
+                stableSamples += 1
+                if stableSamples >= 3 { return }
+            } else {
+                stableSamples = 0
+            }
+            previous = offset
+
+            try await Task.sleep(for: .milliseconds(25))
+        }
     }
 
     private enum TimelineTestError: Error {
