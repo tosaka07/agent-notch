@@ -33,14 +33,6 @@ enum VSCodeWindowJumper {
         "com.exafunction.windsurf",
     ]
 
-    /// How many trailing path components of the working directory can name the workspace.
-    ///
-    /// One covers a session started at the workspace root, which is the common case. Going a little
-    /// further covers a run started inside a package of a monorepo, where the root is an ancestor
-    /// of the working directory. Beyond that the components get generic enough — `src`, `projects`,
-    /// a home directory name — that a match stops being evidence of the right window.
-    nonisolated static let maximumWorkspaceCandidates = 3
-
     /// What VS Code puts between the active editor and the workspace root in a window title.
     nonisolated static let titleSeparator = " — "
 
@@ -124,7 +116,7 @@ enum VSCodeWindowJumper {
         for _ in 0..<maximumDepth {
             if let directory = readWorkingDirectory(currentPID),
                 directory.hasPrefix("/"),
-                !workspaceCandidates(forWorkingDirectory: directory).isEmpty
+                workspaceName(forWorkingDirectory: directory) != nil
             {
                 return directory
             }
@@ -135,13 +127,14 @@ enum VSCodeWindowJumper {
         return nil
     }
 
-    /// The workspace names the working directory could belong to, deepest path component first.
-    static func workspaceCandidates(forWorkingDirectory directory: String) -> [String] {
-        directory.split(separator: "/")
-            .map(String.init)
-            .reversed()
-            .prefix(maximumWorkspaceCandidates)
-            .map { $0 }
+    /// The workspace a directory would be the root of, which is its own last path component.
+    ///
+    /// Only the last one. An ancestor is what a run started inside a package of a monorepo would
+    /// need, but an ancestor is also `projects`, `src`, or a home directory name — components
+    /// generic enough that a window answering to one is no evidence it is the right window. The
+    /// monorepo run falls back to a plain activation instead, which is what it used to get.
+    static func workspaceName(forWorkingDirectory directory: String) -> String? {
+        directory.split(separator: "/").last.map(String.init)
     }
 
     /// Whether a window title names this workspace.
@@ -156,16 +149,14 @@ enum VSCodeWindowJumper {
 
     /// The title of the one window this working directory belongs to, if exactly one does.
     ///
-    /// The match is on whole path components rather than on substrings, and it is abandoned when
-    /// more than one window answers to it. A session in `agent-notch/packages/core` alongside an
-    /// unrelated window rooted at some other `core` is a case where nothing here can tell the two
-    /// apart, and raising the wrong window is worse than raising none: the caller's activation
-    /// still lands the user in the editor, where the previous behaviour left them anyway.
+    /// The match is on a whole path component rather than on a substring, and it is abandoned when
+    /// more than one window answers to it. Two windows rooted at folders of the same name are a
+    /// case where nothing here can tell them apart, and raising the wrong window is worse than
+    /// raising none: the caller's activation still lands the user in the editor, where the previous
+    /// behaviour left them anyway.
     static func windowTitle(forWorkingDirectory directory: String, titles: [String]) -> String? {
-        let candidates = workspaceCandidates(forWorkingDirectory: directory)
-        let matches = titles.filter { title in
-            candidates.contains { windowTitle(title, names: $0) }
-        }
+        guard let workspace = workspaceName(forWorkingDirectory: directory) else { return nil }
+        let matches = titles.filter { windowTitle($0, names: workspace) }
         return matches.count == 1 ? matches[0] : nil
     }
 

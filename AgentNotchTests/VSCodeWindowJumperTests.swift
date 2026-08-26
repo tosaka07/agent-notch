@@ -95,25 +95,25 @@ struct VSCodeWindowJumperTests {
         #expect(title == "Release Notes — agent-notch")
     }
 
-    /// A monorepo run starts inside a package, so the window is titled after an ancestor.
-    @Test("a deeper working directory resolves to the window rooted at an ancestor")
-    @MainActor
-    func resolvesWindowFromAncestorWorkspace() {
-        let title = VSCodeWindowJumper.windowTitle(
-            forWorkingDirectory: "/Users/me/agent-notch/packages/core",
-            titles: ["agent-notch", "tmp"]
-        )
-
-        #expect(title == "agent-notch")
-    }
-
     /// Raising the wrong window is worse than raising none: the caller still activates the editor.
-    @Test("a working directory that answers to two windows resolves to neither")
+    @Test("a workspace name two windows answer to resolves to neither")
     @MainActor
     func refusesAnAmbiguousWorkspace() {
         let title = VSCodeWindowJumper.windowTitle(
-            forWorkingDirectory: "/Users/me/agent-notch/packages/core",
-            titles: ["agent-notch", "core", "tmp"]
+            forWorkingDirectory: "/Users/me/projects/core",
+            titles: ["core", "main.swift — core", "tmp"]
+        )
+
+        #expect(title == nil)
+    }
+
+    /// An ancestor is as often a generic container — `projects`, `src` — as it is the project.
+    @Test("a window rooted at an ancestor of the working directory is not the destination")
+    @MainActor
+    func ignoresWindowsRootedAtAnAncestor() {
+        let title = VSCodeWindowJumper.windowTitle(
+            forWorkingDirectory: "/Users/me/workspace/projects/agent-notch",
+            titles: ["agent-notch — Custom Title", "Notes — projects"]
         )
 
         #expect(title == nil)
@@ -139,20 +139,18 @@ struct VSCodeWindowJumperTests {
         #expect(VSCodeWindowJumper.windowTitles(fromScriptResult: "").isEmpty)
     }
 
-    @Test("only the deepest few path components can name the workspace")
+    @Test("the workspace is the last path component of the working directory")
     @MainActor
-    func ordersWorkspaceCandidates() {
-        let candidates = VSCodeWindowJumper.workspaceCandidates(
-            forWorkingDirectory: "/Users/me/workspace/projects/agent-notch"
-        )
-
-        #expect(candidates == ["agent-notch", "projects", "workspace"])
+    func readsWorkspaceNameFromDirectory() {
+        #expect(
+            VSCodeWindowJumper.workspaceName(
+                forWorkingDirectory: "/Users/me/workspace/projects/agent-notch") == "agent-notch")
     }
 
     @Test("a working directory with no component names no window")
     @MainActor
-    func hasNoCandidateAtRoot() {
-        #expect(VSCodeWindowJumper.workspaceCandidates(forWorkingDirectory: "/").isEmpty)
+    func hasNoWorkspaceNameAtRoot() {
+        #expect(VSCodeWindowJumper.workspaceName(forWorkingDirectory: "/") == nil)
     }
 
     @Test("the working directory comes from the session's own process when it has one")

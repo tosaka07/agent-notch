@@ -8,6 +8,10 @@ import Foundation
 /// host no matter which project it opens. The kernel's own record of the working directory answers
 /// for the process as it is now. Only processes owned by the same user are readable, which is all
 /// this app needs.
+///
+/// `proc_pidinfo` is libproc's own interface rather than a documented framework API, so the one
+/// call is kept here alone. Every caller treats nil as "the directory is unknown" and carries on
+/// without it, which is also what a future macOS that stops answering would produce.
 enum ProcessWorkingDirectory {
     static func path(ofPID pid: Int32) -> String? {
         var info = proc_vnodepathinfo()
@@ -16,11 +20,12 @@ enum ProcessWorkingDirectory {
             return nil
         }
 
-        let path = withUnsafePointer(to: &info.pvi_cdir.vip_path) {
-            $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) {
-                String(cString: $0)
-            }
+        // The kernel writes a NUL-terminated path into a fixed-length field. Decoding stops at
+        // that terminator, and a field without one is not a path this can read.
+        let path = withUnsafeBytes(of: &info.pvi_cdir.vip_path) { field -> String? in
+            guard let end = field.firstIndex(of: 0) else { return nil }
+            return String(decoding: field[..<end], as: UTF8.self)
         }
-        return path.isEmpty ? nil : path
+        return (path?.isEmpty ?? true) ? nil : path
     }
 }
