@@ -19,7 +19,7 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Agent Notch asks cmux to select the pane a session is running in, so that jumping to the terminal lands on that session.</string>
+    <string>Agent Notch asks cmux to select the pane a session is running in, and VS Code to raise the window a session is running in, so that jumping to the terminal lands on that session.</string>
     <key>LSMinimumSystemVersion</key>
     <string>26.0</string>
 </dict>

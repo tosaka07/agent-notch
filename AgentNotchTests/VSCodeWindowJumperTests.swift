@@ -18,42 +18,117 @@ struct VSCodeWindowJumperTests {
         #expect(VSCodeWindowJumper.isVSCodeFamily(bundleIdentifier: nil) == false)
     }
 
-    @Test("the raise script matches the workspace against the window titles of one process")
+    @Test("both scripts address the editor by process ID rather than by name")
+    @MainActor
+    func addressesOneProcess() {
+        let listing = VSCodeWindowJumper.windowTitleScript(applicationPID: editorPID)
+        let raise = VSCodeWindowJumper.focusScript(
+            applicationPID: editorPID,
+            windowTitle: "agent-notch"
+        )
+
+        #expect(listing.contains("first process whose unix id is 76081"))
+        #expect(raise?.contains("first process whose unix id is 76081") == true)
+    }
+
+    @Test("the raise script names the one window the workspace resolved to")
     @MainActor
     func buildsRaiseScript() {
         let script = VSCodeWindowJumper.focusScript(
             applicationPID: editorPID,
-            workspaceName: "agent-notch"
+            windowTitle: "main.swift — agent-notch"
         )
 
-        #expect(script?.contains("first process whose unix id is 76081") == true)
-        #expect(script?.contains("every window whose name contains \"agent-notch\"") == true)
+        #expect(script?.contains("first window whose name is \"main.swift — agent-notch\"") == true)
         #expect(script?.contains("perform action \"AXRaise\"") == true)
     }
 
-    /// The name lands inside an AppleScript string literal, so a directory carrying a quote could
-    /// append statements of its own.
-    @Test("a workspace name carrying AppleScript syntax is escaped rather than interpolated")
+    /// The title lands inside an AppleScript string literal, so one carrying a quote could append
+    /// statements of its own.
+    @Test("a window title carrying AppleScript syntax is escaped rather than interpolated")
     @MainActor
-    func escapesWorkspaceName() {
+    func escapesWindowTitle() {
         let script = VSCodeWindowJumper.focusScript(
             applicationPID: editorPID,
-            workspaceName: "we\"ird\\path"
+            windowTitle: "we\"ird\\path"
         )
 
         #expect(script?.contains("\"we\\\"ird\\\\path\"") == true)
     }
 
-    @Test("a workspace name that cannot be quoted safely never reaches AppleScript")
+    @Test("a window title that cannot be quoted safely never reaches AppleScript")
     @MainActor
-    func rejectsUnquotableWorkspaceName() {
+    func rejectsUnquotableWindowTitle() {
+        #expect(VSCodeWindowJumper.focusScript(applicationPID: editorPID, windowTitle: "") == nil)
         #expect(
-            VSCodeWindowJumper.focusScript(applicationPID: editorPID, workspaceName: "") == nil)
-        #expect(
-            VSCodeWindowJumper.focusScript(applicationPID: editorPID, workspaceName: "a\nb") == nil)
+            VSCodeWindowJumper.focusScript(applicationPID: editorPID, windowTitle: "a\nb") == nil)
     }
 
-    @Test("the deepest path components are offered first, and only a few of them")
+    @Test("the workspace root is the half of the title after the separator")
+    @MainActor
+    func readsWorkspaceRootFromTitle() {
+        #expect(
+            VSCodeWindowJumper.workspaceRoot(ofWindowTitle: "● main.swift — agent-notch")
+                == "agent-notch")
+        #expect(VSCodeWindowJumper.workspaceRoot(ofWindowTitle: "agent-notch") == "agent-notch")
+    }
+
+    @Test("the window whose root is a component of the working directory is the destination")
+    @MainActor
+    func resolvesWindowFromWorkspaceRoot() {
+        let title = VSCodeWindowJumper.windowTitle(
+            forWorkingDirectory: "/Users/me/projects/agent-notch",
+            titles: ["tmp", "Release Notes — agent-notch", "notes — journal"]
+        )
+
+        #expect(title == "Release Notes — agent-notch")
+    }
+
+    /// A monorepo run starts inside a package, so the window is titled after an ancestor.
+    @Test("a deeper working directory resolves to the window rooted at an ancestor")
+    @MainActor
+    func resolvesWindowFromAncestorWorkspace() {
+        let title = VSCodeWindowJumper.windowTitle(
+            forWorkingDirectory: "/Users/me/agent-notch/packages/core",
+            titles: ["agent-notch", "tmp"]
+        )
+
+        #expect(title == "agent-notch")
+    }
+
+    /// Raising the wrong window is worse than raising none: the caller still activates the editor.
+    @Test("a working directory that answers to two windows resolves to neither")
+    @MainActor
+    func refusesAnAmbiguousWorkspace() {
+        let title = VSCodeWindowJumper.windowTitle(
+            forWorkingDirectory: "/Users/me/agent-notch/packages/core",
+            titles: ["agent-notch", "core", "tmp"]
+        )
+
+        #expect(title == nil)
+    }
+
+    /// `contains` would have matched `core` here, and on any window rooted at `core-utils`.
+    @Test("a window root is matched whole rather than as a substring")
+    @MainActor
+    func matchesWholeComponentsOnly() {
+        #expect(
+            VSCodeWindowJumper.windowTitle(
+                forWorkingDirectory: "/Users/me/agent-notch",
+                titles: ["agent-notch-docs", "notch"]
+            ) == nil)
+    }
+
+    @Test("the trailing newline of the listing leaves no empty title behind")
+    @MainActor
+    func parsesWindowTitleListing() {
+        #expect(
+            VSCodeWindowJumper.windowTitles(fromScriptResult: "agent-notch\ntmp\n")
+                == ["agent-notch", "tmp"])
+        #expect(VSCodeWindowJumper.windowTitles(fromScriptResult: "").isEmpty)
+    }
+
+    @Test("only the deepest few path components can name the workspace")
     @MainActor
     func ordersWorkspaceCandidates() {
         let candidates = VSCodeWindowJumper.workspaceCandidates(
@@ -128,10 +203,10 @@ struct VSCodeWindowJumperTests {
         #expect(resolved == nil)
     }
 
-    @Test("the first workspace that names a window wins, and no further script runs")
+    @Test("the listing names the window, and the raise that follows names it back")
     @MainActor
-    func stopsAtTheFirstMatchingWindow() {
-        var attempted: [String] = []
+    func raisesTheResolvedWindow() {
+        var raised: String?
 
         let focused = VSCodeWindowJumper.focusWindow(
             forProcessTree: 500,
@@ -140,35 +215,16 @@ struct VSCodeWindowJumperTests {
             parentOf: { _ in 1 },
             isAutomationPermitted: { true },
             runScript: { script in
-                attempted.append(script)
-                return script.contains("\"agent-notch\"")
+                if script.contains("AXRaise") {
+                    raised = script
+                    return ""
+                }
+                return "tmp\nmain.swift — agent-notch\n"
             }
         )
 
         #expect(focused)
-        #expect(attempted.count == 1)
-    }
-
-    /// A monorepo run starts inside a package, so the window is titled after an ancestor.
-    @Test("a deeper working directory falls back to the ancestor that names a window")
-    @MainActor
-    func fallsBackToAnAncestorWorkspace() {
-        var attempted: [String] = []
-
-        let focused = VSCodeWindowJumper.focusWindow(
-            forProcessTree: 500,
-            applicationPID: editorPID,
-            environmentOf: { $0 == 500 ? ["PWD": "/Users/me/agent-notch/packages/core"] : nil },
-            parentOf: { _ in 1 },
-            isAutomationPermitted: { true },
-            runScript: { script in
-                attempted.append(script)
-                return script.contains("\"agent-notch\"")
-            }
-        )
-
-        #expect(focused)
-        #expect(attempted.count == 3)
+        #expect(raised?.contains("\"main.swift — agent-notch\"") == true)
     }
 
     /// The caller still activates the app, so a missed match costs the window, not the jump.
@@ -181,7 +237,29 @@ struct VSCodeWindowJumperTests {
             environmentOf: { $0 == 500 ? ["PWD": "/Users/me/agent-notch"] : nil },
             parentOf: { _ in 1 },
             isAutomationPermitted: { true },
-            runScript: { _ in false }
+            runScript: { script in
+                if script.contains("AXRaise") {
+                    Issue.record("raised a window the workspace did not name")
+                    return ""
+                }
+                return "tmp\n"
+            }
+        )
+
+        #expect(focused == false)
+    }
+
+    /// The editor can close a window between the listing and the raise.
+    @Test("a raise the editor refuses is reported as a failure")
+    @MainActor
+    func reportsFailureWhenTheRaiseDoesNotApply() {
+        let focused = VSCodeWindowJumper.focusWindow(
+            forProcessTree: 500,
+            applicationPID: editorPID,
+            environmentOf: { $0 == 500 ? ["PWD": "/Users/me/agent-notch"] : nil },
+            parentOf: { _ in 1 },
+            isAutomationPermitted: { true },
+            runScript: { script in script.contains("AXRaise") ? nil : "agent-notch\n" }
         )
 
         #expect(focused == false)
@@ -198,7 +276,7 @@ struct VSCodeWindowJumperTests {
             isAutomationPermitted: { false },
             runScript: { _ in
                 Issue.record("sent an Apple event after automation was denied")
-                return true
+                return ""
             }
         )
 
@@ -216,7 +294,7 @@ struct VSCodeWindowJumperTests {
             isAutomationPermitted: { true },
             runScript: { _ in
                 Issue.record("ran a script without a workspace to match")
-                return true
+                return ""
             }
         )
 
