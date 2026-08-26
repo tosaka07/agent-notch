@@ -149,14 +149,14 @@ enum VSCodeWindowJumper {
             .map { $0 }
     }
 
-    /// The root a window title names, which is the part after the last separator.
+    /// Whether a window title names this workspace.
     ///
     /// A title reads `activeEditor — root` by default, and drops to just `root` when the window has
-    /// no editor open. The active editor is the half that changes as the user works, so only the
-    /// root is ever matched against.
-    static func workspaceRoot(ofWindowTitle title: String) -> String {
-        let root = title.components(separatedBy: titleSeparator).last ?? title
-        return root.trimmingCharacters(in: .whitespaces)
+    /// no editor open. The active editor is the half that changes as the user works, so the match
+    /// is anchored at the end of the title — which also keeps a root that contains the separator
+    /// itself, `foo — bar`, matchable in one piece.
+    static func windowTitle(_ title: String, names workspace: String) -> Bool {
+        title == workspace || title.hasSuffix(titleSeparator + workspace)
     }
 
     /// The title of the one window this working directory belongs to, if exactly one does.
@@ -167,8 +167,10 @@ enum VSCodeWindowJumper {
     /// apart, and raising the wrong window is worse than raising none: the caller's activation
     /// still lands the user in the editor, where the previous behaviour left them anyway.
     static func windowTitle(forWorkingDirectory directory: String, titles: [String]) -> String? {
-        let candidates = Set(workspaceCandidates(forWorkingDirectory: directory))
-        let matches = titles.filter { candidates.contains(workspaceRoot(ofWindowTitle: $0)) }
+        let candidates = workspaceCandidates(forWorkingDirectory: directory)
+        let matches = titles.filter { title in
+            candidates.contains { windowTitle(title, names: $0) }
+        }
         return matches.count == 1 ? matches[0] : nil
     }
 

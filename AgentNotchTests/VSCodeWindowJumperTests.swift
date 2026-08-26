@@ -64,13 +64,24 @@ struct VSCodeWindowJumperTests {
             VSCodeWindowJumper.focusScript(applicationPID: editorPID, windowTitle: "a\nb") == nil)
     }
 
-    @Test("the workspace root is the half of the title after the separator")
+    @Test("a title names the workspace it ends with, with or without an editor in front")
     @MainActor
-    func readsWorkspaceRootFromTitle() {
-        #expect(
-            VSCodeWindowJumper.workspaceRoot(ofWindowTitle: "● main.swift — agent-notch")
-                == "agent-notch")
-        #expect(VSCodeWindowJumper.workspaceRoot(ofWindowTitle: "agent-notch") == "agent-notch")
+    func recognisesTitlesNamingAWorkspace() {
+        #expect(VSCodeWindowJumper.windowTitle("● main.swift — agent-notch", names: "agent-notch"))
+        #expect(VSCodeWindowJumper.windowTitle("agent-notch", names: "agent-notch"))
+        #expect(VSCodeWindowJumper.windowTitle("agent-notch — docs", names: "agent-notch") == false)
+    }
+
+    /// The separator is an ordinary run of characters a folder name may contain.
+    @Test("a workspace whose own name contains the separator is matched in one piece")
+    @MainActor
+    func matchesAWorkspaceNamedLikeATitle() {
+        let title = VSCodeWindowJumper.windowTitle(
+            forWorkingDirectory: "/Users/me/foo — bar",
+            titles: ["main.swift — foo — bar", "tmp"]
+        )
+
+        #expect(title == "main.swift — foo — bar")
     }
 
     @Test("the window whose root is a component of the working directory is the destination")
