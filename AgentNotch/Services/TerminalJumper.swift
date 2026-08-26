@@ -4,9 +4,9 @@ import Foundation
 
 /// Activates the terminal window running a given Claude session.
 /// Handles direct terminal processes, tmux sessions (switch-client + select-window + select-pane),
-/// and cmux panes (see `CmuxPaneJumper`).
+/// cmux panes (see `CmuxPaneJumper`), and VS Code windows (see `VSCodeWindowJumper`).
 enum TerminalJumper {
-    private static let supportedTerminalBundleIdentifiers: Set<String> = [
+    private static let supportedTerminalBundleIdentifiers: Set<String> = Set([
         "com.apple.terminal",
         "com.googlecode.iterm2",
         "com.mitchellh.ghostty",
@@ -17,7 +17,7 @@ enum TerminalJumper {
         "com.github.wez.wezterm",
         "org.wezfurlong.wezterm",
         CmuxPaneJumper.bundleIdentifier,
-    ]
+    ]).union(VSCodeWindowJumper.bundleIdentifiers)
 
     private static let supportedTerminalApplicationNames: Set<String> = [
         "terminal",
@@ -75,14 +75,23 @@ enum TerminalJumper {
     /// Activating an app lands on the window and pane it left off in, which is the whole answer for
     /// a terminal that gives each session its own window. cmux does not: it stacks workspaces and
     /// panes inside one window, so the session's own pane is selected first — the same extra step
-    /// tmux needs. A failed selection still activates, leaving the user in cmux rather than nowhere.
+    /// tmux needs. VS Code stacks its sessions the same way, and gets the same treatment through
+    /// its own window match. A failed selection still activates, leaving the user in the app rather
+    /// than nowhere.
     @MainActor
     private static func activateTerminalApp(
         _ app: NSRunningApplication,
         paneAnchorPID: Int32?
     ) -> Bool {
-        if let paneAnchorPID, CmuxPaneJumper.isCmux(app) {
-            CmuxPaneJumper.focusPane(forProcessTree: paneAnchorPID)
+        if let paneAnchorPID {
+            if CmuxPaneJumper.isCmux(app) {
+                CmuxPaneJumper.focusPane(forProcessTree: paneAnchorPID)
+            } else if VSCodeWindowJumper.isVSCodeFamily(app) {
+                VSCodeWindowJumper.focusWindow(
+                    forProcessTree: paneAnchorPID,
+                    applicationPID: app.processIdentifier
+                )
+            }
         }
         return completeActivation(accepted: app.activate(), onActivated: closeNotch)
     }
