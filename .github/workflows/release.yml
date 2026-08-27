@@ -196,14 +196,20 @@ jobs:
             "$tap"
           cp dist/agent-notch.rb "$tap/Casks/agent-notch.rb"
 
-          if git -C "$tap" diff --quiet -- Casks/agent-notch.rb; then
-            echo "The tap already carries this Cask"
-            exit 0
-          fi
           git -C "$tap" config user.name "github-actions[bot]"
           git -C "$tap" config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Stage before comparing, and compare the index against HEAD. A diff
+          # of the working tree only reports files the tap already tracks, so
+          # a Cask that is new there reads as "no change" and the guard below
+          # skips the push while the step still exits green.
           git -C "$tap" add Casks/agent-notch.rb
+          if git -C "$tap" diff --cached --quiet -- Casks/agent-notch.rb; then
+            echo "The tap already carries this Cask"
+            exit 0
+          fi
+
           git -C "$tap" commit -m "agent-notch $RELEASE_VERSION"
           git -C "$tap" push
 
