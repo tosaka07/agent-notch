@@ -26,6 +26,15 @@ if [ ! -d "$app" ]; then
   exit 1
 fi
 
+# The generated accessors are the only place the resolution logic is visible, so
+# their absence is a failure rather than something to warn about and skip: a
+# check that quietly passes when it cannot run is worse than no check at all.
+if [ ! -d "$derived" ]; then
+  echo "No build directory at $derived — run ./scripts/build_app.sh first" >&2
+  echo "(the generated resource accessors are needed to verify the bundle)" >&2
+  exit 1
+fi
+
 echo "▸ checking $app"
 
 # 1. Nothing may sit at the bundle root. This is where SwiftPM's accessor looks
@@ -38,10 +47,21 @@ if [ -n "$root_extras" ]; then
   printf '      %s\n' $root_extras >&2
 fi
 
-# 2. Every resource bundle belongs in Contents/Resources, which is what Xcode's
-#    accessor searches through Bundle.main.resourceURL.
-for bundle in AgentNotch_AgentNotch AgentNotch_AgentNotchCore Highlighter_Highlighter \
-  KeyboardShortcuts_KeyboardShortcuts; do
+# 2. Every resource bundle a compiled accessor asks for must be in
+#    Contents/Resources, which is what Xcode's accessor searches through
+#    Bundle.main.resourceURL.
+#
+#    The expected names are read out of the generated accessors rather than
+#    listed here, so a newly added dependency is covered without anyone
+#    remembering to update this script.
+expected_bundles="$(
+  find "$derived" -name resource_bundle_accessor.swift -exec \
+    sed -n 's/.*let bundleName = "\([^"]*\)".*/\1/p' {} + | sort -u
+)"
+if [ -z "$expected_bundles" ]; then
+  fail "no resource accessors found under $derived — was the app actually built?"
+fi
+for bundle in $expected_bundles; do
   if [ ! -d "$app/Contents/Resources/$bundle.bundle" ]; then
     fail "missing Contents/Resources/$bundle.bundle"
   fi
@@ -80,15 +100,17 @@ fi
 #    build directory. If a SwiftPM-generated accessor ever ends up compiled into
 #    the app, the binary works here and traps everywhere else — so check the
 #    generated sources rather than trusting which tool was invoked.
-if [ -d "$derived" ]; then
-  while IFS= read -r accessor; do
-    if ! grep -q "Bundle.main.resourceURL" "$accessor"; then
-      fail "accessor does not search Contents/Resources: ${accessor#"$derived"/}"
-    fi
-  done < <(find "$derived" -name resource_bundle_accessor.swift)
-else
-  echo "  ! $derived is absent, skipping the generated-accessor check" >&2
-fi
+while IFS= read -r accessor; do
+  if ! grep -q "Bundle.main.resourceURL" "$accessor"; then
+    fail "accessor does not search Contents/Resources: ${accessor#"$derived"/}"
+  fi
+  # The build directory of whoever compiled it. Present in every SwiftPM
+  # accessor, absent from every Xcode one, and the reason v0.1.0 passed every
+  # check on the build machine and crashed on all the others.
+  if grep -qE '"/(Users|private|var|tmp|home)/' "$accessor"; then
+    fail "accessor hardcodes an absolute build path: ${accessor#"$derived"/}"
+  fi
+done < <(find "$derived" -name resource_bundle_accessor.swift)
 
 if [ "$failures" -gt 0 ]; then
   echo "✘ $failures problem(s): this bundle would not run on another Mac" >&2

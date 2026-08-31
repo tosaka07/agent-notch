@@ -44,7 +44,7 @@ targets:
       # AgentNotchUI library below and linked from there.
       - path: ../AgentNotchApp
       # Icon Composer document. Xcode compiles it into Assets.car and the .icns fallback, which
-      # is what scripts/make_app.sh used to invoke actool by hand for.
+      # is what the bundle-assembly script used to invoke actool by hand for.
       - path: ../Resources/AppIcon/AgentNotch.icon
         buildPhase: resources
 
