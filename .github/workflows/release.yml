@@ -64,6 +64,11 @@ jobs:
           swift --version
           xcodebuild -version
 
+      # build_release.sh generates xcode/AgentNotch.xcodeproj from project.yml
+      # and builds the .app with xcodebuild. The project file is not committed.
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
       - name: Test
         shell: bash
         run: |
