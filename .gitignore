@@ -1,7 +1,10 @@
 # Build
 .build/
 DerivedData/
+# xcode/AgentNotch.xcodeproj is generated from xcode/project.yml by
+# scripts/generate_xcodeproj.sh. project.yml is the source of truth.
 *.xcodeproj/
+xcode/.xcode-build/
 
 # Swift Package Manager
 .swiftpm/

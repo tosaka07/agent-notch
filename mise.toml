@@ -1,2 +1,4 @@
 [tools]
 task = "latest"
+# Generates xcode/AgentNotch.xcodeproj from xcode/project.yml.
+xcodegen = "latest"
