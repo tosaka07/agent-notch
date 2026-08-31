@@ -37,6 +37,20 @@ fi
 
 echo "▸ checking $app"
 
+# 0. The bundle under test must be the one this build directory produced.
+#
+#    Everything below reasons about the .app using accessors read out of
+#    $derived. If the two come from different builds, the check reports on a
+#    bundle it never actually inspected — and it passes: pointing it at the
+#    released v0.1.0 bundle, the one that crashes on every machine but its
+#    build host, was how this hole was found.
+built="$(find "$derived/Build/Products" -maxdepth 2 -name "$(basename "$app")" -print -quit 2>/dev/null)"
+if [ -z "$built" ]; then
+  fail "$derived produced no $(basename "$app") to compare against"
+elif ! cmp -s "$built/Contents/MacOS/AgentNotch" "$app/Contents/MacOS/AgentNotch"; then
+  fail "$app was not produced by $derived — its accessors describe a different build"
+fi
+
 # 1. Nothing may sit at the bundle root. This is where SwiftPM's accessor looks
 #    for its resource bundle, and it is exactly the placement codesign rejects
 #    with "unsealed contents present in the bundle root". Anything here means
@@ -112,8 +126,10 @@ while IFS= read -r accessor; do
   # by listing the directories a build might live under: /Users covers this
   # machine and GitHub's runners, but /Volumes, /opt and /workspace are just as
   # possible, and a check that has to enumerate them is one hosting change away
-  # from silently passing.
-  if grep -qE '=[[:space:]]*"/' "$accessor"; then
+  # from silently passing. Nor is it tied to the `let x = "/..."` shape, so a
+  # path reaching the accessor as URL(fileURLWithPath:) or through any other
+  # spelling is caught too.
+  if grep -qE '"/[A-Za-z]' "$accessor"; then
     fail "accessor hardcodes an absolute build path: ${accessor#"$derived"/}"
   fi
 done < <(find "$derived" -name resource_bundle_accessor.swift)
