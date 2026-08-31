@@ -107,7 +107,13 @@ while IFS= read -r accessor; do
   # The build directory of whoever compiled it. Present in every SwiftPM
   # accessor, absent from every Xcode one, and the reason v0.1.0 passed every
   # check on the build machine and crashed on all the others.
-  if grep -qE '"/(Users|private|var|tmp|home)/' "$accessor"; then
+  #
+  # Matched as "any string literal starting at the filesystem root" rather than
+  # by listing the directories a build might live under: /Users covers this
+  # machine and GitHub's runners, but /Volumes, /opt and /workspace are just as
+  # possible, and a check that has to enumerate them is one hosting change away
+  # from silently passing.
+  if grep -qE '=[[:space:]]*"/' "$accessor"; then
     fail "accessor hardcodes an absolute build path: ${accessor#"$derived"/}"
   fi
 done < <(find "$derived" -name resource_bundle_accessor.swift)

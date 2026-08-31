@@ -114,12 +114,13 @@ swift test --filter AgentNotchTests.TranscriptParserTests/testName  # One test
 
 ## Architecture overview
 
-The package has three executable targets, one library, and one test target. Everything that does not depend on the UI lives in `AgentNotchCore`, so both the GUI and the CLI can use it.
+The package has two executable targets, two libraries, and one test target. Everything that does not depend on the UI lives in `AgentNotchCore`, so both the GUI and the CLI can use it. The executables hold nothing but their entry points, because Xcode links the libraries directly when it builds the `.app` — see [Why Xcode builds the bundle](#why-xcode-builds-the-bundle).
 
 | Target | Role |
 | --- | --- |
 | `AgentNotchCore/` | Models, event parsers, socket server/client, hook installer (no AppKit/SwiftUI dependency) |
 | `AgentNotch/` | GUI app. `NotchPanel` (NSPanel) + SwiftUI views |
+| `AgentNotchApp/` | `@main` for the GUI, and nothing else |
 | `AgentNotchCLI/` | The `agent-notch` binary (hook entry point + installer) |
 | `AgentNotchTests/` | Swift Testing suites covering both Core and GUI |
 
