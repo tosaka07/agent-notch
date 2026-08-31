@@ -20,6 +20,26 @@ Session state, running tools, token usage, and permission requests appear live i
 - **Permission requests**: approve or deny straight from the notch
 - **Open source and free**: shipped as a native, non-sandboxed app
 
+## Install
+
+Install from the Homebrew tap:
+
+```bash
+brew install --cask tosaka07/tap/agent-notch
+```
+
+This installs `AgentNotch.app` into `/Applications` and links the bundled CLI as `agent-notch` on
+your `PATH`, which the agent hooks rely on.
+
+Upgrading and uninstalling go through Homebrew as well:
+
+```bash
+brew upgrade --cask agent-notch
+brew uninstall --cask agent-notch
+```
+
+Apple silicon only, and the cask requires macOS 26 (Tahoe) or later.
+
 ## Requirements
 
 - macOS 26 or later
