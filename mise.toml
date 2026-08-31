@@ -1,4 +1,8 @@
 [tools]
 task = "latest"
 # Generates xcode/AgentNotch.xcodeproj from xcode/project.yml.
-xcodegen = "latest"
+#
+# Pinned rather than "latest": the project file is not committed, so the
+# generator's version is what decides what gets built. An unpinned generator
+# makes the release artifact change on its own schedule.
+xcodegen = "2.46.0"

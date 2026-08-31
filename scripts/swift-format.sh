@@ -21,7 +21,7 @@ shift || true
 
 sources=("$@")
 if [ ${#sources[@]} -eq 0 ]; then
-  sources=(AgentNotch AgentNotchCore AgentNotchCLI AgentNotchTests Package.swift)
+  sources=(AgentNotch AgentNotchApp AgentNotchCore AgentNotchCLI AgentNotchTests Package.swift)
 fi
 
 case "$mode" in

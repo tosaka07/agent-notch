@@ -21,12 +21,23 @@ build_version="0.0.0"
 build_number="1"
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    # The value is checked for presence before shifting past it: `shift 2` with
+    # one argument left fails, and under `set -e` that exits silently, leaving
+    # the caller with a non-zero status and no idea what was wrong.
     --build-version)
-      build_version="${2:-}"
+      if [ "$#" -lt 2 ]; then
+        echo "--build-version requires a value" >&2
+        exit 1
+      fi
+      build_version="$2"
       shift 2
       ;;
     --build-number)
-      build_number="${2:-}"
+      if [ "$#" -lt 2 ]; then
+        echo "--build-number requires a value" >&2
+        exit 1
+      fi
+      build_number="$2"
       shift 2
       ;;
     *)
@@ -45,7 +56,7 @@ if [[ ! "$build_number" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
-# mise owns the pinned XcodeGen in mise.toml. A copy already on PATH is used as
+# mise owns the pinned XcodeGen version in mise.toml. A copy already on PATH is used as
 # is, so the script works on a machine that installed it some other way.
 if command -v xcodegen >/dev/null 2>&1; then
   xcodegen() { command xcodegen "$@"; }

@@ -29,11 +29,16 @@ tasks:
     cmds: ["swift test"]
 
   check:
-    desc: Everything CI runs — lint, build, test
+    desc: Everything CI runs — lint, build, test, and the app bundle
+    # The bundle steps are not optional extras: a SwiftPM-built .app cannot
+    # resolve its package resources anywhere but the machine that built it, so
+    # the Xcode build and the bundle check are what keep that from shipping.
     cmds:
       - task: lint
       - task: build
       - task: test
+      - ./scripts/build_app.sh release
+      - ./scripts/verify_app_bundle.sh
 
   app:
     desc: Assemble build/AgentNotch.app with Xcode
