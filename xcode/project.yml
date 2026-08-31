@@ -1,0 +1,125 @@
+# Xcode project configuration. Managed by https://github.com/yonaskolb/XcodeGen.
+#
+# Xcode builds the shipped .app; everything else still uses SwiftPM. This split is not a
+# preference. `swift build` generates a resource accessor that looks for a package's resource
+# bundle directly under `Bundle.main.bundleURL` and then at the absolute build directory of the
+# machine that compiled the binary. Inside a .app the first path cannot exist — placing bundles
+# at the app root fails codesign with "unsealed contents present in the bundle root" — and the
+# second exists only for whoever built it. So a SwiftPM-built .app resolves package resources on
+# the build machine and traps everywhere else, including inside dependencies that cannot be
+# patched. Xcode's accessor searches `Bundle.main.resourceURL` and has none of this problem.
+#
+# Regenerate with ./scripts/generate_xcodeproj.sh, which is also what CI verifies.
+
+name: AgentNotch
+
+options:
+  minimumXcodeGenVersion: "2.46.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+  # Xcode's own build directory, so `swift build` output and this never collide.
+  defaultConfig: Release
+
+packages:
+  AgentNotchPackage:
+    # A symlink to the repository root. XcodeGen resolves local package paths relative to the
+    # project directory and does not accept `..` here, so the link stands in for it.
+    path: agent-notch-package-symlink
+
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+  # Named AgentNotchApp rather than AgentNotch because the SwiftPM library it links is already
+  # the module AgentNotch, and two build products of the same name collide in the derived data
+  # tree. PRODUCT_NAME below is what the bundle is actually called.
+  AgentNotchApp:
+    type: application
+    platform: macOS
+    deploymentTarget: "26.0"
+
+    sources:
+      # The entry point only. Every other source file is compiled by SwiftPM into the
+      # AgentNotchUI library below and linked from there.
+      - path: ../AgentNotchApp
+      # Icon Composer document. Xcode compiles it into Assets.car and the .icns fallback, which
+      # is what the bundle-assembly script used to invoke actool by hand for.
+      - path: ../Resources/AppIcon/AgentNotch.icon
+        buildPhase: resources
+
+    dependencies:
+      - package: AgentNotchPackage
+        product: AgentNotchUI
+      # Lands in Contents/MacOS, which is where the installed hooks point.
+      - target: AgentNotchCLI
+        embed: true
+        copy:
+          destination: executables
+
+    entitlements:
+      path: ../AgentNotch/AgentNotch.entitlements
+      properties:
+        # Asks cmux and VS Code to raise the window a session runs in.
+        com.apple.security.automation.apple-events: true
+
+    settings:
+      base:
+        SWIFT_VERSION: "6.2"
+        PRODUCT_NAME: AgentNotch
+        # The module name defaults to PRODUCT_NAME, which would clash with the SwiftPM module
+        # AgentNotch that this target links. Only the entry point compiles into it.
+        PRODUCT_MODULE_NAME: AgentNotchEntry
+        # Distribution is arm64-only, matching the Cask's `depends_on arch: :arm64`.
+        ARCHS: arm64
+        PRODUCT_BUNDLE_IDENTIFIER: com.agentnotch.app
+        INFOPLIST_FILE: ../AgentNotch/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AgentNotch
+        # Version and build number are injected by scripts/build_release.sh. The defaults keep a
+        # plain `xcodebuild` from producing a bundle that claims to be a release.
+        MARKETING_VERSION: ${XCODEGEN_AGENT_NOTCH_VERSION}
+        CURRENT_PROJECT_VERSION: ${XCODEGEN_AGENT_NOTCH_BUILD_NUMBER}
+        # Read at runtime by HookInstallationCoordinator to decide whether the hooks may point
+        # at a development build.
+        AGENT_NOTCH_DISTRIBUTION_CHANNEL: production
+        ENABLE_HARDENED_RUNTIME: YES
+        # Signing is done by scripts/build_release.sh with a Developer ID identity, after the
+        # build, so that the same script owns signing, notarization and stapling.
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+      configs:
+        Debug:
+          AGENT_NOTCH_DISTRIBUTION_CHANNEL: development
+        Release:
+          SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+          GCC_TREAT_WARNINGS_AS_ERRORS: YES
+
+  # The hook handler that Claude Code and Codex CLI invoke. Built here rather than by SwiftPM
+  # because it links AgentNotchCore, which carries resources: a SwiftPM-built binary sitting in
+  # Contents/MacOS would resolve Bundle.main to the .app and then fail to find them, the same way
+  # the app itself used to.
+  AgentNotchCLI:
+    type: tool
+    platform: macOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: ../AgentNotchCLI
+    dependencies:
+      - package: AgentNotchPackage
+        product: AgentNotchCoreLib
+    settings:
+      base:
+        SWIFT_VERSION: "6.2"
+        PRODUCT_NAME: agent-notch
+        PRODUCT_MODULE_NAME: AgentNotchCLIEntry
+        PRODUCT_BUNDLE_IDENTIFIER: com.agentnotch.app.cli
+        ARCHS: arm64
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+      configs:
+        Release:
+          SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+          GCC_TREAT_WARNINGS_AS_ERRORS: YES

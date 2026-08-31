@@ -55,3 +55,25 @@ jobs:
 
       - name: Test
         run: swift test --skip-build
+
+      # XcodeGen turns xcode/project.yml into the project that builds the .app.
+      # The project file is not committed, so it is generated here too.
+      # The project file is generated from xcode/project.yml rather than
+      # committed, so XcodeGen has to be present here. Its floor is enforced by
+      # `minimumXcodeGenVersion` in the spec, which fails the generation step
+      # rather than quietly producing a project from an older schema.
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # The shipped bundle is built by Xcode rather than SwiftPM, and the
+      # difference is not cosmetic: a SwiftPM-built .app cannot find its package
+      # resources on any machine but the one that compiled it. Building it here
+      # keeps that path from rotting between releases.
+      - name: Build the app bundle
+        run: ./scripts/build_app.sh release
+
+      # Checks that the resources actually resolve out of Contents/Resources.
+      # This is what would have caught the v0.1.0 release, which crashed on
+      # launch for everyone except the machine that built it.
+      - name: Verify the app bundle
+        run: ./scripts/verify_app_bundle.sh

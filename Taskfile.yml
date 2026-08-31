@@ -29,15 +29,26 @@ tasks:
     cmds: ["swift test"]
 
   check:
-    desc: Everything CI runs — lint, build, test
+    desc: Everything CI runs — lint, build, test, and the app bundle
+    # The bundle steps are not optional extras: a SwiftPM-built .app cannot
+    # resolve its package resources anywhere but the machine that built it, so
+    # the Xcode build and the bundle check are what keep that from shipping.
     cmds:
       - task: lint
       - task: build
       - task: test
+      - ./scripts/build_app.sh release
+      - ./scripts/verify_app_bundle.sh
 
   app:
-    desc: Assemble build/AgentNotch.app
-    cmds: ["./scripts/make_app.sh"]
+    desc: Assemble build/AgentNotch.app with Xcode
+    cmds: ["./scripts/build_app.sh debug"]
+
+  xcodeproj:
+    desc: Regenerate xcode/AgentNotch.xcodeproj from xcode/project.yml
+    # The project file is generated, never committed. Run this before opening
+    # the project in Xcode.
+    cmds: ["./scripts/generate_xcodeproj.sh"]
 
   icons:
     desc: Redraw the raster logo artwork (the app icon itself comes from AgentNotch.icon)

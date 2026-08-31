@@ -9,7 +9,7 @@
 #     -> Resources/AppIcon/{icon-1024,layer-foreground,layer-background}.png
 #
 # # This is no longer the app icon
-# The app icon is `Resources/AppIcon/AgentNotch.icon`, compiled by `make_app.sh`;
+# The app icon is `Resources/AppIcon/AgentNotch.icon`, compiled by Xcode via `build_app.sh`;
 # its layers are the SVGs in `Resources/AppIcon/layers/`. This script survives
 # because `icon-1024.png` is the logo in README.md, and because drawing the mark
 # from the same formula as the UI keeps a check on the hand-authored SVGs.

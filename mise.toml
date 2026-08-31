@@ -1,2 +1,9 @@
 [tools]
 task = "latest"
+# Generates xcode/AgentNotch.xcodeproj from xcode/project.yml.
+#
+# Pinned so that everyone working on the project generates it the same way. CI
+# installs XcodeGen from Homebrew instead of depending on mise, so the version
+# floor that actually guards the build lives in the spec itself, as
+# `minimumXcodeGenVersion`.
+xcodegen = "2.46.0"

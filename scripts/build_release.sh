@@ -75,9 +75,13 @@ app="build/AgentNotch.app"
 entitlements="AgentNotch/AgentNotch.entitlements"
 
 echo "▸ building Agent Notch $build_version ($build_number)"
-AGENT_NOTCH_VERSION="$build_version" \
-  AGENT_NOTCH_BUILD_NUMBER="$build_number" \
-  ./scripts/make_app.sh release
+./scripts/build_app.sh release \
+  --build-version "$build_version" \
+  --build-number "$build_number"
+
+# Refuses to go any further with a bundle whose resources would not resolve on
+# another Mac — the failure mode that shipped as v0.1.0.
+./scripts/verify_app_bundle.sh "$app"
 
 plist="$app/Contents/Info.plist"
 test "$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist")" = "$build_version"

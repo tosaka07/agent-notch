@@ -3,24 +3,41 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.agentnotch.app</string>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleName</key>
-    <string>Agent Notch</string>
+    <string>$(PRODUCT_NAME)</string>
     <key>CFBundleDisplayName</key>
     <string>Agent Notch</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>$(MARKETING_VERSION)</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>AgentNotchDistributionChannel</key>
-    <string>development</string>
+    <string>$(AGENT_NOTCH_DISTRIBUTION_CHANNEL)</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>Agent Notch asks cmux to select the pane a session is running in, and VS Code to raise the window a session is running in, so that jumping to the terminal lands on that session.</string>
     <key>LSMinimumSystemVersion</key>
-    <string>26.0</string>
+    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <!--
+      The interface languages this app offers.
+
+      macOS decides which languages to list under System Settings › General › Language & Region ›
+      Applications from the .lproj directories it finds in the bundle. Ours live inside the
+      SwiftPM resource bundles under Contents/Resources rather than at the top level, where that
+      scan does not reach, so the supported languages are declared here instead.
+    -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>ja</string>
+    </array>
 </dict>
 </plist>
