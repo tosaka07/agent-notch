@@ -4,9 +4,16 @@ import Defaults
 
 /// Application entry point (composition root).
 /// A thin layer that assembles the coordinators and starts them in order.
+///
+/// Public because the `@main` entry point lives outside this module, in the executable target
+/// that both SwiftPM and Xcode build from.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate {
     let sessionManager = SessionManager()
+
+    public override init() {
+        super.init()
+    }
 
     private lazy var statusBar = StatusBarCoordinator(sessionManager: sessionManager)
     /// Pushed before anything Codex-related starts: it decides whether Codex may be touched at all.
@@ -30,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var runtimeStarted = false
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         Log.bootstrap()
         SettingsMigrator.migrateIfNeeded()
         AppLocalization.language = Defaults[.appLanguage]
@@ -65,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeys.register()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    public func applicationWillTerminate(_ notification: Notification) {
         guard runtimeStarted else { return }
         sweep.stop()
         display.stop()
