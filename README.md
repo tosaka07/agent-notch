@@ -43,7 +43,10 @@ Apple silicon only, and the cask requires macOS 26 (Tahoe) or later.
 ## Requirements
 
 - macOS 26 or later
-- Swift tools 6.2 or later (there is no Xcode project; SPM's `Package.swift` is the source of truth)
+- Swift tools 6.2 or later — `Package.swift` is the source of truth for the code
+- Xcode 26 or later, to build the `.app` itself. The Xcode project is generated from
+  `xcode/project.yml` by [XcodeGen](https://github.com/yonaskolb/XcodeGen) and is not committed;
+  `mise install` provides it. See [Why Xcode builds the bundle](#why-xcode-builds-the-bundle).
 
 ## Setup
 
@@ -57,7 +60,7 @@ swift run AgentNotch
 #   Change log level: AGENT_NOTCH_LOG=debug swift run AgentNotch
 
 # Run it as a bundle instead, which anything sending Apple events needs
-./scripts/make_app.sh debug && open build/AgentNotch.app
+./scripts/build_app.sh debug && open build/AgentNotch.app
 ```
 
 `swift run` produces a bare executable, which has no TCC identity of its own. macOS then attributes
@@ -67,6 +70,22 @@ and `NSAppleEventsUsageDescription` is never read. Selecting the cmux pane a ses
 terminal jump, is the one feature that sends Apple events; exercise it from a bundle launched with
 `open`, which goes through Launch Services and so answers for itself. The bundle is unsigned, so
 each rebuild changes its identity and the permission has to be granted again.
+
+### Why Xcode builds the bundle
+
+Day-to-day development uses SwiftPM. The `.app` is built by Xcode, and that split is forced rather
+than chosen.
+
+`swift build` generates a resource accessor that looks for a package's resource bundle in two
+places: directly under `Bundle.main.bundleURL`, and the absolute build directory of the machine
+that compiled the binary. Inside a `.app` the first cannot exist — resources belong in
+`Contents/Resources`, and putting bundles at the app root makes codesign fail with `unsealed
+contents present in the bundle root`. The second exists only for whoever built it. A
+SwiftPM-built `.app` therefore works for the person who compiled it and traps on launch on every
+other machine, dependencies included, and those cannot be patched. Xcode's accessor searches
+`Bundle.main.resourceURL` and resolves correctly.
+
+`./scripts/verify_app_bundle.sh` checks a built bundle for exactly this, and CI runs it.
 
 The first-run onboarding explains the hook changes and installs them only after you approve.
 Until installation succeeds, Agent Notch does not start its session runtime. Hooks can be checked
