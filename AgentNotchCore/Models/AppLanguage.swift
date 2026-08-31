@@ -32,7 +32,7 @@ public enum AppLocalization {
     }
 
     public static func localized(_ value: String.LocalizationValue) -> String {
-        localized(value, in: .module)
+        localized(value, in: ResourceBundle.core)
     }
 
     /// Resolves a Core string for an explicit language without changing process-wide state.
@@ -40,7 +40,7 @@ public enum AppLocalization {
         _ value: String.LocalizationValue,
         language: AppLanguage
     ) -> String {
-        localized(value, in: .module, language: language)
+        localized(value, in: ResourceBundle.core, language: language)
     }
 
     /// Resolves a localized value from the caller's resource bundle.

@@ -37,7 +37,7 @@ struct OpenSourceLicense: Identifiable, Hashable, Sendable {
         URL(string: projectURLString)
     }
 
-    func licenseText(in bundle: Bundle = .module) -> String? {
+    func licenseText(in bundle: Bundle = .appResources) -> String? {
         let texts = resourceNames.compactMap { resourceName -> String? in
             guard
                 let url = bundle.url(

@@ -4,7 +4,7 @@ import SwiftUI
 /// Localization helpers for the GUI target.
 ///
 /// UI strings live in the standard SwiftPM `en.lproj` and `ja.lproj`
-/// directories. Package resources resolve through `Bundle.module`, not
+/// directories. Package resources live in their own bundle rather than
 /// `Bundle.main`, so always go through these helpers.
 extension Text {
     /// A localized text resolved against this module's string catalog.
@@ -19,11 +19,19 @@ extension Text {
 /// user-visible string, where a longer name would drown out the text itself.
 // swift-format-ignore: AlwaysUseLowerCamelCase
 func L(_ value: String.LocalizationValue) -> String {
-    AppLocalization.localized(value, in: .module)
+    AppLocalization.localized(value, in: .appResources)
 }
 
 /// Explicit-language variant for tests and previews that must not mutate global app state.
 // swift-format-ignore: AlwaysUseLowerCamelCase
 func L(_ value: String.LocalizationValue, language: AppLanguage) -> String {
-    AppLocalization.localized(value, in: .module, language: language)
+    AppLocalization.localized(value, in: .appResources, language: language)
+}
+
+extension Bundle {
+    /// Resources owned by the GUI target — string catalogs and the bundled license texts.
+    ///
+    /// `ResourceBundle` rather than `Bundle.module`: the generated accessor cannot find the
+    /// bundle inside a `.app` and traps instead. See `ResourceBundle` for why.
+    static let appResources = ResourceBundle.locate("AgentNotch_AgentNotch") ?? .main
 }
