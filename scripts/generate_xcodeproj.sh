@@ -56,8 +56,9 @@ if [[ ! "$build_number" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
-# mise owns the pinned XcodeGen version in mise.toml. A copy already on PATH is used as
-# is, so the script works on a machine that installed it some other way.
+# A copy already on PATH wins, which is how CI runs it after `brew install
+# xcodegen`; mise supplies the pinned version from mise.toml otherwise. Either
+# way the spec's `minimumXcodeGenVersion` rejects a generator that is too old.
 if command -v xcodegen >/dev/null 2>&1; then
   xcodegen() { command xcodegen "$@"; }
 elif command -v mise >/dev/null 2>&1; then

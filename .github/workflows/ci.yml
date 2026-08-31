@@ -58,13 +58,12 @@ jobs:
 
       # XcodeGen turns xcode/project.yml into the project that builds the .app.
       # The project file is not committed, so it is generated here too.
-      # Through mise so that CI and a developer's machine run the same pinned
-      # version. The project file is generated rather than committed, so the
-      # generator's version is what decides what gets built.
+      # The project file is generated from xcode/project.yml rather than
+      # committed, so XcodeGen has to be present here. Its floor is enforced by
+      # `minimumXcodeGenVersion` in the spec, which fails the generation step
+      # rather than quietly producing a project from an older schema.
       - name: Install XcodeGen
-        run: |
-          brew install mise
-          mise install
+        run: brew install xcodegen
 
       # The shipped bundle is built by Xcode rather than SwiftPM, and the
       # difference is not cosmetic: a SwiftPM-built .app cannot find its package

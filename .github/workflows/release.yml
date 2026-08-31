@@ -66,13 +66,12 @@ jobs:
 
       # build_release.sh generates xcode/AgentNotch.xcodeproj from project.yml
       # and builds the .app with xcodebuild. The project file is not committed.
-      # Through mise so that CI and a developer's machine run the same pinned
-      # version. The project file is generated rather than committed, so the
-      # generator's version is what decides what gets built.
+      # The project file is generated from xcode/project.yml rather than
+      # committed, so XcodeGen has to be present here. Its floor is enforced by
+      # `minimumXcodeGenVersion` in the spec, which fails the generation step
+      # rather than quietly producing a project from an older schema.
       - name: Install XcodeGen
-        run: |
-          brew install mise
-          mise install
+        run: brew install xcodegen
 
       - name: Test
         shell: bash
