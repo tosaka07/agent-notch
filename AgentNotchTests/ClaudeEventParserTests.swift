@@ -264,8 +264,8 @@ struct ClaudeEventParserTests {
         #expect(!info.hasPendingWork)
     }
 
-    /// An unrecognised task type errs toward waiting: a premature completion chime is
-    /// worse than a card that settles one Stop later.
+    /// A missing `type` is a malformed payload rather than a new kind of task, so it errs
+    /// toward waiting.
     @Test("An untyped background task still counts as pending work")
     func stopTreatsUnknownTaskTypesAsPending() {
         let json: [String: Any] = [
@@ -281,6 +281,28 @@ struct ClaudeEventParserTests {
         }
         #expect(info.agentBackgroundTaskCount == 1)
         #expect(info.hasPendingWork)
+    }
+
+    /// Deliberate: an unrecognised type is treated as detached. Completing one Stop early
+    /// is self-correcting — the next tool event puts the card back to running — while a
+    /// deferred Stop has nothing left to re-check it and pins the card until the app
+    /// restarts. A missed SubagentStart is still covered by the tracked subagent count.
+    @Test("An unrecognised task type lets the turn complete")
+    func stopTreatsUnknownTaskTypesAsDetached() {
+        let json: [String: Any] = [
+            "hook_event_name": "Stop",
+            "session_id": "sess-future",
+            "background_tasks": [
+                ["id": "task-1", "type": "future-task", "status": "running"]
+            ],
+        ]
+        guard case .sessionIdle(let info) = ClaudeEventParser.parse(json) else {
+            Issue.record("Expected sessionIdle")
+            return
+        }
+        #expect(info.backgroundTaskCount == 1)
+        #expect(info.agentBackgroundTaskCount == 0)
+        #expect(!info.hasPendingWork)
     }
 
     /// Codex's Stop hook ships the final response text in its payload. Since Codex
