@@ -46,6 +46,7 @@ enum SessionFinalizer {
 
         session.status = .done
         session.doneAt = Date()
+        session.deferredStopAt = nil
         session.currentTool = nil
         session.pendingInterruptions.removeAll()
         session.foldRunningSubagentsToCompleted()

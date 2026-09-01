@@ -400,6 +400,14 @@ public final class UnifiedSession: Identifiable, @unchecked Sendable {
     public var lastAssistantMessage: String?
     /// Moment the session became done; the reference point for the completion animation.
     public var doneAt: Date?
+    /// Moment a `Stop` was received but held back because the payload still reported work in
+    /// flight. Cleared as soon as the turn visibly moves again.
+    ///
+    /// A deferral used to leave no trace, which made it terminal: `Stop` fires once per turn,
+    /// so nothing came along to reconsider it, and `sweepStale` exempts a running status
+    /// whose process is alive. Recording the moment is what lets
+    /// `SessionManager.resolveDeferredStops(...)` settle a deferral that outlived its reason.
+    public var deferredStopAt: Date?
     /// The oldest queued question, which may sit behind an earlier permission.
     public var pendingQuestion: PendingQuestion? {
         get { pendingInterruptions.questions.first }
