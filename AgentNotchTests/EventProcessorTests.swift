@@ -133,6 +133,74 @@ struct EventProcessorTests {
         #expect(session.doneAt != nil)
     }
 
+    /// The deferral has to leave a trace, or nothing can reconsider it later. A subagent
+    /// task is used because that is what still defers — a detached one no longer does.
+    @Test("A deferred Stop records when it was held back")
+    func deferredStopIsRecorded() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "root", agentType: .claudeCode)
+        session.status = .thinking
+
+        EventProcessor.apply(
+            ClaudeEventParser.parse([
+                "hook_event_name": "Stop",
+                "session_id": "root",
+                "background_tasks": [
+                    ["id": "task-1", "type": "subagent", "status": "running"]
+                ],
+            ]),
+            agentType: .claudeCode, manager: manager
+        )
+
+        #expect(session.status == .thinking)
+        #expect(session.deferredStopAt != nil)
+    }
+
+    /// ...and the trace has to go away once the turn moves again, or the timeout would
+    /// settle a deferral that no longer exists.
+    @Test("A resumed turn clears the deferral")
+    func resumedTurnClearsTheDeferral() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "root", agentType: .claudeCode)
+        session.status = .thinking
+        session.deferredStopAt = Date()
+
+        EventProcessor.apply(
+            ClaudeEventParser.parse([
+                "hook_event_name": "PreToolUse",
+                "session_id": "root",
+                "tool_name": "Bash",
+                "tool_use_id": "tool-1",
+                "tool_input": ["command": "ls"],
+            ]),
+            agentType: .claudeCode, manager: manager
+        )
+
+        #expect(session.status == .toolRunning)
+        #expect(session.deferredStopAt == nil)
+    }
+
+    @Test("Finalizing clears the deferral")
+    func finalizeClearsTheDeferral() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "root", agentType: .claudeCode)
+        session.status = .thinking
+        session.deferredStopAt = Date()
+
+        EventProcessor.apply(
+            ClaudeEventParser.parse([
+                "hook_event_name": "Stop",
+                "session_id": "root",
+                "background_tasks": [],
+                "session_crons": [],
+            ]),
+            agentType: .claudeCode, manager: manager
+        )
+
+        #expect(session.status == .done)
+        #expect(session.deferredStopAt == nil)
+    }
+
     @Test("A Codex child rollout Stop never marks a user-input boundary")
     func codexChildStopDoesNotComplete() {
         let path = NSTemporaryDirectory() + "codex-child-\(UUID().uuidString).jsonl"

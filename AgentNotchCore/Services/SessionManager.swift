@@ -546,6 +546,57 @@ public final class SessionManager: ObservableObject {
         return swept
     }
 
+    /// How long a held-back `Stop` may sit before it is settled anyway. The deferral it
+    /// guards against — socket delivery putting `Stop` a few seconds ahead of
+    /// `SubagentStop` — resolves in seconds, so a minute and a half is generous.
+    public static let deferredStopGracePeriod: TimeInterval = 90
+
+    /// Settles a `Stop` that was held back and never reconsidered, and returns the ids it
+    /// touched.
+    ///
+    /// `handleSessionIdle` defers completion while the payload reports work in flight.
+    /// Nothing re-checks that decision — `Stop` fires once per turn — so when the reported
+    /// work outlives the turn (a backgrounded command that never exits, a subagent whose
+    /// `SubagentStart` never arrived) the card keeps a running status indefinitely.
+    /// `sweepStale` exempts exactly that combination, so the retention timeout never
+    /// reaches it either.
+    ///
+    /// The session is moved to `.idle` rather than finalized: the completion moment passed
+    /// minutes ago, and `SessionFinalizer` would post a notification and play a sound that
+    /// cannot be taken back. `.idle` is also the honest state — `.done` means "just
+    /// finished, waiting for input".
+    ///
+    /// A session with an interruption pending is left alone; the queue is the real state
+    /// there, and clearing it would hide a permission prompt.
+    @discardableResult
+    public func resolveDeferredStops(
+        gracePeriod: TimeInterval = SessionManager.deferredStopGracePeriod,
+        now: Date = Date()
+    ) -> [String] {
+        var resolved: [String] = []
+
+        for (id, session) in sessions {
+            guard let deferredAt = session.deferredStopAt else { continue }
+            guard session.presence != .inactive, !session.hasPendingInterruptions else { continue }
+            guard session.status.isRunning else { continue }
+            // Both clocks have to be quiet. Events that do not clear the marker — a
+            // Notification, a SubagentStop with no match — still move `lastActivityAt`, and
+            // settling while those arrive would flip the card under a live turn.
+            let quietSince = max(deferredAt, session.lastActivityAt)
+            guard now.timeIntervalSince(quietSince) > gracePeriod else { continue }
+
+            session.status = .idle
+            session.deferredStopAt = nil
+            session.currentTool = nil
+            resolved.append(id)
+        }
+
+        if !resolved.isEmpty {
+            notifyChange()
+        }
+        return resolved
+    }
+
     private func markInactive(_ session: UnifiedSession, at now: Date) {
         let wasRestored = session.presence == .restored
         session.lastKnownStatus = session.lastKnownStatus ?? session.status
@@ -553,6 +604,7 @@ public final class SessionManager: ObservableObject {
         session.status = .idle
         session.endedAt = session.endedAt ?? (wasRestored ? session.lastActivityAt : now)
         session.doneAt = nil
+        session.deferredStopAt = nil
         session.currentTool = nil
         session.pendingInterruptions.removeAll()
         session.foldRunningSubagentsToCompleted(at: now)
