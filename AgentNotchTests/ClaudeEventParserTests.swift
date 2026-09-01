@@ -267,7 +267,7 @@ struct ClaudeEventParserTests {
     /// A missing `type` is a malformed payload rather than a new kind of task, so it errs
     /// toward waiting.
     @Test("An untyped background task still counts as pending work")
-    func stopTreatsUnknownTaskTypesAsPending() {
+    func stopTreatsMalformedTaskAsPending() {
         let json: [String: Any] = [
             "hook_event_name": "Stop",
             "session_id": "sess-unknown",

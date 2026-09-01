@@ -517,12 +517,14 @@ public enum ClaudeEventParser {
     /// would bring back the bug this rule exists to prevent.
     ///
     /// So an unrecognised type is treated as detached and lets the turn complete. Being
-    /// wrong that way shows a completion a little early and the next tool event puts the
-    /// card back to running; being wrong the other way defers the Stop with nothing left to
-    /// re-check it, which pins the card to "Thinking" until the app restarts. Tracked
-    /// subagents are counted separately (`runningSubagentCount`), so this list only has to
-    /// cover a missed SubagentStart. An entry with no readable `type` at all is a
-    /// malformed payload, not a new task type, and still counts as pending.
+    /// wrong that way costs one early completion notification and sound, which cannot be
+    /// taken back, though the card itself returns to running on the next tool event. Being
+    /// wrong the other way defers the Stop with nothing left to re-check it, which pins the
+    /// card to "Thinking" until the app restarts. A recoverable card and one stray chime
+    /// beat a card that never recovers. Tracked subagents are counted separately
+    /// (`runningSubagentCount`), so this list only has to cover a missed SubagentStart. An
+    /// entry with no readable `type` at all is a malformed payload, not a new task type,
+    /// and still counts as pending.
     private static func agentBackgroundTaskCount(in tasks: [Any]) -> Int {
         tasks.filter { task in
             guard let task = task as? [String: Any],
