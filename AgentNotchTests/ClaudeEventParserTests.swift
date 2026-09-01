@@ -196,6 +196,25 @@ struct ClaudeEventParserTests {
         #expect(info.delivery == .responseChannel)
     }
 
+    /// The hook payload names this field `notification_type`. Reading `type` instead left
+    /// the kind empty on every notification, so nothing downstream could act on one.
+    @Test("Notification reads its kind from notification_type")
+    func notificationKind() {
+        let event = ClaudeEventParser.parse([
+            "hook_event_name": "Notification",
+            "session_id": "sess-notify",
+            "notification_type": "idle_prompt",
+            "message": "Claude is waiting for your input",
+        ])
+        guard case .notification(let sessionId, let type, let message) = event else {
+            Issue.record("Expected notification")
+            return
+        }
+        #expect(sessionId == "sess-notify")
+        #expect(type == "idle_prompt")
+        #expect(message == "Claude is waiting for your input")
+    }
+
     @Test("Stop maps to sessionIdle")
     func stop() {
         let json: [String: Any] = [
