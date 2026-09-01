@@ -19,11 +19,16 @@ public struct SessionStopInfo: Sendable {
     public let agentId: String?
     /// Claude Code 2.1.145+ includes every in-flight task in this array.
     public let backgroundTaskCount: Int
+    /// The subset of `backgroundTaskCount` that keeps the current turn going: subagents and
+    /// teammates. Every other task type (`shell`, `monitor`, `workflow`, MCP tasks) runs
+    /// detached while the session already sits at the user's input prompt, so it must not
+    /// hold the session back from completing.
+    public let agentBackgroundTaskCount: Int
     /// Scheduled work that can wake the session after the current response.
     public let sessionCronCount: Int
 
     public var hasPendingWork: Bool {
-        backgroundTaskCount > 0 || sessionCronCount > 0
+        agentBackgroundTaskCount > 0 || sessionCronCount > 0
     }
 }
 
@@ -393,13 +398,15 @@ public enum ClaudeEventParser {
             let agentId = (json["agent_id"] as? String).flatMap {
                 $0.isEmpty ? nil : $0
             }
+            let backgroundTasks = json["background_tasks"] as? [Any] ?? []
             return .sessionIdle(
                 SessionStopInfo(
                     sessionId: sessionId,
                     lastAssistantMessage: lastMessage,
                     transcriptPath: json["transcript_path"] as? String,
                     agentId: agentId,
-                    backgroundTaskCount: (json["background_tasks"] as? [Any])?.count ?? 0,
+                    backgroundTaskCount: backgroundTasks.count,
+                    agentBackgroundTaskCount: agentBackgroundTaskCount(in: backgroundTasks),
                     sessionCronCount: (json["session_crons"] as? [Any])?.count ?? 0
                 ))
 
@@ -490,6 +497,28 @@ public enum ClaudeEventParser {
     private static func uniqueToolUseId(from json: [String: Any]) -> String {
         if let id = json["tool_use_id"] as? String, !id.isEmpty { return id }
         return UUID().uuidString
+    }
+
+    /// Task types in `background_tasks` that mean the turn itself is still going: another
+    /// agent is working under this session and its result comes back into the same turn.
+    ///
+    /// Everything else Claude registers there — `shell` (a backgrounded Bash command),
+    /// `monitor`, `workflow`, MCP tasks — is detached work. The session is already back at
+    /// the user's input prompt, so treating those as pending would pin the card to
+    /// "Thinking" for as long as the task lives. A backgrounded server that never exits
+    /// pinned it forever.
+    private static let turnContinuingTaskTypes: Set<String> = ["subagent", "teammate"]
+
+    /// Counts the entries of a Stop payload's `background_tasks` that hold the turn open.
+    /// Entries without a readable `type` are counted, so an unknown future task type errs
+    /// toward waiting rather than announcing a premature completion.
+    private static func agentBackgroundTaskCount(in tasks: [Any]) -> Int {
+        tasks.filter { task in
+            guard let task = task as? [String: Any],
+                let type = task["type"] as? String, !type.isEmpty
+            else { return true }
+            return turnContinuingTaskTypes.contains(type)
+        }.count
     }
 
     /// Parses `tool_input.questions` into typed `[AskQuestionInfo.Question]`.

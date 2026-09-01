@@ -236,7 +236,50 @@ struct ClaudeEventParserTests {
         #expect(info.transcriptPath == "/tmp/child.jsonl")
         #expect(info.agentId == "agent-1")
         #expect(info.backgroundTaskCount == 2)
+        #expect(info.agentBackgroundTaskCount == 2)
         #expect(info.sessionCronCount == 1)
+        #expect(info.hasPendingWork)
+    }
+
+    /// A backgrounded Bash command outlives the turn — it is still registered when the
+    /// session is back at the input prompt, and one that never exits (a server, a log
+    /// tail) would otherwise keep the session from ever completing.
+    @Test("A backgrounded shell task is not pending work")
+    func stopIgnoresDetachedShellTasks() {
+        let json: [String: Any] = [
+            "hook_event_name": "Stop",
+            "session_id": "sess-shell",
+            "background_tasks": [
+                ["id": "task-1", "type": "shell", "status": "running"],
+                ["id": "task-2", "type": "monitor", "status": "running"],
+            ],
+            "session_crons": [],
+        ]
+        guard case .sessionIdle(let info) = ClaudeEventParser.parse(json) else {
+            Issue.record("Expected sessionIdle")
+            return
+        }
+        #expect(info.backgroundTaskCount == 2)
+        #expect(info.agentBackgroundTaskCount == 0)
+        #expect(!info.hasPendingWork)
+    }
+
+    /// An unrecognised task type errs toward waiting: a premature completion chime is
+    /// worse than a card that settles one Stop later.
+    @Test("An untyped background task still counts as pending work")
+    func stopTreatsUnknownTaskTypesAsPending() {
+        let json: [String: Any] = [
+            "hook_event_name": "Stop",
+            "session_id": "sess-unknown",
+            "background_tasks": [
+                ["id": "task-1", "status": "running"]
+            ],
+        ]
+        guard case .sessionIdle(let info) = ClaudeEventParser.parse(json) else {
+            Issue.record("Expected sessionIdle")
+            return
+        }
+        #expect(info.agentBackgroundTaskCount == 1)
         #expect(info.hasPendingWork)
     }
 
