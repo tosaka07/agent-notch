@@ -436,12 +436,14 @@ enum EventProcessor {
 
         // Claude's payload is authoritative when present. The tracked run count is also
         // required: socket delivery can put Stop a few seconds before SubagentStop.
+        // Only agent work and scheduled wake-ups defer completion — a backgrounded shell
+        // command leaves the session at the user's input prompt (see `hasPendingWork`).
         if info.hasPendingWork || session.runningSubagentCount > 0 {
             let status: SessionStatus =
                 session.runningSubagentCount > 0 ? .subagentRunning : .thinking
             setStatusUnlessPermissionPending(session, status)
             Log.events.info(
-                "Stop deferred id=\(info.sessionId) background=\(info.backgroundTaskCount) crons=\(info.sessionCronCount) subagents=\(session.runningSubagentCount)"
+                "Stop deferred id=\(info.sessionId) background=\(info.agentBackgroundTaskCount)/\(info.backgroundTaskCount) crons=\(info.sessionCronCount) subagents=\(session.runningSubagentCount)"
             )
             return
         }
