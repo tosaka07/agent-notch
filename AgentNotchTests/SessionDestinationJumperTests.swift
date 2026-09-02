@@ -27,9 +27,21 @@ struct SessionDestinationJumperTests {
         #expect(destination(for: session, canJumpToClaudeApp: true) == .terminal)
     }
 
-    @Test("The Codex app outranks every other surface")
-    func codexAppOutranksEverything() {
+    /// ChatGPT.app registers `codex://` merely by being installed, so a `codex` run started in a
+    /// terminal must still land in that terminal rather than in the desktop app.
+    @Test("A verified terminal outranks the Codex app")
+    func terminalOutranksCodexApp() {
         let session = makeTerminalSession(agentType: .codex)
+
+        #expect(
+            destination(for: session, canJumpToCodexApp: true, canJumpToClaudeApp: true)
+                == .terminal
+        )
+    }
+
+    @Test("A Codex session with no terminal opens in the Codex app")
+    func codexAppDestination() {
+        let session = UnifiedSession(id: "cli-1", agentType: .codex)
 
         #expect(
             destination(for: session, canJumpToCodexApp: true, canJumpToClaudeApp: true)
@@ -52,7 +64,7 @@ struct SessionDestinationJumperTests {
         jumped = []
         #expect(
             jump(
-                makeTerminalSession(agentType: .codex),
+                UnifiedSession(id: "cli-1", agentType: .codex),
                 canJumpToCodexApp: true,
                 record: { jumped.append($0) }
             )

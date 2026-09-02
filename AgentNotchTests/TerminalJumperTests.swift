@@ -156,13 +156,13 @@ struct TerminalJumperTests {
         #expect(didOpenTerminal)
     }
 
+    /// The desktop app answers for `codex://` whenever it is installed, so it is the destination
+    /// only for a session that has no terminal of its own — a `codex` run in a terminal pane keeps
+    /// opening that pane.
     @Test("a Codex App destination is shared by the visible button and T shortcut")
     @MainActor
     func codexAppIsPrimaryDestination() {
         let session = UnifiedSession(id: "thread-1", agentType: .codex)
-        session.pid = 42
-        session.terminalAppName = "Terminal"
-        session.terminalInfoResolved = true
 
         let destination = SessionDestinationJumper.destination(
             for: session,
@@ -170,6 +170,22 @@ struct TerminalJumperTests {
         )
 
         #expect(destination == .codexApp)
+    }
+
+    @Test("a Codex run in a terminal keeps opening that terminal")
+    @MainActor
+    func terminalBackedCodexSessionUsesTerminal() {
+        let session = UnifiedSession(id: "thread-1", agentType: .codex)
+        session.pid = 42
+        session.terminalAppName = "cmux"
+        session.terminalInfoResolved = true
+
+        let destination = SessionDestinationJumper.destination(
+            for: session,
+            canJumpToCodexApp: { _ in true }
+        )
+
+        #expect(destination == .terminal)
     }
 
     @Test("a session with no verified destination does nothing")
