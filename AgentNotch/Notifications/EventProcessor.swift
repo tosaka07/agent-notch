@@ -133,6 +133,14 @@ enum EventProcessor {
         session.status = status
     }
 
+    /// Clears a held-back `Stop` because the turn has visibly moved on. Called from the
+    /// handlers that can only fire while the agent is working again, so a deferral never
+    /// outlives the turn it belonged to and get settled by the timeout later.
+    @MainActor
+    private static func clearDeferredStop(_ session: UnifiedSession) {
+        session.deferredStopAt = nil
+    }
+
     @MainActor
     private static func handleSessionStarted(
         _ info: SessionInfo, agentType: AgentType, manager: SessionManager
@@ -155,6 +163,7 @@ enum EventProcessor {
             manager.session(for: sessionId)
             ?? manager.getOrCreateSession(id: sessionId, agentType: agentType)
         setStatusUnlessPermissionPending(session, .thinking)
+        clearDeferredStop(session)
         NotificationCenter.default.post(name: .agentNotchSessionResumed, object: sessionId)
 
         // If the UserPromptSubmit hook payload carries the prompt, use it directly. That
@@ -201,6 +210,7 @@ enum EventProcessor {
         // Guard against a PreToolUse from another subagent running in parallel clearing
         // the permissionWaiting badge by mistake.
         setStatusUnlessPermissionPending(session, .toolRunning)
+        clearDeferredStop(session)
         session.currentTool = ToolInfo(
             id: info.toolUseId, name: info.toolName, summary: info.summary,
             input: info.toolInput, startedAt: Date(), status: .running
@@ -442,6 +452,7 @@ enum EventProcessor {
             let status: SessionStatus =
                 session.runningSubagentCount > 0 ? .subagentRunning : .thinking
             setStatusUnlessPermissionPending(session, status)
+            session.deferredStopAt = Date()
             Log.events.info(
                 "Stop deferred id=\(info.sessionId) background=\(info.agentBackgroundTaskCount)/\(info.backgroundTaskCount) crons=\(info.sessionCronCount) subagents=\(session.runningSubagentCount)"
             )
@@ -463,6 +474,7 @@ enum EventProcessor {
             ?? manager.getOrCreateSession(id: info.sessionId, agentType: agentType)
         session.startSubagent(agentType: info.agentType, agentId: info.agentId)
         setStatusUnlessPermissionPending(session, .subagentRunning)
+        clearDeferredStop(session)
         Log.events.info(
             "subagentStarted id=\(info.sessionId) type=\(info.agentType) agentId=\(info.agentId ?? "-")")
     }
