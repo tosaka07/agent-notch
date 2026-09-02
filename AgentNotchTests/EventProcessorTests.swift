@@ -247,12 +247,33 @@ struct EventProcessorTests {
         let idlePrompt = ClaudeEventParser.parse([
             "hook_event_name": "Notification",
             "session_id": sessionId,
-            "type": "idle_prompt",
+            "notification_type": "idle_prompt",
             "message": "",
         ])
         EventProcessor.apply(idlePrompt, agentType: .claudeCode, manager: manager)
 
         #expect(session.status == .permissionWaiting)
+    }
+
+    /// The counterpart to the case above: with nothing waiting for approval, Claude
+    /// reporting that it sits at the input prompt does move the card off a running status.
+    @Test("idle_prompt notification moves a thinking session to idle")
+    func idlePromptSettlesAThinkingSession() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "s1", agentType: .claudeCode)
+        session.status = .thinking
+
+        EventProcessor.apply(
+            ClaudeEventParser.parse([
+                "hook_event_name": "Notification",
+                "session_id": "s1",
+                "notification_type": "idle_prompt",
+                "message": "Claude is waiting for your input",
+            ]),
+            agentType: .claudeCode, manager: manager
+        )
+
+        #expect(session.status == .idle)
     }
 
     @Test("PreCompact does not clear permissionWaiting (symmetry with PostCompact)")
