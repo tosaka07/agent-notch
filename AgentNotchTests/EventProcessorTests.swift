@@ -65,6 +65,36 @@ struct EventProcessorTests {
         #expect(session.doneAt != nil)
     }
 
+    /// Regression: a session that backgrounded a long-running command (a debug build of
+    /// this app, a dev server) reported `background_tasks` on every Stop and stayed pinned
+    /// to "Thinking" for hours, because nothing re-checks a deferred Stop.
+    @Test("Stop completes even while a backgrounded shell command is still running")
+    func stopCompletesDespiteDetachedShellTask() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "root", agentType: .claudeCode)
+        session.status = .thinking
+
+        EventProcessor.apply(
+            ClaudeEventParser.parse([
+                "hook_event_name": "Stop",
+                "session_id": "root",
+                "background_tasks": [
+                    [
+                        "id": "task-1",
+                        "type": "shell",
+                        "status": "running",
+                        "description": "Run the debug build",
+                    ]
+                ],
+                "session_crons": [],
+            ]),
+            agentType: .claudeCode, manager: manager
+        )
+
+        #expect(session.status == .done)
+        #expect(session.doneAt != nil)
+    }
+
     @Test("Stop waits when Claude reports background work even if a start hook was missed")
     func stopWaitsForPayloadBackgroundTasks() {
         let manager = SessionManager()
