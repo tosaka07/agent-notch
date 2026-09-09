@@ -384,7 +384,13 @@ public enum ClaudeEventParser {
                 ))
 
         case "Notification":
-            let type = json["type"] as? String ?? ""
+            // The kind arrives as `notification_type`; `type` is only a fallback for older
+            // payloads. Reading `type` alone made every notification look untyped, which
+            // silently disabled the `idle_prompt` handling downstream.
+            let type =
+                json["notification_type"] as? String
+                ?? json["type"] as? String
+                ?? ""
             let message = json["message"] as? String ?? ""
             return .notification(sessionId: sessionId, type: type, message: message)
 

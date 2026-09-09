@@ -651,4 +651,110 @@ struct SessionManagerTests {
         #expect(swept.first?.reason == .timeout)
         #expect(manager.session(for: "unknown-runtime") == nil)
     }
+
+    // MARK: - resolveDeferredStops
+
+    /// The reported failure: a Stop held back by a backgrounded command that never exits.
+    /// Nothing re-checks the deferral and `sweepStale` exempts a running status with a live
+    /// process, so without this the card stays on "Thinking" until the app restarts.
+    @Test("A Stop held back past the grace period settles to idle")
+    func deferredStopSettlesToIdle() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "held", agentType: .claudeCode)
+        session.status = .thinking
+        let deferredAt = Date(timeIntervalSince1970: 1000)
+        session.deferredStopAt = deferredAt
+        session.lastActivityAt = deferredAt
+
+        let resolved = manager.resolveDeferredStops(
+            gracePeriod: 90,
+            now: deferredAt.addingTimeInterval(91)
+        )
+
+        #expect(resolved == ["held"])
+        #expect(session.status == .idle)
+        #expect(session.deferredStopAt == nil)
+        // Not .done: the completion moment passed minutes ago, and finalizing now would
+        // post a notification and play a sound that cannot be taken back.
+        #expect(session.doneAt == nil)
+    }
+
+    @Test("A Stop held back within the grace period is left alone")
+    func deferredStopWaitsOutTheGracePeriod() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "held", agentType: .claudeCode)
+        session.status = .subagentRunning
+        let deferredAt = Date(timeIntervalSince1970: 1000)
+        session.deferredStopAt = deferredAt
+        session.lastActivityAt = deferredAt
+
+        let resolved = manager.resolveDeferredStops(
+            gracePeriod: 90,
+            now: deferredAt.addingTimeInterval(89)
+        )
+
+        #expect(resolved.isEmpty)
+        #expect(session.status == .subagentRunning)
+        #expect(session.deferredStopAt == deferredAt)
+    }
+
+    /// Events that do not clear the marker still move `lastActivityAt`. Settling off the
+    /// deferral timestamp alone would flip the card while a turn is still live.
+    @Test("Recent activity holds a deferral open even once the grace period passed")
+    func deferredStopWaitsForActivityToGoQuiet() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "held", agentType: .claudeCode)
+        session.status = .thinking
+        let deferredAt = Date(timeIntervalSince1970: 1000)
+        session.deferredStopAt = deferredAt
+        session.lastActivityAt = deferredAt.addingTimeInterval(120)
+
+        let resolved = manager.resolveDeferredStops(
+            gracePeriod: 90,
+            now: deferredAt.addingTimeInterval(150)
+        )
+
+        #expect(resolved.isEmpty)
+        #expect(session.status == .thinking)
+    }
+
+    @Test("A pending interruption keeps its own state, deferral or not")
+    func deferredStopLeavesAPendingInterruptionAlone() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "held", agentType: .claudeCode)
+        session.status = .toolRunning
+        let deferredAt = Date(timeIntervalSince1970: 1000)
+        session.deferredStopAt = deferredAt
+        session.lastActivityAt = deferredAt
+        session.pendingPermissions = [
+            PermissionRequest(
+                id: "p1", agentType: .claudeCode, sessionId: "held", toolName: "Bash",
+                toolInput: [:], toolUseId: "tool-1", timestamp: deferredAt, canRespond: true
+            )
+        ]
+
+        let resolved = manager.resolveDeferredStops(
+            gracePeriod: 90,
+            now: deferredAt.addingTimeInterval(600)
+        )
+
+        #expect(resolved.isEmpty)
+        #expect(session.status == .toolRunning)
+    }
+
+    @Test("A session with no deferral is untouched")
+    func resolveDeferredStopsIgnoresOrdinarySessions() {
+        let manager = SessionManager()
+        let session = manager.getOrCreateSession(id: "plain", agentType: .claudeCode)
+        session.status = .thinking
+        session.lastActivityAt = Date(timeIntervalSince1970: 1000)
+
+        let resolved = manager.resolveDeferredStops(
+            gracePeriod: 90,
+            now: Date(timeIntervalSince1970: 100_000)
+        )
+
+        #expect(resolved.isEmpty)
+        #expect(session.status == .thinking)
+    }
 }
